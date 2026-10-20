@@ -1,0 +1,173 @@
+<!-- FILE: index.html -->
+<!-- PART: 3 of 14 -->
+<!-- DETAIL: DOM container, Canvas viewport, In-Run HUD with Temporal Nexus controls, Relic slots, Utility clock-sweep buttons, and ordered script tags. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>OMNI-SHIFT: NEXUS SURVIVORS</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="ui">
+  <!-- IN-RUN HUD -->
+  <div id="hud">
+    <div class="hud-row">
+      <div class="hp-wrap"><div id="hpBar"></div><div id="hpTxt">100/100</div></div>
+      <div class="stat-pill" id="hudStage">STG 1</div>
+      <div class="stat-pill" id="hudDM">DM: 0</div>
+      <button class="btn" id="btnPause" style="padding:3px 8px">II</button>
+    </div>
+    <div class="xp-wrap"><div id="xpBar"></div></div>
+    <div class="hud-row">
+      <div id="wpnSlots" class="slot-bar"></div>
+      <div id="pasSlots" class="slot-bar"></div>
+      <div id="relicSlots" class="slot-bar"></div>
+      <div id="utilBar" class="slot-bar"></div>
+    </div>
+    <div class="hud-row">
+      <div class="time-pill">Temporal Nexus: <span id="timeScaleLbl">1.0x</span></div>
+      <div style="display:flex;gap:3px;pointer-events:auto">
+        <button class="btn" id="btnTimeDown" style="padding:3px 6px">-0.5x</button>
+        <button class="btn" id="btnTimeReset" style="padding:3px 6px">1.0x</button>
+        <button class="btn" id="btnTimeUp" style="padding:3px 6px">+0.5x</button>
+      </div>
+      <button class="btn gold" id="btnInteract" style="display:none;padding:4px 10px">[INTERACT]</button>
+      <div style="display:flex;gap:3px;pointer-events:auto">
+        <button class="btn" id="btnZoomOut" style="padding:3px 7px">-</button>
+        <button class="btn" id="btnZoomIn" style="padding:3px 7px">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN MENU -->
+  <div id="scrMain" class="screen active">
+    <h1>OMNI-SHIFT: NEXUS SURVIVORS</h1>
+    <div class="sub">Touch-First Procedural Multiverse Roguelike • Hold Any UI or World Object 350ms to Inspect</div>
+    <div class="bar">
+      <div class="stat-pill" id="menuDM">Dark Matter: 0</div>
+      <div class="stat-pill" id="menuSelChar">Hero: #00</div>
+      <div class="stat-pill" id="menuSelStage">Stage: 1</div>
+      <div class="stat-pill" id="menuDiff">Difficulty: Operative</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:7px;max-width:290px;margin:auto;width:100%">
+      <button class="btn gold" id="goPlay" style="font-size:0.95rem;padding:12px">DEPLOY INTO NEXUS</button>
+      <button class="btn" id="goDiff">CYCLE DIFFICULTY TIER</button>
+      <button class="btn" id="goChars">CHARACTER ROSTER (55)</button>
+      <button class="btn" id="goStages">STAGE SECTOR MAP (50)</button>
+      <button class="btn" id="goMeta">DARK MATTER SHOP & RESPEC</button>
+      <button class="btn" id="goCodex">WORLD MORPH CODEX & LEGEND</button>
+      <button class="btn" id="goOpts">VIDEO / AUDIO / TOUCH OPTIONS</button>
+      <button class="btn" id="goHealth">HEALTH OF GAME DIAGNOSTICS</button>
+      <button class="btn" id="goHelp">TOUCH CONTROLS & GUIDE</button>
+    </div>
+  </div>
+
+  <!-- CHARACTER SELECT -->
+  <div id="scrChars" class="screen">
+    <h2>55 MULTIVERSE HEROES (Hold 350ms for Full Specs)</h2>
+    <div class="bar">
+      <div class="stat-pill" id="charDM">Available DM: 0</div>
+      <button class="btn warn" id="btnRespecChars">RESPEC (REFUND & LOCK ALL)</button>
+      <button class="btn" data-back="scrMain">BACK</button>
+    </div>
+    <div id="charGrid" class="grid"></div>
+  </div>
+
+  <!-- STAGE SELECT -->
+  <div id="scrStages" class="screen">
+    <h2>50 PROCEDURAL SECTORS (Morphed by Hero Faction)</h2>
+    <div class="bar"><button class="btn" data-back="scrMain">BACK</button></div>
+    <div id="stageGrid" class="grid"></div>
+  </div>
+
+  <!-- META SHOP & RESPEC -->
+  <div id="scrMeta" class="screen">
+    <h2>DARK MATTER NEXUS & 100% RESPEC</h2>
+    <div class="sub">Bosses drop permanent Dark Matter (DM). Reset & refund 100% of spent DM anytime.</div>
+    <div class="bar">
+      <div class="stat-pill" id="metaDM">Available DM: 0</div>
+      <button class="btn warn" id="btnRespecAll">FULL RESPEC (REFUND 100% DM)</button>
+      <button class="btn" data-back="scrMain">BACK</button>
+    </div>
+    <div id="metaGrid" class="grid"></div>
+  </div>
+
+  <!-- CODEX & WORLD MORPH LEGEND -->
+  <div id="scrCodex" class="screen">
+    <h2>BIOME MORPH CODEX & PASSIVE MATRIX</h2>
+    <div class="sub">Every hard-coded object ID morphs its geometry & lore based on your Hero's Faction</div>
+    <div class="bar"><button class="btn" data-back="scrMain">BACK</button></div>
+    <div id="codexGrid" class="grid"></div>
+  </div>
+
+  <!-- OPTIONS -->
+  <div id="scrOpts" class="screen">
+    <h2>SURVIVOR OPTIONS SUITE</h2>
+    <div id="optList" style="display:flex;flex-direction:column;gap:6px;max-width:300px;margin:auto;width:100%"></div>
+    <div class="bar"><button class="btn" data-back="scrMain">SAVE & BACK</button></div>
+  </div>
+
+  <!-- HEALTH OF GAME -->
+  <div id="scrHealth" class="screen">
+    <h2>HEALTH OF GAME — LIVE TELEMETRY</h2>
+    <div class="sub">Real-time architectural diagnostics (Green = Optimal Engine State)</div>
+    <div id="healthBox" style="max-width:340px;margin:auto;width:100%"></div>
+    <div class="bar"><button class="btn" data-back="scrMain">BACK</button></div>
+  </div>
+
+  <!-- HELP -->
+  <div id="scrHelp" class="screen">
+    <h2>TOUCHSCREEN NAVIGATION & RULES</h2>
+    <div style="max-width:340px;margin:auto;display:flex;flex-direction:column;gap:6px">
+      <div class="health-row"><b>1. Floating Virtual Joystick:</b> Touch and drag anywhere on the battlefield to move. Weapons fire automatically.</div>
+      <div class="health-row"><b>2. Pinch-to-Zoom:</b> Spread or pinch two fingers (or tap HUD +/-) to zoom between 0.5x and 2.0x.</div>
+      <div class="health-row"><b>3. 350ms Long-Press Inspector:</b> Hold one finger on ANY UI card, HUD slot, or world object/enemy on the battlefield to inspect.</div>
+      <div class="health-row"><b>4. Guaranteed Level 10 Supercharge:</b> Leveling any weapon to 9 guarantees its flashing gold <b>★ SUPERCHARGE</b> card in Slot 1.</div>
+      <div class="health-row"><b>5. Temporal Nexus & Relics:</b> Adjust speed dynamically, collect up to 3 Relics, and interact with chests, barricades, and hovercrafts.</div>
+    </div>
+    <div class="bar"><button class="btn" data-back="scrMain">BACK</button></div>
+  </div>
+
+  <!-- LEVEL UP / PAUSE MODAL -->
+  <div id="scrLevel" class="screen">
+    <h2 id="lvlTitle">NEXUS LEVEL UP — PICK 1 OF 3</h2>
+    <div class="sub">Hold any card 350ms for full stats & Level 10 Supercharge preview</div>
+    <div id="lvlGrid" style="display:flex;flex-direction:column;gap:8px;max-width:320px;margin:auto;width:100%"></div>
+    <div class="bar" id="pauseBar" style="display:none">
+      <button class="btn" id="btnResume">RESUME RUN</button>
+      <button class="btn warn" id="btnQuitRun">END RUN (PURGE RUN RAM)</button>
+    </div>
+  </div>
+</div>
+
+<!-- LONG-PRESS INSPECTOR TOOLTIP -->
+<div id="tooltip">
+  <div id="tooltipBox">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <div id="ttIcon"></div>
+      <div>
+        <h2 id="ttTitle" style="text-align:left;margin:0">Inspector</h2>
+        <div id="ttSub" style="font-size:0.72rem;color:#00e5ff"></div>
+      </div>
+    </div>
+    <div id="ttBody" style="font-size:0.76rem;line-height:1.4;color:#e0f2f1;white-space:pre-line"></div>
+    <div class="bar" style="margin-top:10px"><button class="btn gold" id="ttClose">CLOSE INSPECTOR</button></div>
+  </div>
+</div>
+
+<!-- ORDERED MODULAR SCRIPT LOADING -->
+<script src="js/chaos.js"></script>
+<script src="js/data-factions.js"></script>
+<script src="js/data-heroes.js"></script>
+<script src="js/data-relics.js"></script>
+<script src="js/state.js"></script>
+<script src="js/world.js"></script>
+<script src="js/combat.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
