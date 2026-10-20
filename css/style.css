@@ -1,0 +1,397 @@
+/* FILE: css/style.css */
+/* PART: 4 of 14 */
+/* DETAIL: Responsive mobile-first stylesheet, HUD layout, flashing Lv.10 Supercharge card animation, Relic slots, and radial clock-sweep utility cooldown icons. */
+
+* {
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  margin: 0;
+  padding: 0;
+}
+
+body, html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #050811;
+  color: #e8f4ff;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+#ui {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.screen {
+  pointer-events: auto;
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 9, 16, 0.94);
+  display: none;
+  flex-direction: column;
+  padding: 10px;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+
+.screen.active {
+  display: flex;
+}
+
+h1 {
+  font-size: 1.25rem;
+  text-align: center;
+  color: #00f0ff;
+  letter-spacing: 1px;
+  margin: 4px 0;
+  text-shadow: 0 0 8px #00f0ff66;
+}
+
+h2 {
+  font-size: 1rem;
+  color: #ffd166;
+  margin: 4px 0;
+  text-align: center;
+}
+
+.sub {
+  font-size: 0.72rem;
+  color: #90a4ae;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 5px 0;
+}
+
+.btn {
+  pointer-events: auto;
+  background: #101b2b;
+  color: #e0f7fa;
+  border: 1px solid #00e5ff;
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+
+.btn:active, .btn.sel {
+  background: #00e5ff;
+  color: #050811;
+  transform: scale(0.96);
+}
+
+.btn.warn {
+  border-color: #ff5252;
+  color: #ff8a80;
+}
+
+.btn.gold {
+  border-color: #ffd166;
+  color: #ffd166;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 7px;
+  overflow-y: auto;
+  padding: 5px;
+  touch-action: pan-y;
+  flex: 1;
+}
+
+.card {
+  background: #0b1422;
+  border: 1px solid #263850;
+  border-radius: 8px;
+  padding: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  position: relative;
+  touch-action: pan-y;
+  cursor: pointer;
+}
+
+.card.unlocked {
+  border-color: #00e5ff;
+}
+
+.card.selected {
+  border: 2px solid #ffd166;
+  background: #152338;
+}
+
+.card.locked {
+  opacity: 0.6;
+  border-color: #37474f;
+}
+
+@keyframes superFlashAnim {
+  0%, 100% {
+    border-color: #ffd166;
+    background: #241d0b;
+    box-shadow: 0 0 14px #ffd166aa, inset 0 0 8px #ffd16655;
+  }
+  50% {
+    border-color: #00f0ff;
+    background: #122838;
+    box-shadow: 0 0 20px #00f0ffcc, inset 0 0 12px #00f0ff66;
+  }
+}
+
+.card.super-flash {
+  border-width: 2px;
+  animation: superFlashAnim 0.85s infinite ease-in-out;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.card-sub {
+  font-size: 0.65rem;
+  color: #80deea;
+}
+
+.card-desc {
+  font-size: 0.63rem;
+  color: #b0bec5;
+  line-height: 1.25;
+}
+
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+
+#hud.active {
+  display: flex;
+}
+
+#hud.flip .hud-row {
+  flex-direction: row-reverse;
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.stat-pill, .time-pill {
+  background: rgba(7, 12, 22, 0.88);
+  border: 1px solid #00e5ff66;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  pointer-events: auto;
+}
+
+.time-pill {
+  border-color: #ffd16688;
+  color: #ffd166;
+  font-weight: 700;
+}
+
+.xp-wrap {
+  width: 100%;
+  height: 9px;
+  background: #0e1622;
+  border: 1px solid #00e5ff;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+#xpBar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #00e5ff, #00ff88);
+}
+
+.hp-wrap {
+  width: 125px;
+  height: 12px;
+  background: #2a0e14;
+  border: 1px solid #ff5252;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+#hpBar {
+  height: 100%;
+  width: 100%;
+  background: #ff5252;
+}
+
+#hpTxt {
+  position:absolute;
+  inset: 0;
+  font-size: 0.6rem;
+  text-align: center;
+  line-height: 10px;
+  font-weight: 700;
+}
+
+.slot-bar {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  pointer-events: auto;
+}
+
+.slot {
+  width: 34px;
+  height: 34px;
+  background: #0c1524;
+  border: 1px solid #00e5ff;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.55rem;
+  font-weight: 700;
+  position: relative;
+  overflow: hidden;
+}
+
+.slot.pas {
+  border-color: #00e676;
+}
+
+.slot.relic {
+  border-color: #e040fb;
+  box-shadow: 0 0 6px #e040fb66;
+}
+
+.slot.super {
+  border-color: #ffd166;
+  box-shadow: 0 0 8px #ffd16699;
+  color: #ffd166;
+}
+
+/* Square Utility Skill Icon with Clockwise Radial Sweep Overlay */
+.util-btn {
+  width: 38px;
+  height: 38px;
+  background: #101b2b;
+  border: 2px solid #546e7a;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.52rem;
+  font-weight: 700;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.util-btn.ready {
+  border-color: #ffd166;
+  box-shadow: 0 0 9px #ffd166aa;
+  color: #ffd166;
+}
+
+.util-sweep {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: conic-gradient(transparent var(--sweep-deg, 360deg), rgba(4, 7, 14, 0.86) var(--sweep-deg, 360deg));
+}
+
+#tooltip {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  z-index: 99;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  pointer-events: auto;
+}
+
+#tooltipBox {
+  background: #0b1524;
+  border: 2px solid #ffd166;
+  border-radius: 12px;
+  padding: 14px;
+  max-width: 330px;
+  width: 100%;
+}
+
+.health-row {
+  margin: 5px 0;
+  background: #0c1726;
+  padding: 8px;
+  border-radius: 8px;
+  border-left: 4px solid #00e676;
+  font-size: 0.74rem;
+}
+
+.meter {
+  height: 7px;
+  background: #182434;
+  border-radius: 4px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  background: #00e676;
+  width: 100%;
+}
+
+.ico {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
