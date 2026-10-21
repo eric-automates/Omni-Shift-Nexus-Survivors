@@ -1,49 +1,60 @@
 <!-- FILE: info.md -->
 <!-- PART: 2 of 14 -->
-<!-- DETAIL: Master architecture, audit fixes, and design specification for the 14-part modular build of OMNI-SHIFT: NEXUS SURVIVORS (v3.0). -->
+<!-- DETAIL: Master game architecture, verification fixes, Orb Vacuum QoL, and the completed 3-Chunk Enemy Anatomy, Limb Damage & Deflection Specification. -->
 
-# OMNI-SHIFT: NEXUS SURVIVORS — ARCHITECTURE & DESIGN SPEC (v3.0)
+# OMNI-SHIFT: NEXUS SURVIVORS — DESIGN & ROADMAP SPEC (v3.4)
 
-## 1. Modular Engine & Zero-GC Memory Lifecycle
-* **14-Part Modular Architecture:** Refactored from a single-file bundle into 14 focused files (`<= 300` lines each) across `index.html`, `css/style.css`, and 10 vanilla ES6 scripts (`js/*.js`). Zero external image or audio assets.
-* **Zero-GC TypedArray Pools:** Pre-allocated Structure-of-Arrays (SoA) ring buffers for Enemies (`MAX_E=360`), Player/Enemy Projectiles (`MAX_P=520`), XP Orbs (`MAX_O=500`), Floating Damage/Speech (`MAX_D=140`), and Particles (`MAX_PT=240`).
-* **Procedural Chunk Delta Memory:** World is split into `512x512` chunks keyed by `"cx,cy"`. `runChunkDeltas` (`Map`) stores bitmasks of broken crates, opened chests, moved barricades, and player-built forts for the active run. `purgeRunMemory()` wipes 100% of run state on exit/death.
-* **Persistent Meta-Save (`OMNISHIFT_META_V1`):** Stores `dmEarned`, `dmSpent`, unlocked `chars`, unlocked `stages`, `ranks` (10 meta-stats), and `diff` (Difficulty 0-4). Full Respec refunds 100% of Dark Matter anytime.
+## 0. Editor & Maintenance Protocol
+* **Acode Overwrite Rule:** Always **Select All + Delete** before pasting replacement code into any file in Acode. Pasting a shorter file directly over a longer file without clearing it first can leave duplicate trailing lines at the end of the file.
+* **No Tree Diagrams:** All documentation uses standard Markdown lists instead of ASCII box-drawing trees for clean mobile rendering.
 
-## 2. Verification Audit Fixes & Mathematical Systems
-* **Guaranteed Lv.10 Supercharge Fix:** Previously, when a weapon reached Lv.9 (e.g., Browncoat Captain's *Brass Frontier Six-Gun*), the upgrade pool shuffled all candidate upgrades and only sliced 3, allowing passive and new-weapon cards to crowd out the Lv.10 upgrade. Now, `triggerLevelUp()` extracts any Lv.9 weapon first and locks its flashing gold `★ SUPERCHARGE` card into **Slot 1** (`100%` guaranteed appearance).
-* **Solid Obstacle Projectile Blocking:** Projectiles now collide with and terminate against solid world obstacles (`PROP_TALL`, `PROP_LOW`, Huts, and Barricades). Player-built Last-Stand Forts allow player projectiles to fire over the sandbags while blocking enemy movement.
-* **Temporal Nexus Control (`timeScale`):** HUD controls `[-0.5x]`, `[1.0x]`, `[+0.5x]` scale `simDt = rawDt * timeScale` in `0.5x` steps from `0.1x` up to unbounded speeds (`10.0x+`), routing all movement, weapon cooldowns, wave timers, and fortification timers through `simDt`.
-* **5 Difficulty Tiers (`DIFFICULTIES`):**
-  0. Cadet (Easy): Monster HP/Dmg `0.65x`, Player HP `1.35x`, XP/Drops `0.75x`, Enemy Spd `0.85x`
-  1. Operative (Normal): `1.0x` baseline across all stats
-  2. Veteran (Hard): Monster HP/Dmg `1.5x`, Player HP `0.85x`, XP/Drops `1.5x`, Enemy Spd `1.12x`
-  3. Nightmare: Monster HP/Dmg `2.2x`, Player HP `0.75x`, XP/Drops `2.3x`, Enemy Spd `1.25x`
-  4. Omega Nexus: Monster HP/Dmg `3.5x`, Player HP `0.65x`, XP/Drops `3.8x`, Enemy Spd `1.40x`
-* **`ChaosMath` Procedural Jitter, Mutation & Wave AI:**
-  * Generates deterministic per-entity vertex jitter, scale variance, and polygon vertex counts (`3 to 8 sides` + mutation spikes as waves progress).
-  * **Low-Wave Obstacle Stun (`wave <= 2`):** Low-wave enemies that collide with obstacles bounce backward, fall/pause in a stunned state (`eStun > 0`) with overhead stun stars, and slowly get back up before resuming movement.
-  * **High-Wave Tangent Steering (`wave >= 3`):** Higher-wave mutated enemies use `ChaosMath.steerAround()` tangent vectors to maneuver smoothly around obstacles and vary movement styles (Direct, Serpentine Sine, Flank Spiral, Tactical Lunge).
+## 1. Core Engine & Zero-GC Memory Lifecycle
+* **14-Part Modular Architecture:** 14 files (`<= 300` lines each) using vanilla HTML5 Canvas, CSS3, ES6 JS, Web Audio API synth, and SVG icons.
+* **Zero-GC TypedArray Pools:** Pre-allocated Structure-of-Arrays (SoA) ring buffers for Enemies (`MAX_E=360`), Projectiles (`MAX_P=520`), Orbs (`MAX_O=500`), Floating Text (`MAX_D=140`), Particles (`MAX_PT=240`), and Black Pixel Drips (`MAX_DRIP=220`).
+* **Orb Vacuum & 10-Min Warp Chest QoL:**
+  * **Zero-Starvation Orb Recycler:** If all `500` orb slots fill up, `spawnOrb()` merges the furthest off-screen orb's XP into the new orb so drops never stop spawning.
+  * **Innate 100% Vacuum:** Force, Telekinetic, Psychic, and Grav-Gun heroes (`#0, #3, #7, #10, #12, #14, #18, #20, #27, #38, #39, #45, #49`) automatically pull 100% of distant orbs on kill and never see redundant magnet/vacuum upgrade cards.
+  * **Level-Up Vacuum Cards:** Non-telekinetic heroes can roll *Subspace Orb Siphon (+35%)* or rare flashing *Omega Singularity Vacuum (100%)*.
+  * **10-Minute XP Warp Chest:** Every 600s (or if `>=380` orbs pile up off-screen), all off-screen orbs compress into a high-yield **XP Warp Orb + Relic Chest** beside the player.
 
-## 3. Roster (55 Playable Heroes), Supercharges & Utility Skills
-* **Heroes #00–#50:** Full 10-Faction Sci-Fi/Fantasy Roster with unique passives and Lv.10 Supercharges.
-* **New Iconic Heroes (#51–#54):**
-  * **#51 Baba Yaga Suit-Assassin (Cyber-Waste):** Dark tailored suit & black hair silhouette. Starts with *Baba Yaga Backup Sidearm* -> transitions to primary *Continental Tactical Arsenal* at Lv.10. **CQC Grapple-Flip-Execute:** Touching any enemy or Boss grabs them, flips/throws them to the ground in a random direction (stunning them), and fires an instant point-blank execution shot.
-  * **#52 The Man With No Name (Rim-Outlaw):** Iconic poncho silhouette with single right-arm revolver extended. Fires *Blazing Fan-Hammer Six-Shooter* in lightning-fast 6-shot bursts with lethal crit/kill power, followed by a snappy `0.55s` quick-reload -> Lv.10 *Deadeye Eight-Shooter*.
-  * **#53 Green-Beret Last-Stand Vet (Xeno-Drop):** Red headband commando. *Belt-Fed M60 & Explosive Bow* -> Lv.10 *First Blood Firestorm*. Staying within a `180px` radius for 120 game-seconds (scales with `timeScale`, or triggered via Utility) deploys a **Last-Stand Fort** (shoot-over barricades + 6 claymore mines).
-  * **#54 Slav-1 Bounty Tracker (Laser-Opera):** Weathered green ESB armor & T-visor helmet. *Sawed-Stock EE-3 Carbine* -> Lv.10 *Disintegrations Authorized*. Automatically triggers **Wrist Flamethrower** cone when surrounded by `>=4` enemies + active **Fibercord Grappling Hook** utility to lock down distant enemies/bosses until eliminated or tether breaks.
-* **HUD Utility Skill Icon (Radial Clock Sweep):** Square HUD button(s) with a grayed-out overlay that un-grays clockwise via a `conic-gradient` clock hand until ready, glowing gold when charged.
-* **Boss Kill One-Liners:** Defeating bosses or rival hunters triggers character-authentic speech banners above the player.
+## 2. Heroes (#00–#54), Alignments & Rival Invasions
+* **Guaranteed Lv.10 Supercharge:** Any Lv.9 weapon guarantees its flashing gold `★ SUPERCHARGE` card in Slot 1 on the next level-up.
+* **Iconic Heroes (#51–#54):**
+  * **#51 Baba Yaga Suit-Assassin:** CQC Grapple-Flip-Execute on contact + Backup Sidearm -> *Continental Tactical Arsenal*.
+  * **#52 The Man With No Name:** Poncho + single right-arm *Fan-Hammer Six-Shooter* with `0.55s` quick-reload -> *Deadeye Eight-Shooter*.
+  * **#53 Green-Beret Last-Stand Vet:** *M60 & Explosive Bow* + 120s stationary **Last-Stand Fort & Claymore Mines**.
+  * **#54 Slav-1 Bounty Tracker:** *EE-3 Carbine* + Auto-Flamethrower (`>=4` foes) + **Fibercord Grappling Hook**.
+* **3-Line Quotes & Alignment Invasions:** Every hero has 3 randomized boss-kill quotes and an alignment (`good`, `bad`, `bounty`). Every 75s, any hero can invade with alignment-specific or matchup-specific dialogue.
 
-## 4. 50-Relic System, Distance Sub-Biomes & World Interaction
-* **50 Unique Relics (`RELICS_DB`):** Found in Relic Chests and dropped by Bosses/Rivals. Standard heroes equip up to `3` Relics (`4` for Collector/Sage heroes `#7`, `#10`, `#35`). Includes **#00 Goa'uld Personal Repulsor** (vaporizes incoming enemy projectiles/missiles), **#01 Beskar Ricochet Core**, and 48 more balanced relics.
-* **Distance-Based Sub-Biomes (Measured from Start `256, 256`):**
-  * `0–800px`: Outpost Perimeter (Standard Faction Props)
-  * `800–1800px`: Settlement Huts Sector (Geometric Huts + Relic Chests)
-  * `1800–3000px`: Vehicle Yard Sector (Rideable Hovercrafts + Movable Barricades)
-  * `3000px+`: Deep Vault Sector (High-density Relic Chests & Elite Shrines)
-* **Interactive World Objects (`[INTERACT]` HUD Button):**
-  * **Relic Chests:** Open to claim a random Relic + XP orbs.
-  * **Movable Barricades:** Pick up, carry, and place anywhere to build custom cover.
-  * **Hovercraft Vehicles:** Board for `+110% Move Speed`, hull armor absorption, and contact ramming damage.
-* **Rival Bounty Hunter Invasions:** Every 75s, a rival hero from the roster spawns with a `"BOUNTY ON YOUR HEAD — I'VE COME TO COLLECT!"` alert, rendering their custom character sprite and firing enemy projectiles (`pEnemy = 1`) at the player.
+## 3. Completed 3-Chunk Enemy Anatomy, Limb Damage & Deflection Spec
+
+### Chunk 1: Articulated Multi-Limb Enemy Anatomy (ACTIVE)
+* **Visual Differentiation:** Main characters and Rival Heroes use multi-layered, multi-colored outfits (`drawHeroSprite`), while regular wave enemies and bosses use solid faction-colored (`fac.c2`) articulated limb silhouettes (`drawEnemyAnatomy` in `js/render.js`).
+* **5 Procedural Enemy Body Types (`eType` + `eSeed` via `ChaosMath`):**
+  1. **Humanoid / Skeleton Troopers (`eType 0`):** Skull/helmet head, ribcage/armor torso, 2 swinging arms, 2 striding legs + Elite Deflector Gear.
+  2. **Quadruped Hounds / Cyber-Dogs (`eType 1`):** Snout head, horizontal torso, **4 independent galloping legs**, and an articulated rear **Tail**.
+  3. **Xeno-Stalkers / Arachnids (`eType 2`):** Segmented thorax/abdomen, mandibles, and **6 scuttling legs**.
+  4. **Heavy Armored Brutes (`eType 3`):** Broad hunched carapace, recessed head, piston legs, and crusher forearms.
+  5. **Sector Bosses (`eType 99`):** Giant 4-armed, multi-limbed Titan silhouette.
+
+### Chunk 2: Zero-GC Limb Damage, `%` Hit Popups, Black Drip Trails & Cripple AI (ACTIVE)
+* **Self-Clearing Limb Tracker (`clearEnemyLimbState`):** Pre-allocated TypedArrays in `js/state.js` (`eLegDmg`, `eTailDmg`, `eLegsLost`, `eBleed`, `eTurnAng`, `eTurnTimer`) automatically reset on enemy death and spawn.
+* **Hit Location & Percentage (`%`) Popups:**
+  * **Critical Hits (Head / Center Mass):** Display a **gold number (`1!` to `100!`)** showing the percentage of core integrity removed.
+  * **Regular Hits (Legs / Arms / Hound Tail):** Strike an extremity and display a **gray number (`5` to `100`)** showing the cumulative percentage of that limb's integrity removed.
+* **Black Pixel Drip & 2x Ground Pool Trail (`MAX_DRIP=220`):** Wounded limbs leak `1.5px` black pixel drips that fall to the ground and pool out to `2x` size (`3.2px`), fading out rapidly when the enemy dies.
+* **Anatomy-Specific Cripple & Balance Physics:**
+  * **Humanoids / Brutes / Arachnids:** Leg damage slows movement speed (up to `-65%`) and visibly shortens/blackens crippled legs.
+  * **Quadruped Hounds (4 Legs + Tail):** Losing 1 of 4 legs barely slows the hound (`-15%`); losing 2+ legs severely cripples it (`-65%` to `-82%`). If its **Tail** takes `>=45%` damage, the tail visibly severs and the hound loses directional balance—veering off-angle and periodically re-orienting toward the player.
+
+### Chunk 3: Faction-Specific Elite Projectile Deflection (ACTIVE IN v3.4)
+* **Who Can Deflect (`canEnemyDeflect`):** Wave 2+ Elites (`eSeed % 5 === 0` on Humanoids and Brutes) have a **32% chance** to deflect incoming projectile bolts/missiles/lasers (`pStyle` 2, 3, 4, 5), while Sector Bosses and Rival Champions have a **16% chance**.
+* **Faction-Authentic Deflector Visuals (`drawDeflectorGear` in `js/render.js`):**
+  * **Laser-Opera (`fac 0`):** Glowing **Plasma Saber** with a white-hot inner core and colored outer blade.
+  * **Astral-Gate, Spice-Empire, Star-Citadel, Lab-Vortex (`fac 1, 3, 4, 8`):** Shimmering semi-circular **Personal Energy Overshield / Holtzman Bubble** arc in front of the unit.
+  * **Rim-Outlaw, Xeno-Drop, Grimdark-40K, Cyber-Waste, Eldritch-Ronin (`fac 2, 5, 6, 7, 9`):** Heavy **Ballistic Riot / Storm Shield** or **Runic Parry Blade** mounted on the lead arm.
+* **Universal Ricochet Physics (`pEnemy = 2`):**
+  * Deflected projectiles turn blazing **orange-white**, play a metallic ricochet synth ping, and bounce off at a random angle.
+  * `pEnemy = 2` projectiles are **Universal Hazards**: they deal full limb/crit damage to **any other enemy** they strike *and* can damage the **player** (especially dangerous when firing rapid bursts at point-blank range).
+  * **Player Defenses Against Ricochets:** Mitigated by `#00 Goa'uld Personal Repulsor` (vaporizes deflected bolts), Player Dodge (`#14 Miranda`, `#18 Muad'Dib`, `#39 Zion One`), `#10 Othala Beaming Phase`, Flat Armor / Beskar Plating, Hovercraft hull armor, or Last-Stand Fort cover.
+  

@@ -1,6 +1,6 @@
 <!-- FILE: index.html -->
 <!-- PART: 3 of 14 -->
-<!-- DETAIL: DOM container, Canvas viewport, In-Run HUD with Temporal Nexus controls, Relic slots, Utility clock-sweep buttons, and ordered script tags. -->
+<!-- DETAIL: DOM container, Canvas viewport, In-Run HUD, Pre-Script Boot Diagnostic, and ordered script tags. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -45,7 +45,7 @@
   <!-- MAIN MENU -->
   <div id="scrMain" class="screen active">
     <h1>OMNI-SHIFT: NEXUS SURVIVORS</h1>
-    <div class="sub">Touch-First Procedural Multiverse Roguelike • Hold Any UI or World Object 350ms to Inspect</div>
+    <div class="sub" id="bootDiag">Touch-First Procedural Multiverse Roguelike • Hold Any UI or World Object 350ms to Inspect</div>
     <div class="bar">
       <div class="stat-pill" id="menuDM">Dark Matter: 0</div>
       <div class="stat-pill" id="menuSelChar">Hero: #00</div>
@@ -158,16 +158,49 @@
   </div>
 </div>
 
+<!-- PRE-SCRIPT BOOT DIAGNOSTIC (Runs BEFORE external JS files to catch syntax/load errors) -->
+<script>
+window._bootErrors = [];
+window.onerror = function(msg, url, line) {
+  var f = url ? url.split("/").pop() : "script";
+  window._bootErrors.push(f + " (Line " + line + "): " + msg);
+};
+</script>
+
 <!-- ORDERED MODULAR SCRIPT LOADING -->
-<script src="js/chaos.js"></script>
-<script src="js/data-factions.js"></script>
-<script src="js/data-heroes.js"></script>
-<script src="js/data-relics.js"></script>
-<script src="js/state.js"></script>
-<script src="js/world.js"></script>
-<script src="js/combat.js"></script>
-<script src="js/sim.js"></script>
-<script src="js/render.js"></script>
-<script src="js/ui.js"></script>
+<script src="js/chaos.js" onerror="window._bootErrors.push('404 Missing: js/chaos.js')"></script>
+<script src="js/data-factions.js" onerror="window._bootErrors.push('404 Missing: js/data-factions.js')"></script>
+<script src="js/data-heroes.js" onerror="window._bootErrors.push('404 Missing: js/data-heroes.js')"></script>
+<script src="js/data-relics.js" onerror="window._bootErrors.push('404 Missing: js/data-relics.js')"></script>
+<script src="js/state.js" onerror="window._bootErrors.push('404 Missing: js/state.js')"></script>
+<script src="js/world.js" onerror="window._bootErrors.push('404 Missing: js/world.js')"></script>
+<script src="js/combat.js" onerror="window._bootErrors.push('404 Missing: js/combat.js')"></script>
+<script src="js/sim.js" onerror="window._bootErrors.push('404 Missing: js/sim.js')"></script>
+<script src="js/render.js" onerror="window._bootErrors.push('404 Missing: js/render.js')"></script>
+<script src="js/ui.js" onerror="window._bootErrors.push('404 Missing: js/ui.js')"></script>
+
+<script>
+window.addEventListener("load", function() {
+  var checks = [
+    ["chaos.js", typeof ChaosMath !== "undefined"],
+    ["data-factions.js", typeof FACTIONS !== "undefined"],
+    ["data-heroes.js", typeof CHAR_RAW !== "undefined"],
+    ["data-relics.js", typeof RELICS_DB !== "undefined"],
+    ["state.js", typeof loadMeta === "function"],
+    ["world.js", typeof getDistBiome === "function"],
+    ["combat.js", typeof startRun === "function"],
+    ["sim.js", typeof updateSim === "function"],
+    ["render.js", typeof renderScene === "function"],
+    ["ui.js", typeof updateMenuUI === "function"]
+  ];
+  var failed = checks.filter(function(c) { return !c[1]; }).map(function(c) { return c[0]; });
+  var box = document.getElementById("bootDiag");
+  if (window._bootErrors.length > 0 || failed.length > 0) {
+    box.style.color = "#ff5252";
+    box.style.fontWeight = "bold";
+    box.textContent = (window._bootErrors.join(" | ") || "") + (failed.length ? " [Failed to parse: " + failed.join(", ") + "]" : "");
+  }
+});
+</script>
 </body>
 </html>
