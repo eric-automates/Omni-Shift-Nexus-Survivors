@@ -1,6 +1,6 @@
 // FILE: js/combat.js
 // PART: 11 of 14
-// DETAIL: Run initialization, Difficulty & Relic application, 55-Hero weapons & Lv.10 Supercharges, Utility skills, CQC Grapple-Execute, and Rival Hunters.
+// DETAIL: Run initialization, Innate Force Orb Vacuum setup, 55-Hero weapons & Lv.10 Supercharges, Utility skills, and Alignment/Matchup Rival Invasions.
 
 "use strict";
 
@@ -17,8 +17,12 @@ function startRun() {
   runActive = true;
   runPaused = false;
   runTime = 0;
+  if (typeof totalRunTime !== "undefined") totalRunTime = 0;
+  if (typeof orbWarpTimer !== "undefined") orbWarpTimer = 0;
   waveNum = 1;
   rivalTimer = 0;
+
+  const innateVac = (typeof hasInnateVacuum === "function" && hasInnateVacuum(cid)) ? 1.0 : 0.0;
 
   player = {
     x: 256, y: 256, aim: 0, walk: 0,
@@ -37,6 +41,7 @@ function startRun() {
     fortAnchorX: 256, fortAnchorY: 256, fortTimer: 0, fortFastMul: 1.0,
     inVehicle: false, vehicleHp: 0, vehBoostMul: 1.0, carryingBarricade: false,
     hasRepulsor: false, utilCdrMul: 1.0,
+    orbVacuumRate: innateVac,
     maxRelics: ([7, 10, 35].includes(cid)) ? 4 : 3,
     relics: [],
     utils: getHeroUtils(cid),
@@ -46,7 +51,6 @@ function startRun() {
     passives: []
   };
 
-  // Original 51 Hero Passives (#00-#50) + New Heroes (#51-#54)
   if (cid === 0) { player.spd *= 1.15; player.mag *= 1.25; }
   if (cid === 1) { player.armor += 4; }
   if (cid === 2) { player.cdr *= 0.74; player.projCnt += 1; }
@@ -109,9 +113,7 @@ function grantRelic(forcedId = -1) {
   if (avail.length === 0) return;
   const rel = forcedId >= 0 ? (RELICS_DB[forcedId] || avail[0]) : avail[Math.floor(Math.random() * avail.length)];
 
-  if (player.relics.length >= player.maxRelics) {
-    player.relics.shift();
-  }
+  if (player.relics.length >= player.maxRelics) player.relics.shift();
   player.relics.push({ id: rel[0], name: rel[1], desc: rel[2], key: rel[3], val: rel[4] });
 
   const k = rel[3], v = rel[4];
@@ -190,25 +192,21 @@ function applyPassive(idx) {
   else if (k === "rev") player.revives += v;
 }
 
-/* === 3. ENEMY, BOSS & RIVAL BOUNTY HUNTER SPAWNER === */
+/* === 3. ENEMY, BOSS & ALIGNMENT-BASED RIVAL CHALLENGER SPAWNER === */
 function spawnEnemy(isBoss = false, isRival = false) {
   for (let i = 0; i < MAX_E; i++) {
     if (!eAct[i]) {
       const ang = Math.random() * Math.PI * 2;
-      const dist = (isBoss || isRival ? 240 : 305) / Math.min(1.2, opts.zoom);
+      const dist = (isBoss || isRival ? 235 : 305) / Math.min(1.2, opts.zoom);
       eX[i] = player.x + Math.cos(ang) * dist;
       eY[i] = player.y + Math.sin(ang) * dist;
-      eVX[i] = 0;
-      eVY[i] = 0;
+      eVX[i] = 0; eVY[i] = 0;
 
       const waveScale = 1 + (waveNum - 1) * 0.18 + ChaosMath.range(i + waveNum * 31, -0.05, 0.12);
       const base = isBoss ? 520 : (isRival ? 390 : (15 + runTime * 0.45));
       eHP[i] = eMax[i] = base * player.stg.hpMul * player.diff.hpMul * waveScale;
       eSpd[i] = (isBoss ? 64 : (isRival ? 88 : (46 + (i % 4) * 11 + Math.min(35, waveNum * 2.2)))) * player.diff.spdMul;
-      eSlow[i] = 0;
-      eShred[i] = 0;
-      eStun[i] = 0;
-      eGrapple[i] = 0;
+      eSlow[i] = 0; eShred[i] = 0; eStun[i] = 0; eGrapple[i] = 0;
       eFireCD[i] = 1.5 + Math.random() * 1.5;
       eSeed[i] = Math.floor(Math.random() * 1000000);
       eWave[i] = waveNum;
@@ -216,11 +214,14 @@ function spawnEnemy(isBoss = false, isRival = false) {
 
       if (isRival) {
         eType[i] = 98;
-        const pool = [54, 51, 52, 29, 1, 3, 34, 40];
-        const rCid = pool[Math.floor(Math.random() * pool.length)];
-        eRivalCid[i] = rCid === player.cid ? 54 : rCid;
-        const rName = CHAR_RAW[eRivalCid[i]][3];
-        spawnSpeech(player.x, player.y - 18, "BOUNTY ON YOUR HEAD! (" + rName.toUpperCase() + ")", "#ff5252", 3.2);
+        let rCid = Math.floor(Math.random() * CHAR_RAW.length);
+        if (rCid === player.cid) rCid = (rCid + 1) % CHAR_RAW.length;
+        eRivalCid[i] = rCid;
+        const rName = CHAR_RAW[rCid][3];
+        const callout = typeof getRivalCallout === "function"
+          ? getRivalCallout(rCid, player.cid)
+          : "You have a bounty on your head, and I've come to collect!";
+        spawnSpeech(player.x, player.y - 24, `${rName.toUpperCase()}: "${callout}"`, "#ff5252", 3.8);
         sfx(140, 420, 0.4, "sawtooth", 0.35);
       } else {
         eType[i] = isBoss ? 99 : (i % 4);
@@ -241,9 +242,7 @@ function fireWeapon(w) {
   const killBonus = player.cid === 24 ? Math.min(2, 1 + Math.floor(player.kills / 15) * 0.01) : 1;
   let baseDmg = (14 + w.lvl * 6.5) * player.might * lowHpBonus * killBonus * (sup ? 2.35 : 1);
 
-  let tx = player.x + Math.cos(player.aim) * 120;
-  let ty = player.y + Math.sin(player.aim) * 120;
-  let best = 1e9;
+  let tx = player.x + Math.cos(player.aim) * 120, ty = player.y + Math.sin(player.aim) * 120, best = 1e9;
   for (let i = 0; i < MAX_E; i++) {
     if (eAct[i]) {
       const d = Math.hypot(eX[i] - player.x, eY[i] - player.y);
@@ -253,11 +252,9 @@ function fireWeapon(w) {
   const aimAng = Math.atan2(ty - player.y, tx - player.x);
   player.aim = aimAng;
 
-  // #52 The Man With No Name: High-crit fast revolver shot
   if (w.id === 52) {
     sfx(720, 190, 0.04, "square", 0.24);
-    const spd = 480 * player.projSpd;
-    const spread = (Math.random() - 0.5) * 0.08;
+    const spd = 480 * player.projSpd, spread = (Math.random() - 0.5) * 0.08;
     spawnProj(player.x, player.y, Math.cos(aimAng + spread) * spd, Math.sin(aimAng + spread) * spd, baseDmg * 2.1, 0.75 * player.dur, 9 * player.area, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0);
     return;
   }
@@ -265,24 +262,21 @@ function fireWeapon(w) {
   if (w.style === "orbit") {
     sfx(420, 620, 0.06, "sine", 0.14);
     for (let k = 0; k < count; k++) {
-      const a = w.ang + (Math.PI * 2 * k) / count;
-      const rad = (58 + (sup ? 24 : 0)) * player.area;
+      const a = w.ang + (Math.PI * 2 * k) / count, rad = (58 + (sup ? 24 : 0)) * player.area;
       spawnProj(player.x + Math.cos(a) * rad, player.y + Math.sin(a) * rad, a, rad, baseDmg, 0.45 * player.dur, 14 * player.area, 99, 1, sup, 0);
     }
     if (sup) spawnProj(player.x, player.y, 0, 0, baseDmg * 0.85, 0.35, 95 * player.area, 99, 6, 1, 0);
   } else if (w.style === "missile") {
     sfx(580, 240, 0.07, "sawtooth");
     for (let k = 0; k < count; k++) {
-      const a = aimAng + (k - (count - 1) / 2) * 0.28;
-      const spd = 235 * player.projSpd;
+      const a = aimAng + (k - (count - 1) / 2) * 0.28, spd = 235 * player.projSpd;
       spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 1.6 * player.dur, 9 * player.area, player.pierce, 2, sup, 0);
     }
   } else if (w.style === "cone") {
     sfx(180, 55, 0.06, "square");
     const pellets = count + 2;
     for (let k = 0; k < pellets; k++) {
-      const a = aimAng + (k - (pellets - 1) / 2) * 0.16;
-      const spd = 295 * player.projSpd;
+      const a = aimAng + (k - (pellets - 1) / 2) * 0.16, spd = 295 * player.projSpd;
       spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.88, 0.55 * player.dur, 8 * player.area, player.pierce + 1, 3, sup, 0);
       if (sup) {
         const ra = a + Math.PI;
@@ -292,15 +286,13 @@ function fireWeapon(w) {
   } else if (w.style === "beam") {
     sfx(880, 220, 0.08, "sawtooth");
     for (let k = 0; k < count; k++) {
-      const a = aimAng + (k - (count - 1) / 2) * 0.12;
-      const spd = 450 * player.projSpd;
+      const a = aimAng + (k - (count - 1) / 2) * 0.12, spd = 450 * player.projSpd;
       spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 1.2, 0.75 * player.dur, 10 * player.area, 4 + player.pierce + (sup ? 6 : 0), 4, sup, 0);
     }
   } else if (w.style === "chain") {
     sfx(660, 320, 0.07, "triangle");
     for (let k = 0; k < count; k++) {
-      const a = aimAng + (k - (count - 1) / 2) * 0.22;
-      const spd = 330 * player.projSpd;
+      const a = aimAng + (k - (count - 1) / 2) * 0.22, spd = 330 * player.projSpd;
       spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 0.9 * player.dur, 11 * player.area, 2 + player.pierce + (sup ? 4 : 0), 5, sup, 0);
     }
   } else {
@@ -315,28 +307,22 @@ function triggerUtility(uIdx) {
   if (u.cd > 0) return;
   u.cd = u.cdMax * player.utilCdrMul;
 
-  if (u.type === "buildFort") {
-    deployLastStandFort(player.x, player.y);
-  } else if (u.type === "grappleHook") {
+  if (u.type === "buildFort") deployLastStandFort(player.x, player.y);
+  else if (u.type === "grappleHook") {
     let best = -1, bestHP = -1;
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 320 && eHP[i] > bestHP) {
-        bestHP = eHP[i]; best = i;
-      }
+      if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 320 && eHP[i] > bestHP) { bestHP = eHP[i]; best = i; }
     }
     if (best >= 0) {
-      eGrapple[best] = 5.5;
-      eStun[best] = 5.5;
+      eGrapple[best] = 5.5; eStun[best] = 5.5;
       spawnSpeech(eX[best], eY[best], "GRAPPLED!", "#00e5ff", 1.8);
       sfx(620, 210, 0.16, "sawtooth");
     }
   } else if (u.type === "flameCone") {
-    flameVisTimer = 0.65;
-    sfx(140, 75, 0.25, "sawtooth", 0.28);
+    flameVisTimer = 0.65; sfx(140, 75, 0.25, "sawtooth", 0.28);
     for (let i = 0; i < MAX_E; i++) {
       if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 135 * player.area) {
-        eHP[i] -= 140 * player.might;
-        spawnDmg(eX[i], eY[i], 140 * player.might, true);
+        eHP[i] -= 140 * player.might; spawnDmg(eX[i], eY[i], 140 * player.might, true);
       }
     }
   } else if (u.type === "fanHammer" || u.type === "critBurst") {
@@ -349,12 +335,9 @@ function triggerUtility(uIdx) {
     for (let i = 0; i < MAX_E; i++) {
       if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 140) {
         const flipAng = Math.random() * Math.PI * 2;
-        eX[i] += Math.cos(flipAng) * 42;
-        eY[i] += Math.sin(flipAng) * 42;
-        eStun[i] = 2.5;
+        eX[i] += Math.cos(flipAng) * 42; eY[i] += Math.sin(flipAng) * 42; eStun[i] = 2.5;
         const execDmg = eType[i] >= 98 ? Math.max(260 * player.might, eMax[i] * 0.38) : eHP[i] + 50;
-        eHP[i] -= execDmg;
-        spawnDmg(eX[i], eY[i], execDmg, true);
+        eHP[i] -= execDmg; spawnDmg(eX[i], eY[i], execDmg, true);
       }
     }
     spawnSpeech(player.x, player.y, "BABA YAGA TAKEDOWN!", "#ffd166", 1.5);
@@ -371,37 +354,28 @@ function updateHeroSpecials(simDt) {
   if (player.cqcCD > 0) player.cqcCD -= simDt;
   if (player.autoFlameCD > 0) player.autoFlameCD -= simDt;
 
-  // #53 Green-Beret Vet: 120s Stationary Last-Stand Fortifier (within 180px)
   if (player.cid === 53) {
     if (Math.hypot(player.x - player.fortAnchorX, player.y - player.fortAnchorY) <= 180) {
       player.fortTimer += simDt * player.fortFastMul;
-      if (player.fortTimer >= 120) {
-        player.fortTimer = 0;
-        deployLastStandFort(player.x, player.y);
-      }
+      if (player.fortTimer >= 120) { player.fortTimer = 0; deployLastStandFort(player.x, player.y); }
     } else {
-      player.fortAnchorX = player.x;
-      player.fortAnchorY = player.y;
+      player.fortAnchorX = player.x; player.fortAnchorY = player.y;
       player.fortTimer = Math.max(0, player.fortTimer - simDt * 0.5);
     }
   }
 
-  // #54 Slav-1 Tracker: Auto-Flamethrower when >= 4 foes surround within 115px
   if (player.cid === 54 && player.autoFlameCD <= 0) {
     let nearCnt = 0;
     for (let i = 0; i < MAX_E; i++) {
       if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 115) nearCnt++;
     }
     if (nearCnt >= 4) {
-      player.autoFlameCD = 4.5;
-      flameVisTimer = 0.55;
+      player.autoFlameCD = 4.5; flameVisTimer = 0.55;
       spawnSpeech(player.x, player.y, "WRIST FLAMETHROWER!", "#ff6d00", 1.4);
       sfx(150, 65, 0.22, "sawtooth", 0.25);
       for (let i = 0; i < MAX_E; i++) {
         if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 125 * player.area) {
-          eHP[i] -= 110 * player.might;
-          eStun[i] = 1.0;
-          spawnDmg(eX[i], eY[i], 110 * player.might, true);
+          eHP[i] -= 110 * player.might; eStun[i] = 1.0; spawnDmg(eX[i], eY[i], 110 * player.might, true);
         }
       }
     }

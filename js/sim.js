@@ -1,6 +1,6 @@
 // FILE: js/sim.js
 // PART: 12 of 14
-// DETAIL: Main simulation tick, Temporal Nexus scaling, solid obstacle projectile blocking, Goa'uld Repulsor shield, and Wave Mutation/Steering AI.
+// DETAIL: Main simulation tick, Limb % Hit Routing, Elite Projectile Deflection (pEnemy=2 Universal Ricochet Hazards), Black Drips, and Hound AI.
 
 "use strict";
 
@@ -9,7 +9,10 @@ function updateSim(rawDt) {
   if (!runActive || runPaused || !player) return;
   const simDt = rawDt * timeScale;
   runTime += simDt;
-  waveNum = 1 + Math.floor(runTime / 20);
+  if (typeof totalRunTime !== "undefined") totalRunTime += simDt;
+  if (typeof orbWarpTimer !== "undefined") orbWarpTimer += simDt;
+  const elapsedTotal = typeof totalRunTime !== "undefined" ? totalRunTime : runTime;
+  waveNum = 1 + Math.floor(elapsedTotal / 20);
   rivalTimer += simDt;
   ambTimer += rawDt;
 
@@ -19,7 +22,20 @@ function updateSim(rawDt) {
     sfx(65, 52, 0.35, "sine", 0.06);
   }
 
-  // Timed Hero Passives (#42 Sandevistan, #43 VATS, #23 Borg, #10 Othala)
+  if (typeof compressOffscreenOrbsToChest === "function") {
+    if (typeof orbWarpTimer !== "undefined" && orbWarpTimer >= 600) {
+      orbWarpTimer = 0;
+      compressOffscreenOrbsToChest();
+    } else if (Math.floor(elapsedTotal) % 15 === 0) {
+      let offscreenCnt = 0;
+      for (let i = 0; i < MAX_O; i++) {
+        const homing = typeof oHome !== "undefined" ? oHome[i] : 0;
+        if (oAct[i] && !homing && Math.hypot(oX[i] - player.x, oY[i] - player.y) > 360) offscreenCnt++;
+      }
+      if (offscreenCnt >= 380) compressOffscreenOrbsToChest();
+    }
+  }
+
   if (player.adaptTimer > 0) player.adaptTimer -= simDt;
   if (player.phaseTimer > 0) player.phaseTimer -= simDt;
   if (player.cid === 42) player.sandTimer = (player.sandTimer + simDt) % 6;
@@ -37,7 +53,6 @@ function updateSim(rawDt) {
     player.aim = Math.atan2(joy.dy, joy.dx);
   }
 
-  // Chunk Props Collision, Loot Pods & Floor Hazards
   const pcx = Math.floor(player.x / 512), pcy = Math.floor(player.y / 512);
   for (let dy = -1; dy <= 1; dy++) {
     for (let dx = -1; dx <= 1; dx++) {
@@ -63,7 +78,6 @@ function updateSim(rawDt) {
     }
   }
 
-  // Enemy, Sector Boss (45s) & Rival Bounty Hunter (75s) Spawners
   if (Math.random() < simDt * (3.8 + waveNum * 0.25)) spawnEnemy(false, false);
   if (runTime >= 45 && !player.bossSpawned) {
     player.bossSpawned = true;
@@ -74,7 +88,6 @@ function updateSim(rawDt) {
     spawnEnemy(false, true);
   }
 
-  // Weapon Firing & #52 The Man With No Name 6-Shot Blazing Burst + 0.55s Quick-Reload
   const reaverRate = player.cid === 17 ? (1 - 0.5 * (1 - player.hp / player.maxHp)) : 1;
   player.weapons.forEach(w => {
     w.ang += simDt * (w.lvl >= 10 ? 5.5 : 3.2);
@@ -108,16 +121,25 @@ function updateSim(rawDt) {
   updateProjectiles(simDt);
   updateEnemies(simDt);
 
-  // Orbs, Floating Damage/Speech & Particles
+  for (let i = 0; i < MAX_DRIP; i++) {
+    if (!drAct[i]) continue;
+    if (drZ[i] > 0) drZ[i] = Math.max(0, drZ[i] - 18 * simDt);
+    drLife[i] -= simDt;
+    if (drLife[i] <= 0) drAct[i] = 0;
+  }
+
   for (let i = 0; i < MAX_O; i++) {
     if (!oAct[i]) continue;
     const d = Math.hypot(player.x - oX[i], player.y - oY[i]);
-    if (d < player.mag) {
+    const isHoming = typeof oHome !== "undefined" && oHome[i] === 1;
+    if (d < player.mag || isHoming) {
       const a = Math.atan2(player.y - oY[i], player.x - oX[i]);
-      oX[i] += Math.cos(a) * 320 * simDt;
-      oY[i] += Math.sin(a) * 320 * simDt;
-      if (d < 18) {
+      const pullSpd = isHoming ? 520 : 320;
+      oX[i] += Math.cos(a) * pullSpd * simDt;
+      oY[i] += Math.sin(a) * pullSpd * simDt;
+      if (d < 20) {
         oAct[i] = 0;
+        if (typeof oHome !== "undefined") oHome[i] = 0;
         player.xp += oVal[i] * player.greed;
         sfx(500 + player.lvl * 12, 760 + player.lvl * 12, 0.035, "sine", 0.12);
         if (player.xp >= player.nextXp) {
@@ -138,39 +160,90 @@ function updateSim(rawDt) {
   updateHUD();
 }
 
-/* === 2. PROJECTILE PHYSICS, SOLID WALL BLOCKING & GOA'ULD REPULSOR === */
+/* === 2. LIMB % DAMAGE ROUTING, ELITE DEFLECTION & PROJECTILE COLLISIONS === */
+function applyEnemyHitAndLimbs(j, finalDmg, isCrit) {
+  eHP[j] -= finalDmg;
+  if (player.slow > 0) eSlow[j] = Math.min(0.65, player.slow);
+  if (player.shred > 0) eShred[j] += player.shred * 0.25;
+
+  const maxH = Math.max(1, eMax[j]);
+  if (isCrit) {
+    const corePct = Math.min(100, Math.max(1, Math.round((finalDmg / maxH) * 100)));
+    spawnDmg(eX[j], eY[j], corePct, true, false);
+  } else {
+    const limbPool = maxH * 0.45;
+    const pctDelta = Math.min(95, Math.max(5, Math.round((finalDmg / limbPool) * 100)));
+    eBleed[j] = 1;
+    spawnDrip(eX[j], eY[j] + 6, j);
+
+    if (eType[j] === 1 && (eSeed[j] + Math.floor(runTime * 10)) % 3 === 0) {
+      eTailDmg[j] = Math.min(100, eTailDmg[j] + pctDelta);
+      spawnDmg(eX[j], eY[j], pctDelta, false, true);
+    } else {
+      eLegDmg[j] = Math.min(100, eLegDmg[j] + pctDelta);
+      eLegsLost[j] = eType[j] === 1 ? Math.min(4, Math.floor(eLegDmg[j] / 25)) : Math.min(2, Math.floor(eLegDmg[j] / 45));
+      spawnDmg(eX[j], eY[j], pctDelta, false, true);
+    }
+  }
+}
+
+function canEnemyDeflect(j, projStyle) {
+  if (projStyle === 1 || projStyle === 6 || eStun[j] > 0 || eGrapple[j] > 0) return false;
+  if (eType[j] >= 98) return Math.random() < 0.16;
+  const isDeflectorElite = (eType[j] === 0 || eType[j] === 3) && eWave[j] >= 2 && (eSeed[j] % 5 === 0);
+  return isDeflectorElite && Math.random() < 0.32;
+}
+
 function updateProjectiles(simDt) {
   for (let i = 0; i < MAX_P; i++) {
     if (!pAct[i]) continue;
     pLife[i] -= simDt;
     if (pLife[i] <= 0) { pAct[i] = 0; continue; }
 
-    // Enemy / Rival Projectiles (pEnemy === 1)
-    if (pEnemy[i] === 1) {
+    // pEnemy === 1 (Enemy Shot) OR pEnemy === 2 (Deflected Universal Ricochet Hazard!)
+    if (pEnemy[i] >= 1) {
       pX[i] += pVX[i] * simDt;
       pY[i] += pVY[i] * simDt;
-      // #00 Goa'uld Personal Repulsor stops incoming enemy missiles
       if (player.hasRepulsor && Math.hypot(pX[i] - player.x, pY[i] - player.y) < 58) {
-        pAct[i] = 0;
-        spawnParticles(pX[i], pY[i], 4);
-        sfx(680, 920, 0.04, "sine", 0.1);
+        pAct[i] = 0; spawnParticles(pX[i], pY[i], 4); sfx(680, 920, 0.04, "sine", 0.1);
         continue;
       }
       if (isPointBlockedByObstacle(pX[i], pY[i], false)) {
-        pAct[i] = 0;
-        spawnParticles(pX[i], pY[i], 3);
+        pAct[i] = 0; spawnParticles(pX[i], pY[i], 3);
         continue;
       }
+      // Universal Ricochet (pEnemy === 2) can also hit and hurt ANY enemy in the world!
+      if (pEnemy[i] === 2) {
+        let hitFoe = false;
+        for (let j = 0; j < MAX_E; j++) {
+          if (eAct[j] && Math.hypot(pX[i] - eX[j], pY[i] - eY[j]) < (eType[j] >= 98 ? 22 : 14)) {
+            applyEnemyHitAndLimbs(j, pDmg[i], true);
+            spawnParticles(eX[j], eY[j], 4);
+            if (eHP[j] <= 0) handleEnemyDeath(j);
+            pAct[i] = 0; hitFoe = true;
+            break;
+          }
+        }
+        if (hitFoe) continue;
+      }
+      // Check hit against Player (with Dodge, Phase, Vehicle & Armor defenses)
       if (Math.hypot(pX[i] - player.x, pY[i] - player.y) < 16) {
         pAct[i] = 0;
-        const dmg = Math.max(2, pDmg[i] - player.armor);
+        if (Math.random() < player.dodge) {
+          spawnSpeech(player.x, player.y, "DODGED!", "#00e5ff", 0.7);
+          continue;
+        }
+        const raw = pEnemy[i] === 2 ? Math.min(26, pDmg[i] * 0.25) * player.diff.dmgMul : pDmg[i];
+        const effArm = player.armor + (player.adaptTimer > 0 ? 5 : 0);
+        const dmg = Math.max(1, raw - effArm) * (player.cid === 1 ? 0.8 : 1);
         if (player.inVehicle) {
           player.vehicleHp -= dmg;
           if (player.vehicleHp <= 0) player.inVehicle = false;
         } else {
           player.hp -= dmg;
+          if (player.cid === 23) player.adaptTimer = 5;
         }
-        spawnDmg(player.x, player.y, dmg, false);
+        spawnDmg(player.x, player.y, dmg, false, false);
       }
       continue;
     }
@@ -189,22 +262,17 @@ function updateProjectiles(simDt) {
         }
       }
       if (bd < 260) {
-        const ta = Math.atan2(by - pY[i], bx - pX[i]);
-        const spd = Math.hypot(pVX[i], pVY[i]);
+        const ta = Math.atan2(by - pY[i], bx - pX[i]), spd = Math.hypot(pVX[i], pVY[i]);
         pVX[i] = pVX[i] * 0.88 + Math.cos(ta) * spd * 0.12;
         pVY[i] = pVY[i] * 0.88 + Math.sin(ta) * spd * 0.12;
       }
-      pX[i] += pVX[i] * simDt;
-      pY[i] += pVY[i] * simDt;
+      pX[i] += pVX[i] * simDt; pY[i] += pVY[i] * simDt;
     } else if (pStyle[i] !== 6) {
-      pX[i] += pVX[i] * simDt;
-      pY[i] += pVY[i] * simDt;
+      pX[i] += pVX[i] * simDt; pY[i] += pVY[i] * simDt;
     }
 
-    // Solid obstacles stop projectiles (ignoreForts=true lets player shoot over Last-Stand Forts)
     if (pStyle[i] !== 1 && pStyle[i] !== 6 && isPointBlockedByObstacle(pX[i], pY[i], true)) {
-      pAct[i] = 0;
-      spawnParticles(pX[i], pY[i], 3);
+      pAct[i] = 0; spawnParticles(pX[i], pY[i], 3);
       continue;
     }
 
@@ -212,20 +280,33 @@ function updateProjectiles(simDt) {
       if (!eAct[j]) continue;
       const hitR = pRad[i] + (eType[j] >= 98 ? 22 : 13);
       if (Math.hypot(pX[i] - eX[j], pY[i] - eY[j]) < hitR) {
+        // Chunk 3: Check if Elite / Boss deflects this projectile with Plasma Sword / Shield!
+        if (canEnemyDeflect(j, pStyle[i])) {
+          const defAng = Math.atan2(pVY[i], pVX[i]) + Math.PI + (Math.random() - 0.5) * 2.2;
+          const defSpd = Math.max(250, Math.hypot(pVX[i], pVY[i]) * 0.88);
+          pVX[i] = Math.cos(defAng) * defSpd;
+          pVY[i] = Math.sin(defAng) * defSpd;
+          pX[i] = eX[j] + Math.cos(defAng) * (hitR + 8);
+          pY[i] = eY[j] + Math.sin(defAng) * (hitR + 8);
+          pEnemy[i] = 2;
+          pStyle[i] = 3;
+          pLife[i] = Math.max(0.75, pLife[i]);
+          spawnParticles(eX[j], eY[j], 5);
+          sfx(920, 1480, 0.05, "triangle", 0.18);
+          break;
+        }
+
         const isCrit = (player.cid === 43 && player.vatsTimer < 0.8) || (Math.random() < player.crit);
         const bossBoost = eType[j] >= 98 ? player.bossMul : 1;
         const finalDmg = pDmg[i] * (isCrit ? player.cdmg : 1) * bossBoost * (1 + eShred[j]);
 
-        eHP[j] -= finalDmg;
-        if (player.slow > 0) eSlow[j] = Math.min(0.65, player.slow);
-        if (player.shred > 0) eShred[j] += player.shred * 0.25;
+        applyEnemyHitAndLimbs(j, finalDmg, isCrit);
 
         if (pStyle[i] !== 6 && eGrapple[j] <= 0) {
           const ka = Math.atan2(eY[j] - player.y, eX[j] - player.x);
           eX[j] += Math.cos(ka) * 8 * player.kb;
           eY[j] += Math.sin(ka) * 8 * player.kb;
         }
-        spawnDmg(eX[j], eY[j], finalDmg, isCrit);
         spawnParticles(eX[j], eY[j], 3);
 
         if (pPrc[i] > 0) pPrc[i]--;
@@ -240,6 +321,7 @@ function updateProjectiles(simDt) {
 
 function handleEnemyDeath(j) {
   eAct[j] = 0;
+  clearEnemyLimbState(j, true);
   player.kills++;
   if (player.cid === 3 && player.kills % 15 === 0) player.hp = Math.min(player.maxHp, player.hp + 1);
   if (player.cid === 11 && player.kills % 10 === 0) player.hp = Math.min(player.maxHp, player.hp + 3);
@@ -262,19 +344,20 @@ function handleEnemyDeath(j) {
   }
 }
 
-/* === 3. ENEMY WAVE AI: OBSTACLE STUN, TANGENT STEERING & CQC EXECUTE === */
+/* === 3. ENEMY WAVE AI: LIMB CRIPPLE, HOUND TAIL BALANCE & CQC EXECUTE === */
 function updateEnemies(simDt) {
+  const elapsedTotal = typeof totalRunTime !== "undefined" ? totalRunTime : runTime;
   for (let i = 0; i < MAX_E; i++) {
     if (!eAct[i]) continue;
 
-    // Claymore Mine Detonation Check
+    if (eBleed[i] === 1 && Math.random() < simDt * 6.2) spawnDrip(eX[i], eY[i] + 7, i);
+
     for (let m = activeMines.length - 1; m >= 0; m--) {
       if (Math.hypot(eX[i] - activeMines[m].x, eY[i] - activeMines[m].y) < 26) {
         const mn = activeMines[m];
         activeMines.splice(m, 1);
-        eHP[i] -= mn.dmg;
+        applyEnemyHitAndLimbs(i, mn.dmg, true);
         eStun[i] = 2.0;
-        spawnDmg(eX[i], eY[i], mn.dmg, true);
         spawnParticles(mn.x, mn.y, 12);
         sfx(120, 45, 0.18, "sawtooth");
         if (eHP[i] <= 0) { handleEnemyDeath(i); break; }
@@ -293,13 +376,31 @@ function updateEnemies(simDt) {
       continue;
     }
 
+    let legMul = 1.0;
+    if (eType[i] === 1) {
+      const lost = eLegsLost[i];
+      legMul = lost === 0 ? 1.0 : (lost === 1 ? 0.85 : (lost === 2 ? 0.35 : 0.18));
+    } else if (eLegDmg[i] > 0) {
+      legMul = Math.max(0.32, 1.0 - (eLegDmg[i] / 100) * 0.65);
+    }
+
     const baseAng = Math.atan2(player.y - eY[i], player.x - eX[i]);
-    const patAng = ChaosMath.movePattern(eMoveStyle[i], baseAng, runTime, eSeed[i]);
-    const patSpd = ChaosMath.moveSpeedMul(eMoveStyle[i], runTime, eSeed[i]);
-    const curSpd = eSpd[i] * patSpd * (1 - eSlow[i]) * (player.cid === 49 ? 0.75 : 1);
+    let patAng = ChaosMath.movePattern(eMoveStyle[i], baseAng, elapsedTotal, eSeed[i]);
+
+    if (eType[i] === 1 && eTailDmg[i] >= 45) {
+      eTurnTimer[i] -= simDt;
+      if (eTurnTimer[i] <= 0) {
+        eTurnTimer[i] = 0.45 + (eSeed[i] % 5) * 0.1;
+        eTurnAng[i] = baseAng + (Math.random() - 0.5) * 1.45;
+      }
+      patAng = eTurnAng[i];
+    }
+
+    const patSpd = ChaosMath.moveSpeedMul(eMoveStyle[i], elapsedTotal, eSeed[i]);
+    const curSpd = eSpd[i] * patSpd * legMul * (1 - eSlow[i]) * (player.cid === 49 ? 0.75 : 1);
     const nearObs = getNearbySolidObstacles(eX[i], eY[i], 70, false);
 
-    if (eWave[i] >= 3 || eType[i] >= 98) {
+    if ((eWave[i] >= 3 || eType[i] >= 98) && !(eType[i] === 1 && eTailDmg[i] >= 45)) {
       const st = ChaosMath.steerAround(eX[i], eY[i], player.x, player.y, nearObs, 1.15, eSeed[i]);
       eX[i] += st.vx * curSpd * simDt;
       eY[i] += st.vy * curSpd * simDt;
@@ -308,10 +409,8 @@ function updateEnemies(simDt) {
       eY[i] += Math.sin(patAng) * curSpd * simDt;
     }
 
-    // Obstacle collision: low-wave enemies bounce back & get stunned; forts block all enemies
     for (let k = 0; k < nearObs.length; k++) {
-      const ob = nearObs[k];
-      const od = Math.hypot(eX[i] - ob.x, eY[i] - ob.y);
+      const ob = nearObs[k], od = Math.hypot(eX[i] - ob.x, eY[i] - ob.y);
       if (od < ob.rad + 11) {
         const pushA = Math.atan2(eY[i] - ob.y, eX[i] - ob.x);
         if (eWave[i] <= 2 && !ob.isFort && eType[i] < 98) {
@@ -325,7 +424,6 @@ function updateEnemies(simDt) {
       }
     }
 
-    // Rival Bounty Hunters & Wave 4+ Ranged Mutants fire enemy projectiles
     if (eType[i] === 98 || (eWave[i] >= 4 && i % 6 === 0)) {
       eFireCD[i] -= simDt;
       if (eFireCD[i] <= 0 && Math.hypot(player.x - eX[i], player.y - eY[i]) < 290) {
@@ -335,7 +433,6 @@ function updateEnemies(simDt) {
       }
     }
 
-    // Player Contact: #51 Baba Yaga CQC Grapple-Flip-Execute, Vehicle Ramming & Damage
     if (Math.hypot(player.x - eX[i], player.y - eY[i]) < (eType[i] >= 98 ? 26 : 18)) {
       if (player.cid === 51 && player.cqcCD <= 0) {
         player.cqcCD = 0.85;
@@ -344,8 +441,7 @@ function updateEnemies(simDt) {
         eY[i] = player.y + Math.sin(flipA) * 44;
         eStun[i] = 2.4;
         const exDmg = eType[i] >= 98 ? Math.max(240 * player.might, eMax[i] * 0.34) : eHP[i] + 999;
-        eHP[i] -= exDmg;
-        spawnDmg(eX[i], eY[i], exDmg, true);
+        applyEnemyHitAndLimbs(i, exDmg, true);
         spawnSpeech(player.x, player.y, "CQC FLIP & EXECUTE!", "#ffd166", 1.1);
         sfx(780, 140, 0.1, "square");
         if (eHP[i] <= 0) handleEnemyDeath(i);
