@@ -1,6 +1,6 @@
 // FILE: js/state.js
 // PART: 9 of 14
-// DETAIL: Meta-Save persistence, Temporal Nexus scaling, Zero-GC SoA Pools, Self-Clearing Limb Damage Arrays, and Black Pixel Drip Ring Buffer.
+// DETAIL: Meta-Save persistence, Temporal Nexus scaling, Zero-GC SoA Pools, Limb/Drip Pools, and the v4.1 100-Shot Firing Range Ring Buffer.
 
 "use strict";
 
@@ -87,7 +87,7 @@ function resize() {
 window.addEventListener("resize", resize);
 resize();
 
-const MAX_E = 360, MAX_P = 520, MAX_O = 500, MAX_D = 140, MAX_PT = 240, MAX_DRIP = 220;
+const MAX_E = 360, MAX_P = 520, MAX_O = 500, MAX_D = 140, MAX_PT = 240, MAX_DRIP = 220, MAX_SH = 100;
 
 const eX = new Float32Array(MAX_E), eY = new Float32Array(MAX_E),
       eVX = new Float32Array(MAX_E), eVY = new Float32Array(MAX_E),
@@ -99,7 +99,6 @@ const eX = new Float32Array(MAX_E), eY = new Float32Array(MAX_E),
       eMoveStyle = new Uint8Array(MAX_E), eRivalCid = new Int16Array(MAX_E),
       eType = new Uint8Array(MAX_E), eAct = new Uint8Array(MAX_E);
 
-// Self-Clearing Limb Integrity & Hound Balance Pools (Zero-GC)
 const eLegDmg = new Float32Array(MAX_E),
       eTailDmg = new Float32Array(MAX_E),
       eLegsLost = new Uint8Array(MAX_E),
@@ -107,7 +106,6 @@ const eLegDmg = new Float32Array(MAX_E),
       eTurnAng = new Float32Array(MAX_E),
       eTurnTimer = new Float32Array(MAX_E);
 
-// Black Pixel Drip & 2x Ground Pool Ring Buffer
 const drX = new Float32Array(MAX_DRIP),
       drY = new Float32Array(MAX_DRIP),
       drZ = new Float32Array(MAX_DRIP),
@@ -116,12 +114,39 @@ const drX = new Float32Array(MAX_DRIP),
       drAct = new Uint8Array(MAX_DRIP);
 let drHead = 0;
 
+// v4.1 100-Shot Rolling Accuracy & Quadrant Ring Buffer
+// shAtk: 0=Ranged Bullet/Bolt, 1=Melee/Saber/Nova
+// shTgt: 0=Humanoid, 1=Wolf/Hound, 2=Arachnid, 3=Brute, 4=Titan Boss
+// shZone: 0=Miss, 1=Limb/Arm/Leg/Tail, 2=Torso/Heart, 3=Head/T-Zone
+const shNX = new Float32Array(MAX_SH),
+      shNY = new Float32Array(MAX_SH),
+      shAtk = new Uint8Array(MAX_SH),
+      shTgt = new Uint8Array(MAX_SH),
+      shZone = new Uint8Array(MAX_SH);
+let shWrite = 0, shCount = 0, selRangeTab = 0;
+
+function recordShotImpact(nx, ny, atkType, rawEnemyType, zone) {
+  let tgt = 0;
+  if (rawEnemyType === 1) tgt = 1;
+  else if (rawEnemyType === 2) tgt = 2;
+  else if (rawEnemyType === 3) tgt = 3;
+  else if (rawEnemyType === 99) tgt = 4;
+  shNX[shWrite] = Math.max(-0.94, Math.min(0.94, nx));
+  shNY[shWrite] = Math.max(-0.94, Math.min(0.94, ny));
+  shAtk[shWrite] = atkType;
+  shTgt[shWrite] = tgt;
+  shZone[shWrite] = zone;
+  shWrite = (shWrite + 1) % MAX_SH;
+  if (shCount < MAX_SH) shCount++;
+}
+
 const pX = new Float32Array(MAX_P), pY = new Float32Array(MAX_P),
       pVX = new Float32Array(MAX_P), pVY = new Float32Array(MAX_P),
       pDmg = new Float32Array(MAX_P), pLife = new Float32Array(MAX_P),
       pRad = new Float32Array(MAX_P), pPrc = new Int8Array(MAX_P),
       pStyle = new Uint8Array(MAX_P), pSup = new Uint8Array(MAX_P),
-      pEnemy = new Uint8Array(MAX_P), pAct = new Uint8Array(MAX_P);
+      pEnemy = new Uint8Array(MAX_P), pHit = new Uint8Array(MAX_P),
+      pAct = new Uint8Array(MAX_P);
 
 const oX = new Float32Array(MAX_O), oY = new Float32Array(MAX_O),
       oVal = new Float32Array(MAX_O), oHome = new Uint8Array(MAX_O),
@@ -149,17 +174,11 @@ let joy = { act: false, id: -1, ox: 0, oy: 0, dx: 0, dy: 0 };
 let pinchDist = 0;
 
 function clearEnemyLimbState(idx, fadeDrips = true) {
-  eLegDmg[idx] = 0;
-  eTailDmg[idx] = 0;
-  eLegsLost[idx] = 0;
-  eBleed[idx] = 0;
-  eTurnAng[idx] = 0;
-  eTurnTimer[idx] = 0;
+  eLegDmg[idx] = 0; eTailDmg[idx] = 0; eLegsLost[idx] = 0;
+  eBleed[idx] = 0; eTurnAng[idx] = 0; eTurnTimer[idx] = 0;
   if (fadeDrips) {
     for (let k = 0; k < MAX_DRIP; k++) {
-      if (drAct[k] && drOwner[k] === idx && drLife[k] > 0.4) {
-        drLife[k] = 0.4;
-      }
+      if (drAct[k] && drOwner[k] === idx && drLife[k] > 0.4) drLife[k] = 0.4;
     }
   }
 }
@@ -169,32 +188,17 @@ function spawnDrip(x, y, ownerIdx) {
   drHead = (drHead + 1) % MAX_DRIP;
   drX[i] = x + (Math.random() - 0.5) * 6;
   drY[i] = y + (Math.random() - 0.5) * 4;
-  drZ[i] = 5.5;
-  drLife[i] = 4.2;
-  drOwner[i] = ownerIdx;
-  drAct[i] = 1;
+  drZ[i] = 5.5; drLife[i] = 4.2; drOwner[i] = ownerIdx; drAct[i] = 1;
 }
 
 function purgeRunMemory() {
-  runActive = false;
-  runPaused = false;
+  runActive = false; runPaused = false;
   runChunkDeltas.clear();
-  activeForts.length = 0;
-  activeMines.length = 0;
-  movedBarricades.length = 0;
-  eAct.fill(0);
-  eLegDmg.fill(0);
-  eTailDmg.fill(0);
-  eLegsLost.fill(0);
-  eBleed.fill(0);
-  eTurnAng.fill(0);
-  eTurnTimer.fill(0);
-  drAct.fill(0);
-  pAct.fill(0);
-  oAct.fill(0);
-  oHome.fill(0);
-  dAct.fill(0);
-  ptAct.fill(0);
+  activeForts.length = 0; activeMines.length = 0; movedBarricades.length = 0;
+  eAct.fill(0); eLegDmg.fill(0); eTailDmg.fill(0); eLegsLost.fill(0);
+  eBleed.fill(0); eTurnAng.fill(0); eTurnTimer.fill(0);
+  drAct.fill(0); pAct.fill(0); pHit.fill(0); oAct.fill(0); oHome.fill(0); dAct.fill(0); ptAct.fill(0);
+  shWrite = 0; shCount = 0;
   player = null;
 }
 
@@ -203,14 +207,10 @@ function spawnDmg(x, y, val, isCrit, isLimb = false) {
   if (!opts.dmgNums) return;
   for (let i = 0; i < MAX_D; i++) {
     if (!dAct[i]) {
-      dX[i] = x + (Math.random() - 0.5) * 14;
-      dY[i] = y - 10;
+      dX[i] = x + (Math.random() - 0.5) * 14; dY[i] = y - 10;
       dVal[i] = Math.min(100, Math.max(1, Math.round(val)));
-      dTxt[i] = "";
-      dCol[i] = isLimb ? "#9e9e9e" : (isCrit ? "#ffd166" : "#ffffff");
-      dLife[i] = 0.58;
-      dCrit[i] = isCrit ? 1 : 0;
-      dAct[i] = 1;
+      dTxt[i] = ""; dCol[i] = isLimb ? "#9e9e9e" : (isCrit ? "#ffd166" : "#ffffff");
+      dLife[i] = 0.58; dCrit[i] = isCrit ? 1 : 0; dAct[i] = 1;
       return;
     }
   }
@@ -219,14 +219,8 @@ function spawnDmg(x, y, val, isCrit, isLimb = false) {
 function spawnSpeech(x, y, text, color = "#ffd166", dur = 2.4) {
   for (let i = 0; i < MAX_D; i++) {
     if (!dAct[i]) {
-      dX[i] = x;
-      dY[i] = y - 28;
-      dVal[i] = 0;
-      dTxt[i] = text;
-      dCol[i] = color;
-      dLife[i] = dur;
-      dCrit[i] = 2;
-      dAct[i] = 1;
+      dX[i] = x; dY[i] = y - 28; dVal[i] = 0; dTxt[i] = text;
+      dCol[i] = color; dLife[i] = dur; dCrit[i] = 2; dAct[i] = 1;
       return;
     }
   }
@@ -297,7 +291,7 @@ function spawnProj(x, y, vx, vy, dmg, life, rad, prc, style, sup, isEnemy = 0) {
     if (!pAct[i]) {
       pX[i] = x; pY[i] = y; pVX[i] = vx; pVY[i] = vy; pDmg[i] = dmg;
       pLife[i] = life; pRad[i] = rad; pPrc[i] = prc; pStyle[i] = style;
-      pSup[i] = sup; pEnemy[i] = isEnemy; pAct[i] = 1;
+      pSup[i] = sup; pEnemy[i] = isEnemy; pHit[i] = 0; pAct[i] = 1;
       return;
     }
   }

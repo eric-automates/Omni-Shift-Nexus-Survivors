@@ -1,6 +1,6 @@
 // FILE: js/sim.js
 // PART: 12 of 14
-// DETAIL: Main simulation tick, Limb % Hit Routing, Elite Projectile Deflection (pEnemy=2 Universal Ricochet Hazards), Black Drips, and Hound AI.
+// DETAIL: Main simulation tick, Per-Archetype XY Anatomy Quadrant Telemetry (Henchman, Wolf, Arachnid, Brute, Titan), Elite Deflection, and Hound AI.
 
 "use strict";
 
@@ -160,30 +160,106 @@ function updateSim(rawDt) {
   updateHUD();
 }
 
-/* === 2. LIMB % DAMAGE ROUTING, ELITE DEFLECTION & PROJECTILE COLLISIONS === */
-function applyEnemyHitAndLimbs(j, finalDmg, isCrit) {
+/* === 2. ARCHETYPE-SPECIFIC XY QUADRANT HIT TELEMETRY, LIMB % & DEFLECTION === */
+function findNearestEnemyType(x, y, fallbackIdx = 0) {
+  let bestD = 1e9, bestType = fallbackIdx % 4;
+  for (let j = 0; j < MAX_E; j++) {
+    if (eAct[j]) {
+      const d = Math.hypot(eX[j] - x, eY[j] - y);
+      if (d < bestD) { bestD = d; bestType = eType[j]; }
+    }
+  }
+  return bestType;
+}
+
+function applyEnemyHitAndLimbs(j, finalDmg, isCrit, hitX = eX[j], hitY = eY[j], atkType = 0) {
   eHP[j] -= finalDmg;
   if (player.slow > 0) eSlow[j] = Math.min(0.65, player.slow);
   if (player.shred > 0) eShred[j] += player.shred * 0.25;
 
-  const maxH = Math.max(1, eMax[j]);
+  const maxH = Math.max(1, eMax[j]), et = eType[j];
+  const r = et >= 98 ? 22 : 14;
+  const focus = Math.max(0.25, 1.0 - Math.min(0.65, player.crit * 0.75));
+  const rx = ((hitX - eX[j]) / r) * focus + (Math.random() - 0.5) * 0.16 * focus;
+  const ry = ((hitY - eY[j]) / r) * focus + (Math.random() - 0.5) * 0.16 * focus;
+  const side = rx < 0 ? -1 : 1;
+
   if (isCrit) {
+    // Critical Hit -> Maps to each archetype's specific Head T-Zone or Heart Bullseye!
+    const isHead = (Math.random() < 0.52) || (ry < -0.15);
+    let nx = rx * 0.25, ny = -0.10 + (Math.random() - 0.5) * 0.14;
+    if (et === 1) {
+      // Wolf Target: Head is forward-right (+0.48, -0.26), Heart is (+0.08, -0.10)
+      nx = isHead ? (0.48 + (Math.random() - 0.5) * 0.14) : (0.08 + (Math.random() - 0.5) * 0.15);
+      ny = isHead ? (-0.26 + (Math.random() - 0.5) * 0.14) : (-0.10 + (Math.random() - 0.5) * 0.14);
+    } else if (et === 2) {
+      // Arachnid Target: Cephalothorax Eyes (0, -0.26) or Thorax Heart (0, -0.06)
+      nx = (Math.random() - 0.5) * 0.16;
+      ny = isHead ? (-0.28 + (Math.random() - 0.5) * 0.10) : (-0.06 + (Math.random() - 0.5) * 0.14);
+    } else if (et === 3) {
+      // Brute Target: Recessed Head (0, -0.52) or Broad Chest Heart (0, -0.10)
+      nx = (Math.random() - 0.5) * 0.18;
+      ny = isHead ? (-0.52 + (Math.random() - 0.5) * 0.12) : (-0.10 + (Math.random() - 0.5) * 0.16);
+    } else {
+      // Henchman (0) & Titan Boss (99): Head T-Zone (0, -0.64) or Chest Heart (0, -0.12)
+      nx = (Math.random() - 0.5) * 0.14;
+      ny = isHead ? (-0.64 + (Math.random() - 0.5) * 0.12) : (-0.12 + (Math.random() - 0.5) * 0.15);
+    }
+    if (typeof recordShotImpact === "function") recordShotImpact(nx, ny, atkType, et, isHead ? 3 : 2);
     const corePct = Math.min(100, Math.max(1, Math.round((finalDmg / maxH) * 100)));
     spawnDmg(eX[j], eY[j], corePct, true, false);
   } else {
+    // Regular Hit -> Maps onto that specific creature's limbs, legs, crusher arms, or wolf tail!
     const limbPool = maxH * 0.45;
     const pctDelta = Math.min(95, Math.max(5, Math.round((finalDmg / limbPool) * 100)));
     eBleed[j] = 1;
     spawnDrip(eX[j], eY[j] + 6, j);
 
-    if (eType[j] === 1 && (eSeed[j] + Math.floor(runTime * 10)) % 3 === 0) {
-      eTailDmg[j] = Math.min(100, eTailDmg[j] + pctDelta);
-      spawnDmg(eX[j], eY[j], pctDelta, false, true);
-    } else {
+    let nx = rx, ny = ry;
+    if (et === 1) {
+      if ((eSeed[j] + Math.floor(runTime * 10)) % 3 === 0) {
+        // Wolf Tail Quadrant (rear-left: nx ~ -0.64, ny ~ -0.22)
+        eTailDmg[j] = Math.min(100, eTailDmg[j] + pctDelta);
+        nx = -0.64 + (Math.random() - 0.5) * 0.14;
+        ny = -0.22 + (Math.random() - 0.5) * 0.14;
+      } else {
+        // Wolf 4 Legs (spread across x: -0.38 to +0.38, y: +0.25 to +0.68)
+        eLegDmg[j] = Math.min(100, eLegDmg[j] + pctDelta);
+        eLegsLost[j] = Math.min(4, Math.floor(eLegDmg[j] / 25));
+        const legSlot = [-0.36, -0.20, 0.20, 0.36][(eSeed[j] + Math.floor(runTime * 7)) % 4];
+        nx = legSlot + (Math.random() - 0.5) * 0.08;
+        ny = 0.26 + Math.random() * 0.42;
+      }
+    } else if (et === 2) {
+      // Arachnid 6 Wide Legs (x: +/-0.35 to +/-0.62, y: -0.22 to +0.42)
       eLegDmg[j] = Math.min(100, eLegDmg[j] + pctDelta);
-      eLegsLost[j] = eType[j] === 1 ? Math.min(4, Math.floor(eLegDmg[j] / 25)) : Math.min(2, Math.floor(eLegDmg[j] / 45));
-      spawnDmg(eX[j], eY[j], pctDelta, false, true);
+      eLegsLost[j] = Math.min(2, Math.floor(eLegDmg[j] / 45));
+      nx = side * (0.34 + Math.random() * 0.28);
+      ny = -0.20 + Math.random() * 0.62;
+    } else if (et === 3) {
+      // Brute Heavy Crusher Arms (x: +/-0.50) or Thick Legs (x: +/-0.20, y: +0.35..+0.72)
+      eLegDmg[j] = Math.min(100, eLegDmg[j] + pctDelta);
+      eLegsLost[j] = Math.min(2, Math.floor(eLegDmg[j] / 45));
+      const hitArm = ry < 0.05;
+      nx = side * (hitArm ? (0.44 + Math.random() * 0.16) : (0.16 + Math.random() * 0.14));
+      ny = hitArm ? (-0.24 + Math.random() * 0.42) : (0.32 + Math.random() * 0.40);
+    } else if (et === 99) {
+      // 4-Armed Titan Boss: Upper Arms, Lower Arms, or Pillar Legs
+      eLegDmg[j] = Math.min(100, eLegDmg[j] + pctDelta);
+      eLegsLost[j] = Math.min(2, Math.floor(eLegDmg[j] / 45));
+      const zonePick = (eSeed[j] + Math.floor(runTime * 11)) % 3;
+      nx = side * (zonePick < 2 ? (0.46 + Math.random() * 0.18) : (0.18 + Math.random() * 0.14));
+      ny = zonePick === 0 ? (-0.46 + (Math.random() - 0.5) * 0.14) : (zonePick === 1 ? (0.04 + (Math.random() - 0.5) * 0.24) : (0.42 + Math.random() * 0.32));
+    } else {
+      // Henchman (0): Arms (x: +/-0.36, y: -0.28..+0.15) or Legs (x: +/-0.14, y: +0.28..+0.72)
+      eLegDmg[j] = Math.min(100, eLegDmg[j] + pctDelta);
+      eLegsLost[j] = Math.min(2, Math.floor(eLegDmg[j] / 45));
+      const hitArm = ry < 0.05;
+      nx = side * (hitArm ? (0.32 + Math.random() * 0.12) : (0.11 + Math.random() * 0.10));
+      ny = hitArm ? (-0.28 + Math.random() * 0.42) : (0.28 + Math.random() * 0.44);
     }
+    if (typeof recordShotImpact === "function") recordShotImpact(nx, ny, atkType, et, 1);
+    spawnDmg(eX[j], eY[j], pctDelta, false, true);
   }
 }
 
@@ -198,9 +274,16 @@ function updateProjectiles(simDt) {
   for (let i = 0; i < MAX_P; i++) {
     if (!pAct[i]) continue;
     pLife[i] -= simDt;
-    if (pLife[i] <= 0) { pAct[i] = 0; continue; }
+    if (pLife[i] <= 0) {
+      if (pEnemy[i] === 0 && pHit[i] === 0 && pStyle[i] !== 1 && pStyle[i] !== 6 && typeof recordShotImpact === "function") {
+        const ma = Math.atan2(pVY[i], pVX[i]);
+        const nearType = findNearestEnemyType(pX[i], pY[i], i);
+        recordShotImpact(Math.cos(ma) * 0.86, Math.sin(ma) * 0.86, 0, nearType, 0);
+      }
+      pAct[i] = 0;
+      continue;
+    }
 
-    // pEnemy === 1 (Enemy Shot) OR pEnemy === 2 (Deflected Universal Ricochet Hazard!)
     if (pEnemy[i] >= 1) {
       pX[i] += pVX[i] * simDt;
       pY[i] += pVY[i] * simDt;
@@ -212,12 +295,11 @@ function updateProjectiles(simDt) {
         pAct[i] = 0; spawnParticles(pX[i], pY[i], 3);
         continue;
       }
-      // Universal Ricochet (pEnemy === 2) can also hit and hurt ANY enemy in the world!
       if (pEnemy[i] === 2) {
         let hitFoe = false;
         for (let j = 0; j < MAX_E; j++) {
           if (eAct[j] && Math.hypot(pX[i] - eX[j], pY[i] - eY[j]) < (eType[j] >= 98 ? 22 : 14)) {
-            applyEnemyHitAndLimbs(j, pDmg[i], true);
+            applyEnemyHitAndLimbs(j, pDmg[i], true, pX[i], pY[i], 0);
             spawnParticles(eX[j], eY[j], 4);
             if (eHP[j] <= 0) handleEnemyDeath(j);
             pAct[i] = 0; hitFoe = true;
@@ -226,7 +308,6 @@ function updateProjectiles(simDt) {
         }
         if (hitFoe) continue;
       }
-      // Check hit against Player (with Dodge, Phase, Vehicle & Armor defenses)
       if (Math.hypot(pX[i] - player.x, pY[i] - player.y) < 16) {
         pAct[i] = 0;
         if (Math.random() < player.dodge) {
@@ -248,7 +329,6 @@ function updateProjectiles(simDt) {
       continue;
     }
 
-    // Player Projectiles (pEnemy === 0)
     if (pStyle[i] === 1) {
       pVX[i] += simDt * (pSup[i] ? 6 : 3.5);
       pX[i] = player.x + Math.cos(pVX[i]) * pVY[i];
@@ -272,6 +352,11 @@ function updateProjectiles(simDt) {
     }
 
     if (pStyle[i] !== 1 && pStyle[i] !== 6 && isPointBlockedByObstacle(pX[i], pY[i], true)) {
+      if (pHit[i] === 0 && typeof recordShotImpact === "function") {
+        const ma = Math.atan2(pVY[i], pVX[i]);
+        const nearType = findNearestEnemyType(pX[i], pY[i], i);
+        recordShotImpact(Math.cos(ma) * 0.86, Math.sin(ma) * 0.86, 0, nearType, 0);
+      }
       pAct[i] = 0; spawnParticles(pX[i], pY[i], 3);
       continue;
     }
@@ -280,7 +365,7 @@ function updateProjectiles(simDt) {
       if (!eAct[j]) continue;
       const hitR = pRad[i] + (eType[j] >= 98 ? 22 : 13);
       if (Math.hypot(pX[i] - eX[j], pY[i] - eY[j]) < hitR) {
-        // Chunk 3: Check if Elite / Boss deflects this projectile with Plasma Sword / Shield!
+        pHit[i] = 1;
         if (canEnemyDeflect(j, pStyle[i])) {
           const defAng = Math.atan2(pVY[i], pVX[i]) + Math.PI + (Math.random() - 0.5) * 2.2;
           const defSpd = Math.max(250, Math.hypot(pVX[i], pVY[i]) * 0.88);
@@ -288,9 +373,7 @@ function updateProjectiles(simDt) {
           pVY[i] = Math.sin(defAng) * defSpd;
           pX[i] = eX[j] + Math.cos(defAng) * (hitR + 8);
           pY[i] = eY[j] + Math.sin(defAng) * (hitR + 8);
-          pEnemy[i] = 2;
-          pStyle[i] = 3;
-          pLife[i] = Math.max(0.75, pLife[i]);
+          pEnemy[i] = 2; pStyle[i] = 3; pLife[i] = Math.max(0.75, pLife[i]);
           spawnParticles(eX[j], eY[j], 5);
           sfx(920, 1480, 0.05, "triangle", 0.18);
           break;
@@ -299,8 +382,9 @@ function updateProjectiles(simDt) {
         const isCrit = (player.cid === 43 && player.vatsTimer < 0.8) || (Math.random() < player.crit);
         const bossBoost = eType[j] >= 98 ? player.bossMul : 1;
         const finalDmg = pDmg[i] * (isCrit ? player.cdmg : 1) * bossBoost * (1 + eShred[j]);
+        const atkKind = (pStyle[i] === 1 || pStyle[i] === 6) ? 1 : 0;
 
-        applyEnemyHitAndLimbs(j, finalDmg, isCrit);
+        applyEnemyHitAndLimbs(j, finalDmg, isCrit, pX[i], pY[i], atkKind);
 
         if (pStyle[i] !== 6 && eGrapple[j] <= 0) {
           const ka = Math.atan2(eY[j] - player.y, eX[j] - player.x);
@@ -349,14 +433,13 @@ function updateEnemies(simDt) {
   const elapsedTotal = typeof totalRunTime !== "undefined" ? totalRunTime : runTime;
   for (let i = 0; i < MAX_E; i++) {
     if (!eAct[i]) continue;
-
     if (eBleed[i] === 1 && Math.random() < simDt * 6.2) spawnDrip(eX[i], eY[i] + 7, i);
 
     for (let m = activeMines.length - 1; m >= 0; m--) {
       if (Math.hypot(eX[i] - activeMines[m].x, eY[i] - activeMines[m].y) < 26) {
         const mn = activeMines[m];
         activeMines.splice(m, 1);
-        applyEnemyHitAndLimbs(i, mn.dmg, true);
+        applyEnemyHitAndLimbs(i, mn.dmg, true, mn.x, mn.y, 0);
         eStun[i] = 2.0;
         spawnParticles(mn.x, mn.y, 12);
         sfx(120, 45, 0.18, "sawtooth");
@@ -441,7 +524,7 @@ function updateEnemies(simDt) {
         eY[i] = player.y + Math.sin(flipA) * 44;
         eStun[i] = 2.4;
         const exDmg = eType[i] >= 98 ? Math.max(240 * player.might, eMax[i] * 0.34) : eHP[i] + 999;
-        applyEnemyHitAndLimbs(i, exDmg, true);
+        applyEnemyHitAndLimbs(i, exDmg, true, eX[i], eY[i], 1);
         spawnSpeech(player.x, player.y, "CQC FLIP & EXECUTE!", "#ffd166", 1.1);
         sfx(780, 140, 0.1, "square");
         if (eHP[i] <= 0) handleEnemyDeath(i);
