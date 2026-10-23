@@ -1,6 +1,6 @@
 // FILE: js/ui.js
 // PART: 14 of 14
-// DETAIL: Fixed btn.style.fontSize in renderWeaponToggler, Strict Dynamic EOF Scanner, 56-Theme Hook, Non-Spamming HUD Guard (_inHudUpdate), and Safe Loop.
+// DETAIL: Strict Dynamic EOF Scanner, Non-Conflicting Theme Hook (Delegates to chaos.js), Protected Pause/Resume Modal, and Safe Loop.
 
 "use strict";
 
@@ -132,99 +132,108 @@ document.getElementById("ttClose").onclick = () => {
   if (typeof runActive !== "undefined" && runActive && !document.getElementById("scrLevel").classList.contains("active")) runPaused = false;
 };
 
-/* === 3. WEAPON TOGGLER (Fixed btn.style.fontSize), PAPER TARGETS & LEVEL-UP === */
+/* === 3. WEAPON TOGGLER, PAPER TARGETS & LEVEL-UP === */
 function renderWeaponToggler() {
   if (!player) return;
-  let tBar = document.getElementById("wpnToggleBar");
-  const grid = document.getElementById("lvlGrid");
-  if (!tBar && grid) {
-    tBar = document.createElement("div"); tBar.id = "wpnToggleBar";
-    tBar.className = "bar"; tBar.style.margin = "4px auto";
-    grid.parentNode.insertBefore(tBar, grid.nextSibling);
+  window._inHudUpdate = true;
+  try {
+    let tBar = document.getElementById("wpnToggleBar");
+    const grid = document.getElementById("lvlGrid");
+    if (!tBar && grid) {
+      tBar = document.createElement("div"); tBar.id = "wpnToggleBar";
+      tBar.className = "bar"; tBar.style.margin = "4px auto";
+      grid.parentNode.insertBefore(tBar, grid.nextSibling);
+    }
+    if (!tBar) return;
+    tBar.innerHTML = `<div style="font-size:0.6rem;color:#ffd166;width:100%;text-align:center">ACTIVE WEAPONS (TAP TO TOGGLE — MAX ${player.armCap || 2} HANDS AT ONCE):</div>`;
+    player.weapons.forEach(w => {
+      if (typeof w.enabled === "undefined") w.enabled = true;
+      const btn = document.createElement("button");
+      btn.className = "btn" + (w.enabled ? " sel" : " warn");
+      btn.style.padding = "3px 7px";
+      btn.style.fontSize = "0.58rem";
+      btn.textContent = `${w.enabled ? "ON" : "OFF"}: ${w.name.split(" ")[0]} (L${w.lvl})`;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        if (w.enabled && player.weapons.filter(x => x.enabled !== false).length <= 1) return;
+        w.enabled = !w.enabled;
+        renderWeaponToggler(); updateHUD();
+      };
+      tBar.appendChild(btn);
+    });
+  } finally {
+    window._inHudUpdate = false;
   }
-  if (!tBar) return;
-  tBar.innerHTML = `<div style="font-size:0.6rem;color:#ffd166;width:100%;text-align:center">ACTIVE WEAPONS (TAP TO TOGGLE — MAX ${player.armCap || 2} HANDS AT ONCE):</div>`;
-  player.weapons.forEach(w => {
-    if (typeof w.enabled === "undefined") w.enabled = true;
-    const btn = document.createElement("button");
-    btn.className = "btn" + (w.enabled ? " sel" : " warn");
-    btn.style.padding = "3px 7px";
-    btn.style.fontSize = "0.58rem";
-    btn.textContent = `${w.enabled ? "ON" : "OFF"}: ${w.name.split(" ")[0]} (L${w.lvl})`;
-    btn.onclick = () => {
-      if (w.enabled && player.weapons.filter(x => x.enabled !== false).length <= 1) return;
-      w.enabled = !w.enabled;
-      if (window.trackProgress) window.trackProgress(`Toggled Weapon ${w.name}: ${w.enabled ? "ON" : "OFF"}`);
-      renderWeaponToggler(); updateHUD();
-    };
-    tBar.appendChild(btn);
-  });
 }
 
 const TARGET_TABS = ["1.Hench", "2.Wolf", "3.Spider", "4.Brute", "5.Titan"];
 function drawRangeTarget(tabIdx = selRangeTab) {
   selRangeTab = tabIdx;
-  const startIdx = (shWrite - shCount + MAX_SH) % MAX_SH;
-  const tabCounts = [0, 0, 0, 0, 0];
-  let globalHits = 0;
-  for (let s = 0; s < shCount; s++) {
-    const idx = (startIdx + s) % MAX_SH;
-    tabCounts[shTgt[idx] || 0]++;
-    if (shZone[idx] > 0) globalHits++;
+  window._inHudUpdate = true;
+  try {
+    const startIdx = (shWrite - shCount + MAX_SH) % MAX_SH;
+    const tabCounts = [0, 0, 0, 0, 0];
+    let globalHits = 0;
+    for (let s = 0; s < shCount; s++) {
+      const idx = (startIdx + s) % MAX_SH;
+      tabCounts[shTgt[idx] || 0]++;
+      if (shZone[idx] > 0) globalHits++;
+    }
+    const tabBar = document.getElementById("rangeTabs");
+    if (tabBar) {
+      tabBar.innerHTML = "";
+      TARGET_TABS.forEach((tName, idx) => {
+        const btn = document.createElement("button");
+        btn.className = "btn" + (idx === tabIdx ? " sel" : "");
+        btn.style.padding = "2px 5px"; btn.style.fontSize = "0.58rem";
+        btn.textContent = `${tName} (${tabCounts[idx]})`;
+        btn.onclick = (e) => { e.stopPropagation(); drawRangeTarget(idx); };
+        tabBar.appendChild(btn);
+      });
+    }
+    const rcv = document.getElementById("rangeCv");
+    if (!rcv) return;
+    const rctx = rcv.getContext("2d"), rw = rcv.width, rh = rcv.height, cx = rw * 0.5, cy = rh * 0.52;
+    rctx.fillStyle = "#e8dfc8"; rctx.fillRect(0, 0, rw, rh);
+    rctx.fillStyle = "#23272e"; rctx.strokeStyle = "#d9c8a9"; rctx.lineWidth = 1.4;
+    if (tabIdx === 0) {
+      rctx.fillRect(cx - 26, cy + 18, 20, 56); rctx.fillRect(cx + 6, cy + 18, 20, 56);
+      rctx.fillRect(cx - 56, cy - 34, 20, 52); rctx.fillRect(cx + 36, cy - 34, 20, 52);
+      rctx.fillRect(cx - 32, cy - 38, 64, 58); rctx.beginPath(); rctx.arc(cx, cy - 58, 18, 0, Math.PI * 2); rctx.fill();
+    } else if (tabIdx === 1) {
+      [-54, -32, 22, 44].forEach(ox => rctx.fillRect(cx + ox, cy + 12, 14, 52));
+      rctx.fillRect(cx - 58, cy - 22, 104, 36); rctx.fillRect(cx + 42, cy - 38, 36, 30);
+    } else if (tabIdx === 2) {
+      rctx.beginPath(); rctx.ellipse(cx, cy + 18, 34, 26, 0, 0, Math.PI * 2); rctx.fill();
+      rctx.beginPath(); rctx.arc(cx, cy - 22, 20, 0, Math.PI * 2); rctx.fill();
+    } else {
+      rctx.fillRect(cx - 38, cy + 20, 28, 52); rctx.fillRect(cx + 10, cy + 20, 28, 52);
+      rctx.fillRect(cx - 76, cy - 36, 26, 62); rctx.fillRect(cx + 50, cy - 36, 26, 62);
+      rctx.fillRect(cx - 50, cy - 42, 100, 64); rctx.beginPath(); rctx.arc(cx, cy - 52, 18, 0, Math.PI * 2); rctx.fill();
+    }
+    let tabShots = 0, tabCrits = 0, rangedCnt = 0, meleeCnt = 0;
+    rctx.font = "bold 7.5px monospace"; rctx.textAlign = "left";
+    for (let s = 0; s < shCount; s++) {
+      const idx = (startIdx + s) % MAX_SH, num = s + 1;
+      if (shTgt[idx] !== tabIdx) continue;
+      tabShots++;
+      const z = shZone[idx], atk = shAtk[idx];
+      if (z >= 2) tabCrits++;
+      if (atk === 0) rangedCnt++; else meleeCnt++;
+      const px = cx + shNX[idx] * (rw * 0.44), py = cy + shNY[idx] * (rh * 0.44);
+      rctx.strokeStyle = z === 0 ? "#ff5252" : (z >= 2 ? "#ffd166" : "#00e5ff");
+      rctx.beginPath(); rctx.arc(px, py, 2.5, 0, Math.PI * 2); rctx.stroke();
+      rctx.fillStyle = "#111"; rctx.fillText(String(num), px + 3, py - 2);
+    }
+    const stEl = document.getElementById("rangeStats");
+    if (stEl) stEl.textContent = `Target: ${tabShots} of ${shCount}/100 | Acc: ${shCount ? Math.round((globalHits / shCount) * 100) : 100}% | T-Zone: ${tabShots ? Math.round((tabCrits / tabShots) * 100) : 0}% | ⊕:${rangedCnt} /:${meleeCnt}`;
+  } finally {
+    window._inHudUpdate = false;
   }
-  const tabBar = document.getElementById("rangeTabs");
-  if (tabBar) {
-    tabBar.innerHTML = "";
-    TARGET_TABS.forEach((tName, idx) => {
-      const btn = document.createElement("button");
-      btn.className = "btn" + (idx === tabIdx ? " sel" : "");
-      btn.style.padding = "2px 5px"; btn.style.fontSize = "0.58rem";
-      btn.textContent = `${tName} (${tabCounts[idx]})`;
-      btn.onclick = () => drawRangeTarget(idx);
-      tabBar.appendChild(btn);
-    });
-  }
-  const rcv = document.getElementById("rangeCv");
-  if (!rcv) return;
-  const rctx = rcv.getContext("2d"), rw = rcv.width, rh = rcv.height, cx = rw * 0.5, cy = rh * 0.52;
-  rctx.fillStyle = "#e8dfc8"; rctx.fillRect(0, 0, rw, rh);
-  rctx.fillStyle = "#23272e"; rctx.strokeStyle = "#d9c8a9"; rctx.lineWidth = 1.4;
-  if (tabIdx === 0) {
-    rctx.fillRect(cx - 26, cy + 18, 20, 56); rctx.fillRect(cx + 6, cy + 18, 20, 56);
-    rctx.fillRect(cx - 56, cy - 34, 20, 52); rctx.fillRect(cx + 36, cy - 34, 20, 52);
-    rctx.fillRect(cx - 32, cy - 38, 64, 58); rctx.beginPath(); rctx.arc(cx, cy - 58, 18, 0, Math.PI * 2); rctx.fill();
-  } else if (tabIdx === 1) {
-    [-54, -32, 22, 44].forEach(ox => rctx.fillRect(cx + ox, cy + 12, 14, 52));
-    rctx.fillRect(cx - 58, cy - 22, 104, 36); rctx.fillRect(cx + 42, cy - 38, 36, 30);
-  } else if (tabIdx === 2) {
-    rctx.beginPath(); rctx.ellipse(cx, cy + 18, 34, 26, 0, 0, Math.PI * 2); rctx.fill();
-    rctx.beginPath(); rctx.arc(cx, cy - 22, 20, 0, Math.PI * 2); rctx.fill();
-  } else {
-    rctx.fillRect(cx - 38, cy + 20, 28, 52); rctx.fillRect(cx + 10, cy + 20, 28, 52);
-    rctx.fillRect(cx - 76, cy - 36, 26, 62); rctx.fillRect(cx + 50, cy - 36, 26, 62);
-    rctx.fillRect(cx - 50, cy - 42, 100, 64); rctx.beginPath(); rctx.arc(cx, cy - 52, 18, 0, Math.PI * 2); rctx.fill();
-  }
-  let tabShots = 0, tabCrits = 0, rangedCnt = 0, meleeCnt = 0;
-  rctx.font = "bold 7.5px monospace"; rctx.textAlign = "left";
-  for (let s = 0; s < shCount; s++) {
-    const idx = (startIdx + s) % MAX_SH, num = s + 1;
-    if (shTgt[idx] !== tabIdx) continue;
-    tabShots++;
-    const z = shZone[idx], atk = shAtk[idx];
-    if (z >= 2) tabCrits++;
-    if (atk === 0) rangedCnt++; else meleeCnt++;
-    const px = cx + shNX[idx] * (rw * 0.44), py = cy + shNY[idx] * (rh * 0.44);
-    rctx.strokeStyle = z === 0 ? "#ff5252" : (z >= 2 ? "#ffd166" : "#00e5ff");
-    rctx.beginPath(); rctx.arc(px, py, 2.5, 0, Math.PI * 2); rctx.stroke();
-    rctx.fillStyle = "#111"; rctx.fillText(String(num), px + 3, py - 2);
-  }
-  const stEl = document.getElementById("rangeStats");
-  if (stEl) stEl.textContent = `Target: ${tabShots} of ${shCount}/100 | Acc: ${shCount ? Math.round((globalHits / shCount) * 100) : 100}% | T-Zone: ${tabShots ? Math.round((tabCrits / tabShots) * 100) : 0}% | ⊕:${rangedCnt} /:${meleeCnt}`;
 }
 
 function triggerLevelUp() {
   runPaused = true; sfx(330, 880, 0.22, "triangle");
-  if (window.trackProgress) window.trackProgress(`Level Up Modal Opened: Lv.${player.lvl}`);
   document.getElementById("lvlTitle").textContent = "NEXUS LEVEL " + player.lvl + " — PICK 1 OF 3";
   document.getElementById("pauseBar").style.display = "none";
   const grid = document.getElementById("lvlGrid"); grid.innerHTML = "";
@@ -247,63 +256,69 @@ function triggerLevelUp() {
   if (curVac < 1.0 && typeof vacuumDistantOrbs === "function") pool.push({ type: Math.random() < 0.22 ? "vac100" : "vac35" });
 
   pool.sort(() => Math.random() - 0.5);
-  [...guaranteedSuper, ...pool].slice(0, 3).forEach(ch => {
-    const card = document.createElement("div");
-    let title = "", sub = "", desc = "", ico = "";
-    if (ch.type === "wup") {
-      const nxt = ch.w.lvl + 1;
-      const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[ch.w.id]) ? HERO_SIG_GEAR[ch.w.id] : null;
-      const lv5Name = sig ? sig[0] : ch.w.name;
-      card.className = "card unlocked" + (nxt === 10 ? " super-flash" : "");
-      title = nxt === 10 ? "★ SUPERCHARGE: " + ch.w.superName + " (Lv.10)" : (nxt === 5 ? "★ LV.5 PRIMARY: " + lv5Name : ch.w.name + " (Lv." + nxt + "/10)");
-      sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (nxt === 5 ? "PRIMARY ARSENAL TRANSITION (+25% DMG)" : "Weapon Matrix Upgrade");
-      desc = nxt === 10 ? "Supercharges weapon physics & unlocks 2.35x Ultimate Damage!" : (nxt === 5 ? "Transitions starter weapon into " + lv5Name + " with extended barrel/blade!" : "+25% Base Damage, +Area, faster cooldown.");
-      ico = makeSVG(ch.w.style, nxt >= 5 ? "#ffd166" : "#00e5ff", "#ffd166", ch.w.id);
-    } else if (ch.type === "wnew") {
-      const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[ch.c[0]]) ? HERO_SIG_GEAR[ch.c[0]] : null;
-      card.className = "card unlocked";
-      title = "NEW WEAPON: " + ch.c[4]; sub = FACTIONS[ch.c[1]].name + " Tech";
-      desc = `Lv.5 Primary: ${sig ? sig[0] : ch.c[4]} | Lv.10: ${ch.c[5]}`;
-      ico = makeSVG(ch.c[6], FACTIONS[ch.c[1]].c1, FACTIONS[ch.c[1]].c2, ch.c[0]);
-    } else if (ch.type === "vac35") {
-      card.className = "card unlocked";
-      title = `SUBSPACE ORB SIPHON (+35% -> ${Math.min(100, Math.round((curVac + 0.35) * 100))}%)`;
-      sub = "Distant Orb Vacuum Upgrade"; desc = "35% of all orbs auto-fly to you & pulls 35% of stranded map orbs!";
-      ico = makeSVG("orbit", "#00ff88", "#00e5ff");
-    } else if (ch.type === "vac100") {
-      card.className = "card unlocked super-flash";
-      title = "★ OMEGA SINGULARITY VACUUM (100% ORBS)"; sub = "RARE TOTAL ORB ABSORPTION MATRIX";
-      desc = "100% of all distant & future orbs across the sector automatically fly to you!";
-      ico = makeSVG("nova", "#ffd166", "#00ff88");
-    } else {
-      card.className = "card unlocked";
-      title = `${ch.p[0]} (Lv.${ch.lvl}/5)`; sub = "Passive Matrix Slot"; desc = ch.p[1];
-      ico = makeSVG("pas", "#00e676", "#ffd166");
-    }
-    card.innerHTML = `<div class="card-head">${ico}<div><div class="card-title">${title}</div><div class="card-sub">${sub}</div></div></div><div class="card-desc">${desc}</div>`;
-    bindTooltip(card, () => title, () => sub, () => desc, () => ico);
-    card.onclick = () => {
-      if (wasLongPress) return;
+  window._inHudUpdate = true;
+  try {
+    [...guaranteedSuper, ...pool].slice(0, 3).forEach(ch => {
+      const card = document.createElement("div");
+      let title = "", sub = "", desc = "", ico = "";
       if (ch.type === "wup") {
-        ch.w.lvl++;
-        if (ch.w.style === "orbit") player.saberMastery = Math.min(100, player.saberMastery + 10);
-        if (ch.w.lvl === 10) spawnSpeech(player.x, player.y, "SUPERCHARGED: " + ch.w.superName.toUpperCase() + "!", "#ffd166", 2.6);
+        const nxt = ch.w.lvl + 1;
+        const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[ch.w.id]) ? HERO_SIG_GEAR[ch.w.id] : null;
+        const lv5Name = sig ? sig[0] : ch.w.name;
+        card.className = "card unlocked" + (nxt === 10 ? " super-flash" : "");
+        title = nxt === 10 ? "★ SUPERCHARGE: " + ch.w.superName + " (Lv.10)" : (nxt === 5 ? "★ LV.5 PRIMARY: " + lv5Name : ch.w.name + " (Lv." + nxt + "/10)");
+        sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (nxt === 5 ? "PRIMARY ARSENAL TRANSITION (+25% DMG)" : "Weapon Matrix Upgrade");
+        desc = nxt === 10 ? "Supercharges weapon physics & unlocks 2.35x Ultimate Damage!" : (nxt === 5 ? "Transitions starter weapon into " + lv5Name + " with extended barrel/blade!" : "+25% Base Damage, +Area, faster cooldown.");
+        ico = makeSVG(ch.w.style, nxt >= 5 ? "#ffd166" : "#00e5ff", "#ffd166", ch.w.id);
       } else if (ch.type === "wnew") {
-        player.weapons.push({ id: ch.c[0], name: ch.c[4], superName: ch.c[5], style: ch.c[6], lvl: 1, cd: 0, ang: 0, enabled: true, evolvedLv5: false });
-        if (ch.c[6] === "orbit") { player.hasSaber = true; player.saberMastery = Math.max(10, player.saberMastery); }
+        const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[ch.c[0]]) ? HERO_SIG_GEAR[ch.c[0]] : null;
+        card.className = "card unlocked";
+        title = "NEW WEAPON: " + ch.c[4]; sub = FACTIONS[ch.c[1]].name + " Tech";
+        desc = `Lv.5 Primary: ${sig ? sig[0] : ch.c[4]} | Lv.10: ${ch.c[5]}`;
+        ico = makeSVG(ch.c[6], FACTIONS[ch.c[1]].c1, FACTIONS[ch.c[1]].c2, ch.c[0]);
       } else if (ch.type === "vac35") {
-        player.orbVacuumRate = Math.min(1.0, +(curVac + 0.35).toFixed(2)); vacuumDistantOrbs(0.35);
+        card.className = "card unlocked";
+        title = `SUBSPACE ORB SIPHON (+35% -> ${Math.min(100, Math.round((curVac + 0.35) * 100))}%)`;
+        sub = "Distant Orb Vacuum Upgrade"; desc = "35% of all orbs auto-fly to you & pulls 35% of stranded map orbs!";
+        ico = makeSVG("orbit", "#00ff88", "#00e5ff");
       } else if (ch.type === "vac100") {
-        player.orbVacuumRate = 1.0; vacuumDistantOrbs(1.0);
-      } else applyPassive(ch.idx);
-      runPaused = false; showScreen(null); updateHUD();
-    };
-    grid.appendChild(card);
-  });
+        card.className = "card unlocked super-flash";
+        title = "★ OMEGA SINGULARITY VACUUM (100% ORBS)"; sub = "RARE TOTAL ORB ABSORPTION MATRIX";
+        desc = "100% of all distant & future orbs across the sector automatically fly to you!";
+        ico = makeSVG("nova", "#ffd166", "#00ff88");
+      } else {
+        card.className = "card unlocked";
+        title = `${ch.p[0]} (Lv.${ch.lvl}/5)`; sub = "Passive Matrix Slot"; desc = ch.p[1];
+        ico = makeSVG("pas", "#00e676", "#ffd166");
+      }
+      card.innerHTML = `<div class="card-head">${ico}<div><div class="card-title">${title}</div><div class="card-sub">${sub}</div></div></div><div class="card-desc">${desc}</div>`;
+      bindTooltip(card, () => title, () => sub, () => desc, () => ico);
+      card.onclick = () => {
+        if (wasLongPress) return;
+        if (ch.type === "wup") {
+          ch.w.lvl++;
+          if (ch.w.style === "orbit") player.saberMastery = Math.min(100, player.saberMastery + 10);
+          if (ch.w.lvl === 10) spawnSpeech(player.x, player.y, "SUPERCHARGED: " + ch.w.superName.toUpperCase() + "!", "#ffd166", 2.6);
+        } else if (ch.type === "wnew") {
+          player.weapons.push({ id: ch.c[0], name: ch.c[4], superName: ch.c[5], style: ch.c[6], lvl: 1, cd: 0, ang: 0, enabled: true, evolvedLv5: false });
+          if (ch.c[6] === "orbit") { player.hasSaber = true; player.saberMastery = Math.max(10, player.saberMastery); }
+        } else if (ch.type === "vac35") {
+          player.orbVacuumRate = Math.min(1.0, +(curVac + 0.35).toFixed(2)); vacuumDistantOrbs(0.35);
+        } else if (ch.type === "vac100") {
+          player.orbVacuumRate = 1.0; vacuumDistantOrbs(1.0);
+        } else applyPassive(ch.idx);
+        runPaused = false; showScreen(null); updateHUD();
+      };
+      grid.appendChild(card);
+    });
+  } finally {
+    window._inHudUpdate = false;
+  }
   renderWeaponToggler(); drawRangeTarget(selRangeTab); showScreen("scrLevel");
 }
 
 const LIMB_LBLS = ["HD", "TR", "LA", "RA", "LL", "RL"];
+
 function updateHUD() {
   if (typeof player === "undefined" || !player) return;
   window._inHudUpdate = true;
@@ -396,24 +411,29 @@ function updateMenuUI() {
 function renderChars() {
   document.getElementById("charDM").textContent = "Available DM: " + availDM();
   const g = document.getElementById("charGrid"); g.innerHTML = "";
-  CHAR_RAW.forEach(c => {
-    const unl = meta.chars.includes(c[0]), sel = meta.selChar === c[0], f = FACTIONS[c[1]], ico = makeSVG(c[6], f.c1, f.c2, c[0]);
-    const utils = getHeroUtils(c[0]).map(u => u.name).join(" + "), alignStr = typeof getHeroAlign === "function" ? getHeroAlign(c[0]).toUpperCase() : "HERO";
-    const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[c[0]]) ? HERO_SIG_GEAR[c[0]] : [c[4], "READY!", "Secondary Gear"];
-    const d = document.createElement("div"); d.className = "card " + (unl ? "unlocked" : "locked") + (sel ? " selected" : "");
-    d.innerHTML = `<div class="card-head"><canvas width="36" height="36" style="position:relative;width:36px;height:36px;background:${f.bg};border:1px solid ${f.c1};border-radius:6px;flex-shrink:0"></canvas><div><div class="card-title">#${String(c[0]).padStart(2, "0")} ${c[3]}</div>
-      <div class="card-sub">${f.name} • ${unl ? "UNLOCKED" : c[2] + " DM"}</div></div></div>
-      <div class="card-desc"><b>Lv1:</b> ${c[4]}<br><b>Lv5:</b> ${sig[0]}<br><b>Lv10:</b> ${c[5]}<br><b>Gear:</b> ${sig[2]}</div>`;
-    const pcv = d.querySelector("canvas");
-    if (pcv) drawHeroSprite(18, 20, f, c[0], 0, 0, 0, pcv.getContext("2d"), -1);
-    bindTooltip(d, () => `#${c[0]} ${c[3]}`, () => `${f.name} (${alignStr})`, () => `Lv.1 Weapon: ${c[4]}\nLv.5 Primary: ${sig[0]}\nLv.10 Supercharge: ${c[5]}\nMounted Gear: ${sig[2]} (Auto-Fires)\nPassive: ${c[7]} (${c[8]})\nUtility: ${utils}\nDeploy Callout: "${sig[1]}"`, () => ico, () => c[0]);
-    d.onclick = () => {
-      if (wasLongPress) return;
-      if (unl) { meta.selChar = c[0]; saveMeta(); renderChars(); }
-      else if (availDM() >= c[2]) { meta.dmSpent += c[2]; meta.chars.push(c[0]); meta.selChar = c[0]; saveMeta(); renderChars(); sfx(440, 880, 0.16, "triangle"); }
-    };
-    g.appendChild(d);
-  });
+  window._inHudUpdate = true;
+  try {
+    CHAR_RAW.forEach(c => {
+      const unl = meta.chars.includes(c[0]), sel = meta.selChar === c[0], f = FACTIONS[c[1]], ico = makeSVG(c[6], f.c1, f.c2, c[0]);
+      const utils = getHeroUtils(c[0]).map(u => u.name).join(" + "), alignStr = typeof getHeroAlign === "function" ? getHeroAlign(c[0]).toUpperCase() : "HERO";
+      const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[c[0]]) ? HERO_SIG_GEAR[c[0]] : [c[4], "READY!", "Secondary Gear"];
+      const d = document.createElement("div"); d.className = "card " + (unl ? "unlocked" : "locked") + (sel ? " selected" : "");
+      d.innerHTML = `<div class="card-head"><canvas width="36" height="36" style="position:relative;width:36px;height:36px;background:${f.bg};border:1px solid ${f.c1};border-radius:6px;flex-shrink:0"></canvas><div><div class="card-title">#${String(c[0]).padStart(2, "0")} ${c[3]}</div>
+        <div class="card-sub">${f.name} • ${unl ? "UNLOCKED" : c[2] + " DM"}</div></div></div>
+        <div class="card-desc"><b>Lv1:</b> ${c[4]}<br><b>Lv5:</b> ${sig[0]}<br><b>Lv10:</b> ${c[5]}<br><b>Gear:</b> ${sig[2]}</div>`;
+      const pcv = d.querySelector("canvas");
+      if (pcv) drawHeroSprite(18, 20, f, c[0], 0, 0, 0, pcv.getContext("2d"), -1);
+      bindTooltip(d, () => `#${c[0]} ${c[3]}`, () => `${f.name} (${alignStr})`, () => `Lv.1 Weapon: ${c[4]}\nLv.5 Primary: ${sig[0]}\nLv.10 Supercharge: ${c[5]}\nMounted Gear: ${sig[2]} (Auto-Fires)\nPassive: ${c[7]} (${c[8]})\nUtility: ${utils}\nDeploy Callout: "${sig[1]}"`, () => ico, () => c[0]);
+      d.onclick = () => {
+        if (wasLongPress) return;
+        if (unl) { meta.selChar = c[0]; saveMeta(); renderChars(); }
+        else if (availDM() >= c[2]) { meta.dmSpent += c[2]; meta.chars.push(c[0]); meta.selChar = c[0]; saveMeta(); renderChars(); sfx(440, 880, 0.16, "triangle"); }
+      };
+      g.appendChild(d);
+    });
+  } finally {
+    window._inHudUpdate = false;
+  }
 }
 
 function renderStages() {
@@ -472,7 +492,7 @@ async function renderHealth() {
   const auditHTML = eofAuditResults.map(r => `<div style="color:${r.ok ? "#00e676" : "#ff5252"}">• ${r.file}: ${r.status}</div>`).join("");
   document.getElementById("healthBox").innerHTML = `
     <div class="health-row"><b>Dynamic EOF & Trailing-Line Paste Audit:</b><br>${auditHTML}</div>
-    <div class="health-row"><b>56-Hero Voxel, 56 SVGs, 56 Themes & 2-Btn Utils: 100% VERIFIED</b><br>Zero Shared Placeholders Across All 56 Heroes<div class="meter"><div class="meter-fill"></div></div></div>
+    <div class="health-row"><b>56-Hero Voxel, 56 SVGs, 56 Themes & Music Player: 100% VERIFIED</b><br>Zero Shared Placeholders Across All 56 Heroes<div class="meter"><div class="meter-fill"></div></div></div>
     <div class="health-row"><b>Live Render Load & Gore Telemetry:</b><br>${fpsCount} FPS • ${frameMs}ms/frame • Corpses: ${activeCorpseCount}/${opts.persistCount}<div class="meter"><div class="meter-fill"></div></div></div>`;
 }
 
@@ -503,13 +523,28 @@ document.getElementById("btnTimeUp").onclick = () => setTimeScale(0.5, false);
 document.getElementById("btnInteract").onclick = () => { if (typeof triggerWorldInteract === "function") triggerWorldInteract(); };
 document.getElementById("btnZoomIn").onclick = () => { opts.zoom = Math.min(2.0, +(opts.zoom + 0.2).toFixed(2)); };
 document.getElementById("btnZoomOut").onclick = () => { opts.zoom = Math.max(0.5, +(opts.zoom - 0.2).toFixed(2)); };
-document.getElementById("btnPause").onclick = () => {
-  runPaused = true; document.getElementById("lvlTitle").textContent = "RUN PAUSED";
-  document.getElementById("lvlGrid").innerHTML = ""; document.getElementById("pauseBar").style.display = "flex";
+document.getElementById("btnPause").onclick = (e) => {
+  e.stopPropagation();
+  if (!runActive) return;
+  runPaused = true;
+  document.getElementById("lvlTitle").textContent = "RUN PAUSED";
+  document.getElementById("lvlGrid").innerHTML = "";
+  document.getElementById("pauseBar").style.display = "flex";
   renderWeaponToggler(); drawRangeTarget(selRangeTab); showScreen("scrLevel");
 };
-document.getElementById("btnResume").onclick = () => { runPaused = false; showScreen(null); };
-document.getElementById("btnQuitRun").onclick = () => { purgeRunMemory(); document.getElementById("hud").classList.remove("active"); showScreen("scrMain"); };
+document.getElementById("btnResume").onclick = (e) => {
+  e.stopPropagation();
+  runPaused = false;
+  document.getElementById("pauseBar").style.display = "none";
+  showScreen(null);
+};
+document.getElementById("btnQuitRun").onclick = (e) => {
+  e.stopPropagation();
+  purgeRunMemory();
+  document.getElementById("pauseBar").style.display = "none";
+  document.getElementById("hud").classList.remove("active");
+  showScreen("scrMain");
+};
 
 let lastTS = performance.now();
 function loop(ts) {
