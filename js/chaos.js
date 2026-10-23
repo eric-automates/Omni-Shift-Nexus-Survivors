@@ -741,9 +741,15 @@ function updateThemeMusic(rawDt) {
   const mainScr = document.getElementById("scrMain");
   const onMainMenu = mainScr && mainScr.classList.contains("active");
 
-  // Plays continuously during Active Run, Level-Up, AND Pause Menu; pauses only on Main Menu
+  // Check if your custom MP3 music player is actively playing audio right now
+  const mp3IsPlaying = (runAudio && !runAudio.paused && !userPausedMusic && currentFadeMode !== "out");
+
+  // Keep MP3 player running during active runs, or on the main menu if you pressed play
   const inRunSession = (typeof runActive !== "undefined" && runActive && !onMainMenu);
-  updateActiveRunMP3(inRunSession);
+  updateActiveRunMP3(inRunSession || (onMainMenu && mp3IsPlaying));
+
+  // IF YOU HIT PLAY ON THE MP3 PLAYER ON MAIN MENU -> SKIP 8-BIT MUSIC
+  if (onMainMenu && mp3IsPlaying) return;
 
   if (!onMainMenu) return;
 
@@ -762,6 +768,7 @@ function updateThemeMusic(rawDt) {
     }
   }
 }
+
 
 /* === 4. AUTOMATED MUSIC PLAYER, SEEK BAR, GENRE FILTER & NOW-PLAYING TOAST === */
 function formatSec(s) {
