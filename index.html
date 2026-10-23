@@ -1,6 +1,6 @@
 <!-- FILE: index.html -->
 <!-- PART: 3 of 14 -->
-<!-- DETAIL: DOM container, Canvas viewport, In-Run HUD, Level-Up/Pause Firing Range Paper Target Telemetry (#rangeBox), and ordered script tags. -->
+<!-- DETAIL: DOM shell, HUD (#bodyHud), Outfit Customizer (#custBox), Firing Range (#rangeBox), and Superb Live Debug Console & Crash/DOM Sentinel. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,6 +8,154 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>OMNI-SHIFT: NEXUS SURVIVORS</title>
 <link rel="stylesheet" href="css/style.css">
+<!-- PRE-BOOT LIVE DEBUGGER & ERROR SENTINEL (Captures Parse & Runtime Errors Before DOM Mounts) -->
+<script>
+(function() {
+  window._bootErrors = [];
+  window._inHudUpdate = false;
+  let logsHistory = [];
+  let lastMessageText = "";
+  let repeatCount = 1;
+  let domSpyEnabled = true;
+  let flushScheduled = false;
+  let errorCount = 0;
+
+  function renderLogBox() {
+    flushScheduled = false;
+    const bodyEl = document.getElementById("live-debug-body");
+    const btnEl = document.getElementById("live-debug-toggle");
+    if (!bodyEl) return;
+    const atBottom = (bodyEl.scrollHeight - bodyEl.scrollTop - bodyEl.clientHeight) < 36;
+    bodyEl.innerHTML = logsHistory.join("<br>");
+    if (atBottom) bodyEl.scrollTop = bodyEl.scrollHeight;
+    if (btnEl && errorCount > 0) {
+      btnEl.innerText = "🚨 Debug (" + errorCount + ")";
+      btnEl.style.borderColor = "#ff3333";
+    }
+  }
+
+  window.trackProgress = function(message, isError = false) {
+    const cleanMsg = String(message).replace(/<[^>]*>/g, "");
+    const tParts = new Date().toLocaleTimeString().split(" ");
+    const time = tParts[0];
+
+    if (cleanMsg === lastMessageText && !isError && logsHistory.length > 0) {
+      repeatCount++;
+      logsHistory[logsHistory.length - 1] = `[${time}] ${message} <span style="color:#ffd166">(x${repeatCount})</span>`;
+    } else {
+      lastMessageText = cleanMsg;
+      repeatCount = 1;
+      const formatted = isError
+        ? `<span style="color:#ff5252;font-weight:bold;">[${time}] 🚨 ${message}</span>`
+        : `[${time}] ${message}`;
+      logsHistory.push(formatted);
+      if (logsHistory.length > 80) logsHistory.shift();
+    }
+
+    if (isError) {
+      errorCount++;
+      const box = document.getElementById("live-debug-box");
+      const btn = document.getElementById("live-debug-toggle");
+      if (box) box.style.display = "flex";
+      if (btn) { btn.style.backgroundColor = "#d50000"; btn.style.color = "#fff"; }
+    }
+
+    if (!flushScheduled) {
+      flushScheduled = true;
+      requestAnimationFrame(renderLogBox);
+    }
+  };
+
+  window.addEventListener("error", function(ev) {
+    const f = ev.filename ? ev.filename.split("/").pop() : "script";
+    const msg = `${f} (Line ${ev.lineno}:${ev.colno || 0}): ${ev.message}`;
+    window._bootErrors.push(msg);
+    const stackLine = (ev.error && ev.error.stack) ? ev.error.stack.split("\n").slice(0, 3).join(" → ") : "";
+    window.trackProgress(`CRASH: ${ev.message}<br>📍 File: ${f} (Line ${ev.lineno})${stackLine ? "<br>🔍 " + stackLine : ""}`, true);
+  }, true);
+
+  window.addEventListener("unhandledrejection", function(ev) {
+    window.trackProgress(`ASYNC ERROR: ${ev.reason}`, true);
+  });
+
+  window.addEventListener("DOMContentLoaded", () => {
+    const debugBox = document.createElement("div");
+    debugBox.id = "live-debug-box";
+    debugBox.style.cssText = "position:fixed;bottom:38px;left:0;width:100%;height:165px;background:rgba(4,8,16,0.96);color:#00e676;font-family:monospace;font-size:10.5px;z-index:999999;display:none;flex-direction:column;border-top:2px solid #00e5ff;";
+
+    const toolBar = document.createElement("div");
+    toolBar.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:3px 8px;background:#0a1526;border-bottom:1px solid #1e324a;font-size:10px;color:#80deea;";
+    toolBar.innerHTML = `<span><b>NEXUS LIVE DEBUGGER</b></span><div style="display:flex;gap:5px">
+      <button id="dbgSpyBtn" style="background:#1c3144;color:#00e676;border:1px solid #00e5ff;border-radius:3px;padding:1px 6px;font-size:9.5px">DOM Spy: ON</button>
+      <button id="dbgCopyBtn" style="background:#1c3144;color:#fff;border:1px solid #546e7a;border-radius:3px;padding:1px 6px;font-size:9.5px">Copy</button>
+      <button id="dbgClearBtn" style="background:#1c3144;color:#ffd166;border:1px solid #546e7a;border-radius:3px;padding:1px 6px;font-size:9.5px">Clear</button>
+    </div>`;
+
+    const logBody = document.createElement("div");
+    logBody.id = "live-debug-body";
+    logBody.style.cssText = "flex:1;padding:6px 8px;overflow-y:auto;-webkit-overflow-scrolling:touch;line-height:1.35;";
+
+    debugBox.appendChild(toolBar);
+    debugBox.appendChild(logBody);
+    document.body.appendChild(debugBox);
+
+    const toggleBtn = document.createElement("button");
+    toggleBtn.id = "live-debug-toggle";
+    toggleBtn.innerText = "⚙️ Debug";
+    toggleBtn.style.cssText = "position:fixed;bottom:4px;left:5px;z-index:1000000;padding:4px 10px;background:#1a2636;color:#e0f7fa;border:1px solid #00e5ff88;border-radius:4px;font-size:11px;font-family:monospace;";
+
+    toggleBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = debugBox.style.display === "none";
+      debugBox.style.display = open ? "flex" : "none";
+      toggleBtn.style.backgroundColor = open ? "#00e676" : (errorCount > 0 ? "#d50000" : "#1a2636");
+      toggleBtn.style.color = open ? "#000" : "#fff";
+      if (open) renderLogBox();
+    });
+    document.body.appendChild(toggleBtn);
+
+    document.getElementById("dbgSpyBtn").onclick = function(e) {
+      e.stopPropagation();
+      domSpyEnabled = !domSpyEnabled;
+      this.textContent = "DOM Spy: " + (domSpyEnabled ? "ON" : "OFF");
+      this.style.color = domSpyEnabled ? "#00e676" : "#ff8a80";
+    };
+    document.getElementById("dbgClearBtn").onclick = function(e) {
+      e.stopPropagation();
+      logsHistory = []; errorCount = 0; lastMessageText = "";
+      toggleBtn.innerText = "⚙️ Debug";
+      renderLogBox();
+    };
+    document.getElementById("dbgCopyBtn").onclick = function(e) {
+      e.stopPropagation();
+      const plain = logsHistory.map(l => l.replace(/<[^>]*>/g, "")).join("\n");
+      if (navigator.clipboard) navigator.clipboard.writeText(plain);
+      window.trackProgress("Copied debug log to clipboard.");
+    };
+
+    // Smart UI Creation Sentinel (Ignores 60-FPS HUD redraws, logs caller function for buttons/modals)
+    const origCreate = document.createElement;
+    document.createElement = function(tagName) {
+      const el = origCreate.apply(document, arguments);
+      if (domSpyEnabled && !window._inHudUpdate) {
+        const t = String(tagName).toLowerCase();
+        if (t === "button" || t === "div" || t === "canvas") {
+          let caller = "UI";
+          try {
+            const st = (new Error().stack || "").split("\n");
+            if (st[2]) caller = st[2].trim().replace(/^at\s+/, "").split(" ")[0];
+          } catch (err) {}
+          window.trackProgress(`DOM <${t.toUpperCase()}> via ${caller}`);
+        }
+      }
+      return el;
+    };
+
+    window.trackProgress("Advanced Debugger Ready. Listening for UI & Combat events...");
+    renderLogBox();
+  });
+})();
+</script>
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -26,6 +174,10 @@
       <div id="pasSlots" class="slot-bar"></div>
       <div id="relicSlots" class="slot-bar"></div>
       <div id="utilBar" class="slot-bar"></div>
+    </div>
+    <div class="hud-row">
+      <div id="bodyHud" class="slot-bar" style="align-items:center"></div>
+      <div class="stat-pill" id="saberHud" style="font-size:0.62rem;padding:2px 6px;color:#ffd166;display:none">Saber: 0%</div>
     </div>
     <div class="hud-row">
       <div class="time-pill">Temporal Nexus: <span id="timeScaleLbl">1.0x</span></div>
@@ -55,7 +207,7 @@
     <div style="display:flex;flex-direction:column;gap:7px;max-width:290px;margin:auto;width:100%">
       <button class="btn gold" id="goPlay" style="font-size:0.95rem;padding:12px">DEPLOY INTO NEXUS</button>
       <button class="btn" id="goDiff">CYCLE DIFFICULTY TIER</button>
-      <button class="btn" id="goChars">CHARACTER ROSTER (55)</button>
+      <button class="btn" id="goChars">CHARACTER ROSTER (56)</button>
       <button class="btn" id="goStages">STAGE SECTOR MAP (50)</button>
       <button class="btn" id="goMeta">DARK MATTER SHOP & RESPEC</button>
       <button class="btn" id="goCodex">WORLD MORPH CODEX & LEGEND</button>
@@ -67,7 +219,7 @@
 
   <!-- CHARACTER SELECT -->
   <div id="scrChars" class="screen">
-    <h2>55 MULTIVERSE HEROES (Hold 350ms for Full Specs)</h2>
+    <h2>56 MULTIVERSE HEROES (Hold 350ms to Inspect & Customize Outfit)</h2>
     <div class="bar">
       <div class="stat-pill" id="charDM">Available DM: 0</div>
       <button class="btn warn" id="btnRespecChars">RESPEC (REFUND & LOCK ALL)</button>
@@ -94,7 +246,7 @@
     <div id="metaGrid" class="grid"></div>
   </div>
 
-  <!-- CODEX & WORLD MORPH LEGEND -->
+  <!-- CODEX -->
   <div id="scrCodex" class="screen">
     <h2>BIOME MORPH CODEX & PASSIVE MATRIX</h2>
     <div class="sub">Every hard-coded object ID morphs its geometry & lore based on your Hero's Faction</div>
@@ -112,7 +264,7 @@
   <!-- HEALTH OF GAME -->
   <div id="scrHealth" class="screen">
     <h2>HEALTH OF GAME — LIVE TELEMETRY</h2>
-    <div class="sub">Real-time architectural diagnostics (Green = Optimal Engine State)</div>
+    <div class="sub">Real-time architectural diagnostics & Dynamic EOF Paste Scanner</div>
     <div id="healthBox" style="max-width:340px;margin:auto;width:100%"></div>
     <div class="bar"><button class="btn" data-back="scrMain">BACK</button></div>
   </div>
@@ -121,16 +273,15 @@
   <div id="scrHelp" class="screen">
     <h2>TOUCHSCREEN NAVIGATION & RULES</h2>
     <div style="max-width:340px;margin:auto;display:flex;flex-direction:column;gap:6px">
-      <div class="health-row"><b>1. Floating Virtual Joystick:</b> Touch and drag anywhere on the battlefield to move. Weapons fire automatically.</div>
-      <div class="health-row"><b>2. Pinch-to-Zoom:</b> Spread or pinch two fingers (or tap HUD +/-) to zoom between 0.5x and 2.0x.</div>
-      <div class="health-row"><b>3. 350ms Long-Press Inspector:</b> Hold one finger on ANY UI card, HUD slot, or world object/enemy on the battlefield to inspect.</div>
-      <div class="health-row"><b>4. Guaranteed Level 10 Supercharge:</b> Leveling any weapon to 9 guarantees its flashing gold <b>★ SUPERCHARGE</b> card in Slot 1.</div>
-      <div class="health-row"><b>5. 100-Shot Firing Range Target:</b> Pause or Level-Up to inspect your last 100 shots (numbered 1–100) across all 5 enemy target silhouettes.</div>
+      <div class="health-row"><b>1. Floating Virtual Joystick:</b> Touch and drag anywhere on the battlefield to move. Weapons aim and fire automatically.</div>
+      <div class="health-row"><b>2. Kenshi Limb Status & Guard HUD:</b> Taking damage grants Toughness XP. Tap/Hold any limb icon (HD, TR, LL, RL) on the HUD to raise your arm and guard that zone!</div>
+      <div class="health-row"><b>3. 350ms Long-Press & Outfit Customizer:</b> Hold any Hero card in the Roster 350ms to customize their canon Head/Hair, Torso, Legs, Back & Saber color.</div>
+      <div class="health-row"><b>4. Lv.5 Primary & Lv.10 Supercharge:</b> Every weapon evolves into its Primary Arsenal at Lv.5 and guarantees its ★ Supercharge card at Lv.10.</div>
     </div>
     <div class="bar"><button class="btn" data-back="scrMain">BACK</button></div>
   </div>
 
-  <!-- LEVEL UP / PAUSE MODAL + UNUSED DARK SPACE FIRING RANGE TELEMETRY (v4.1) -->
+  <!-- LEVEL UP / PAUSE MODAL + FIRING RANGE TELEMETRY -->
   <div id="scrLevel" class="screen">
     <h2 id="lvlTitle">NEXUS LEVEL UP — PICK 1 OF 3</h2>
     <div class="sub">Hold any card 350ms for full stats & Level 10 Supercharge preview</div>
@@ -139,7 +290,6 @@
       <button class="btn" id="btnResume">RESUME RUN</button>
       <button class="btn warn" id="btnQuitRun">END RUN (PURGE RUN RAM)</button>
     </div>
-    <!-- v4.1 FIRING RANGE PAPER TARGET TELEMETRY (Occupies Unused Lower Space) -->
     <div id="rangeBox" style="max-width:330px;margin:4px auto 0 auto;width:100%;background:#08101c;border:1px solid #263850;border-radius:8px;padding:6px;display:flex;flex-direction:column;align-items:center;gap:4px">
       <div style="font-size:0.68rem;color:#ffd166;font-weight:700;letter-spacing:0.5px">BALLISTIC & MELEE RANGE TELEMETRY (LAST 100 ATTACKS)</div>
       <div id="rangeTabs" style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center"></div>
@@ -149,7 +299,7 @@
   </div>
 </div>
 
-<!-- LONG-PRESS INSPECTOR TOOLTIP -->
+<!-- LONG-PRESS INSPECTOR TOOLTIP + DUAL-VIEW CANON OUTFIT CUSTOMIZER -->
 <div id="tooltip">
   <div id="tooltipBox">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
@@ -159,54 +309,26 @@
         <div id="ttSub" style="font-size:0.72rem;color:#00e5ff"></div>
       </div>
     </div>
-    <div id="ttBody" style="font-size:0.76rem;line-height:1.4;color:#e0f2f1;white-space:pre-line"></div>
-    <div class="bar" style="margin-top:10px"><button class="btn gold" id="ttClose">CLOSE INSPECTOR</button></div>
+    <div id="ttBody" style="font-size:0.74rem;line-height:1.35;color:#e0f2f1;white-space:pre-line"></div>
+    <div id="custBox" style="display:none;margin-top:8px;border-top:1px solid #263850;padding-top:6px;flex-direction:column;align-items:center;gap:5px">
+      <div style="font-size:0.66rem;color:#ffd166;font-weight:700">CANON OUTFIT CUSTOMIZER (ZOOMED + IN-GAME PREVIEW)</div>
+      <div id="custBtns" style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center"></div>
+      <canvas id="custCv" width="290" height="125" style="position:relative;width:290px;height:125px;background:#070d17;border:1px solid #00e5ff88;border-radius:6px"></canvas>
+    </div>
+    <div class="bar" style="margin-top:8px"><button class="btn gold" id="ttClose">CLOSE INSPECTOR</button></div>
   </div>
 </div>
 
-<!-- PRE-SCRIPT BOOT DIAGNOSTIC -->
-<script>
-window._bootErrors = [];
-window.onerror = function(msg, url, line) {
-  var f = url ? url.split("/").pop() : "script";
-  window._bootErrors.push(f + " (Line " + line + "): " + msg);
-};
-</script>
-
 <!-- ORDERED MODULAR SCRIPT LOADING -->
-<script src="js/chaos.js" onerror="window._bootErrors.push('404 Missing: js/chaos.js')"></script>
-<script src="js/data-factions.js" onerror="window._bootErrors.push('404 Missing: js/data-factions.js')"></script>
-<script src="js/data-heroes.js" onerror="window._bootErrors.push('404 Missing: js/data-heroes.js')"></script>
-<script src="js/data-relics.js" onerror="window._bootErrors.push('404 Missing: js/data-relics.js')"></script>
-<script src="js/state.js" onerror="window._bootErrors.push('404 Missing: js/state.js')"></script>
-<script src="js/world.js" onerror="window._bootErrors.push('404 Missing: js/world.js')"></script>
-<script src="js/combat.js" onerror="window._bootErrors.push('404 Missing: js/combat.js')"></script>
-<script src="js/sim.js" onerror="window._bootErrors.push('404 Missing: js/sim.js')"></script>
-<script src="js/render.js" onerror="window._bootErrors.push('404 Missing: js/render.js')"></script>
-<script src="js/ui.js" onerror="window._bootErrors.push('404 Missing: js/ui.js')"></script>
-
-<script>
-window.addEventListener("load", function() {
-  var checks = [
-    ["chaos.js", typeof ChaosMath !== "undefined"],
-    ["data-factions.js", typeof FACTIONS !== "undefined"],
-    ["data-heroes.js", typeof CHAR_RAW !== "undefined"],
-    ["data-relics.js", typeof RELICS_DB !== "undefined"],
-    ["state.js", typeof loadMeta === "function"],
-    ["world.js", typeof getDistBiome === "function"],
-    ["combat.js", typeof startRun === "function"],
-    ["sim.js", typeof updateSim === "function"],
-    ["render.js", typeof renderScene === "function"],
-    ["ui.js", typeof updateMenuUI === "function"]
-  ];
-  var failed = checks.filter(function(c) { return !c[1]; }).map(function(c) { return c[0]; });
-  var box = document.getElementById("bootDiag");
-  if (window._bootErrors.length > 0 || failed.length > 0) {
-    box.style.color = "#ff5252";
-    box.style.fontWeight = "bold";
-    box.textContent = (window._bootErrors.join(" | ") || "") + (failed.length ? " [Failed to parse: " + failed.join(", ") + "]" : "");
-  }
-});
-</script>
+<script src="js/chaos.js" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
+<script src="js/data-factions.js" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
+<script src="js/data-heroes.js" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
+<script src="js/data-relics.js" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
+<script src="js/state.js" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
+<script src="js/world.js" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
+<script src="js/combat.js" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
+<script src="js/sim.js" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
+<script src="js/render.js" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
+<script src="js/ui.js" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
 </body>
 </html>
