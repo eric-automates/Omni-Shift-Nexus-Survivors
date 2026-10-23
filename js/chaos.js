@@ -1,6 +1,6 @@
 // FILE: js/chaos.js
 // PART: 5 of 14
-// DETAIL: ChaosMath RNG, polygon/limb mutator, obstacle steering, Realistic Weapon/Saber/Ricochet/Snap Acoustics, and All 56 Individually Composed 8-Bit Character Themes.
+// DETAIL: ChaosMath RNG, Noise-Buffer + FM Acoustic Synth (All 56 Weapons, Lightning, Flamethrower, Rockets, Explosions, Sabers), 56 Extended 16-Note Alignment Themes, and External Run MP3 Streamer.
 
 "use strict";
 
@@ -82,143 +82,313 @@ function hashChunk(cx, cy) {
   return ChaosMath.createRNG(seed >>> 0);
 }
 
-/* === 2. REALISTIC RNG-VARIED ACOUSTIC SYNTHESIZER === */
-let actx = null, ambTimer = 0, themeTimer = 0, themeStep = 0;
+/* === 2. MOVIE-ACCURATE WEB AUDIO SYNTHESIZER (Noise Buffers + Biquad Filters + FM) === */
+let actx = null, noiseBuf = null, ambTimer = 0, themeTimer = 0, themeStep = 0;
+let runAudio = null, runAudioFailed = false;
 
 function ensureAudio() {
   const vol = (typeof opts !== "undefined" && typeof opts.vol === "number") ? opts.vol : 0.45;
   if (vol <= 0.01) return null;
-  if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    // Pre-allocate 1.0s White/Pink Noise Buffer for realistic gunfire, flamethrowers, rockets & explosions
+    const sr = actx.sampleRate;
+    noiseBuf = actx.createBuffer(1, sr, sr);
+    const data = noiseBuf.getChannelData(0);
+    for (let i = 0; i < sr; i++) data[i] = Math.random() * 2 - 1;
+  }
   if (actx.state === "suspended") actx.resume();
   return actx;
+}
+
+function playNoise(dur = 0.12, filterType = "bandpass", freqStart = 1200, freqEnd = 300, q = 1.5, gainMul = 0.22) {
+  try {
+    const ac = ensureAudio();
+    if (!ac || !noiseBuf) return;
+    const now = ac.currentTime, vol = opts.vol;
+    const d = Math.max(0.02, dur * (0.92 + Math.random() * 0.16));
+    const src = ac.createBufferSource(), flt = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = noiseBuf; src.loop = true;
+    flt.type = filterType; flt.Q.setValueAtTime(q, now);
+    flt.frequency.setValueAtTime(Math.max(30, freqStart * (0.94 + Math.random() * 0.12)), now);
+    flt.frequency.exponentialRampToValueAtTime(Math.max(30, freqEnd), now + d);
+    g.gain.setValueAtTime(vol * gainMul, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + d);
+    src.connect(flt); flt.connect(g); g.connect(ac.destination);
+    src.start(now, Math.random() * 0.5); src.stop(now + d);
+  } catch (e) {}
 }
 
 function sfx(f1, f2, dur = 0.08, type = "sawtooth", gainMul = 0.2, jitterPct = 0.055) {
   try {
     const ac = ensureAudio();
     if (!ac) return;
-    const vol = opts.vol;
-    const j1 = 1 + (Math.random() - 0.5) * 2 * jitterPct;
-    const j2 = 1 + (Math.random() - 0.5) * 2 * jitterPct;
-    const dVar = Math.max(0.025, dur * (1 + (Math.random() - 0.5) * 0.12));
-    const now = ac.currentTime;
-    const osc = ac.createOscillator(), gain = ac.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(Math.max(22, f1 * j1), now);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(22, f2 * j2), now + dVar);
-    gain.gain.setValueAtTime(vol * gainMul, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + dVar);
-    osc.connect(gain); gain.connect(ac.destination);
-    osc.start(now); osc.stop(now + dVar);
+    // Automatically upgrade special game call signatures into rich multi-layered acoustics!
+    if (f1 === 140 && f2 === 75) { sfxFlamethrower(dur); return; }
+    if (f1 === 150 && f2 === 65) { sfxFlamethrower(dur); return; }
+    if (f1 === 120 && f2 === 45) { sfxExplosion(1.0); return; }
+    if (f1 === 170 && f2 === 55) {
+      playNoise(0.045, "lowpass", 520, 90, 1.2, 0.16);
+      sfxTone(165, 48, 0.05, "triangle", 0.15, 0.08);
+      return;
+    }
+    sfxTone(f1, f2, dur, type, gainMul, jitterPct);
   } catch (e) {}
 }
 
+function sfxTone(f1, f2, dur = 0.08, type = "sawtooth", gainMul = 0.2, jitterPct = 0.055) {
+  const ac = ensureAudio();
+  if (!ac) return;
+  const vol = opts.vol, now = ac.currentTime;
+  const j1 = 1 + (Math.random() - 0.5) * 2 * jitterPct;
+  const j2 = 1 + (Math.random() - 0.5) * 2 * jitterPct;
+  const dVar = Math.max(0.022, dur * (1 + (Math.random() - 0.5) * 0.12));
+  const osc = ac.createOscillator(), gain = ac.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(Math.max(22, f1 * j1), now);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(22, f2 * j2), now + dVar);
+  gain.gain.setValueAtTime(vol * gainMul, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + dVar);
+  osc.connect(gain); gain.connect(ac.destination);
+  osc.start(now); osc.stop(now + dVar);
+}
+
+function sfxFlamethrower(dur = 0.45) {
+  playNoise(dur, "bandpass", 950, 260, 0.9, 0.34);
+  playNoise(dur * 0.8, "lowpass", 320, 85, 1.4, 0.28);
+  sfxTone(115, 52, dur * 0.9, "sawtooth", 0.14, 0.08);
+}
+
+function sfxExplosion(scale = 1.0) {
+  playNoise(0.32 * scale, "lowpass", 480, 42, 0.8, 0.38);
+  playNoise(0.18 * scale, "bandpass", 1400, 180, 1.5, 0.24);
+  sfxTone(95, 24, 0.28 * scale, "sawtooth", 0.32, 0.06);
+}
+
+function sfxForceLightning() {
+  for (let k = 0; k < 3; k++) {
+    setTimeout(() => {
+      playNoise(0.055, "highpass", 2400, 900, 3.2, 0.22);
+      sfxTone(1650 + Math.random() * 900, 140, 0.05, "sawtooth", 0.18, 0.14);
+    }, k * 28);
+  }
+}
+
+// Movie-Accurate Weapon & Utility Acoustics Across All 56 Heroes (#00-#55)
 function sfxWeapon(style, wpnId = 0, isSaber = false) {
   try {
     const ac = ensureAudio();
     if (!ac) return;
     const now = ac.currentTime, vol = opts.vol;
+
     if (isSaber) {
-      const swingPitch = 78 + Math.random() * 58, swingPeak = 165 + Math.random() * 115, dur = 0.19 + Math.random() * 0.09;
-      const o1 = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain();
+      if ([18, 19, 24, 48, 50].includes(wpnId)) {
+        // Metallic Steel Sword / Crysknife / Bat'leth / Nodachi Air Whoosh + Blade Ring
+        playNoise(0.14, "bandpass", 1800, 420, 2.2, 0.25);
+        sfxTone(540, 180, 0.11, "triangle", 0.18, 0.08);
+        sfxTone(2400, 1650, 0.06, "sine", 0.08, 0.05);
+        return;
+      }
+      // Authentic Plasma Lightsaber: Dual Detuned Hum + Doppler Swing Whoosh
+      const baseH = wpnId === 3 ? 68 : (wpnId === 55 ? 88 : 92) + (Math.random() - 0.5) * 24;
+      const peakH = baseH * (1.85 + Math.random() * 0.55);
+      const dur = 0.21 + Math.random() * 0.08;
+      const o1 = ac.createOscillator(), o2 = ac.createOscillator(), flt = ac.createBiquadFilter(), g = ac.createGain();
       o1.type = "sawtooth"; o2.type = "triangle";
-      o1.frequency.setValueAtTime(swingPitch, now);
-      o1.frequency.exponentialRampToValueAtTime(swingPeak, now + dur * 0.45);
-      o1.frequency.exponentialRampToValueAtTime(swingPitch * 0.82, now + dur);
-      o2.frequency.setValueAtTime(swingPitch * 1.98, now);
-      o2.frequency.exponentialRampToValueAtTime(swingPeak * 1.5, now + dur * 0.5);
+      flt.type = "lowpass"; flt.frequency.setValueAtTime(420, now);
+      flt.frequency.exponentialRampToValueAtTime(1450, now + dur * 0.42);
+      flt.frequency.exponentialRampToValueAtTime(360, now + dur);
+      o1.frequency.setValueAtTime(baseH, now);
+      o1.frequency.exponentialRampToValueAtTime(peakH, now + dur * 0.42);
+      o1.frequency.exponentialRampToValueAtTime(baseH * 0.86, now + dur);
+      o2.frequency.setValueAtTime(baseH * 2.02, now);
+      o2.frequency.exponentialRampToValueAtTime(peakH * 1.65, now + dur * 0.45);
       g.gain.setValueAtTime(0.001, now);
-      g.gain.linearRampToValueAtTime(vol * 0.24, now + dur * 0.35);
+      g.gain.linearRampToValueAtTime(vol * 0.28, now + dur * 0.35);
       g.gain.exponentialRampToValueAtTime(0.001, now + dur);
-      o1.connect(g); o2.connect(g); g.connect(ac.destination);
+      o1.connect(flt); o2.connect(flt); flt.connect(g); g.connect(ac.destination);
       o1.start(now); o2.start(now); o1.stop(now + dur); o2.stop(now + dur);
+      playNoise(dur * 0.85, "bandpass", 650, 220, 1.8, 0.14);
       return;
     }
-    if (wpnId === 52 || wpnId === 13) { sfx(1450, 180, 0.045, "square", 0.26, 0.04); sfx(240, 48, 0.075, "sawtooth", 0.22, 0.04); }
-    else if (wpnId === 54) { sfx(980, 210, 0.065, "sawtooth", 0.22, 0.035); sfx(620, 130, 0.08, "square", 0.16, 0.04); }
-    else if (wpnId === 15 || wpnId === 53 || wpnId === 28) { sfx(310, 52, 0.085, "sawtooth", 0.26, 0.04); sfx(1100, 420, 0.03, "triangle", 0.14, 0.05); }
-    else if (wpnId === 51) { sfx(880, 165, 0.05, "triangle", 0.24, 0.03); }
-    else if (style === "cone") { sfx(220, 55, 0.07, "square", 0.22, 0.05); }
-    else if (style === "beam") { sfx(920, 240, 0.075, "sawtooth", 0.19, 0.045); }
-    else if (style === "missile") { sfx(540, 190, 0.09, "sawtooth", 0.18, 0.06); }
-    else if (style === "chain") { sfx(1150, 290, 0.065, "square", 0.18, 0.08); }
-    else { sfx(380, 680, 0.08, "sine", 0.16, 0.07); }
+
+    if (wpnId === 54 && style === "missile") {
+      // Boba Fett Z-6 Jetpack Missile Ignition Pop + Rocket Exhaust Whoosh
+      playNoise(0.28, "bandpass", 1400, 280, 1.1, 0.32);
+      sfxTone(380, 95, 0.24, "sawtooth", 0.24, 0.05);
+      return;
+    }
+    if (wpnId === 54) {
+      // Boba Fett ESB EE-3 Carbine: Iconic 3-Pulse Metallic Guy-Wire Laser Chirp + Chamber Thump
+      [0, 0.026, 0.052].forEach((delay, idx) => {
+        setTimeout(() => {
+          sfxTone(1380 - idx * 140, 240, 0.048, "sawtooth", 0.22, 0.03);
+          sfxTone(680, 135, 0.052, "square", 0.14, 0.03);
+        }, delay * 1000);
+      });
+      playNoise(0.05, "bandpass", 2200, 600, 2.5, 0.16);
+      return;
+    }
+    if (wpnId === 3 || wpnId === 11 || wpnId === 38 || wpnId === 49 || style === "chain") {
+      // ROTJ Sith Force Lightning / Tesla Arc Crackle
+      sfxForceLightning();
+      return;
+    }
+    if (wpnId === 52 || wpnId === 13) {
+      // Western Colt Navy Six-Shooter / Mal's Brass Revolver: Crisp Hammer Snap + Gunpowder Crack + Cylinder Echo
+      playNoise(0.065, "bandpass", 2800, 480, 1.2, 0.34);
+      sfxTone(1600, 170, 0.048, "square", 0.25, 0.035);
+      sfxTone(260, 52, 0.085, "sawtooth", 0.24, 0.035);
+      return;
+    }
+    if (wpnId === 51) {
+      // Baba Yaga Compensated 9mm / Lv.5 Benelli Tactical Shotgun
+      playNoise(0.055, "highpass", 1800, 520, 1.5, 0.28);
+      sfxTone(940, 145, 0.052, "triangle", 0.26, 0.03);
+      sfxTone(190, 58, 0.06, "square", 0.18, 0.03);
+      return;
+    }
+    if ([15, 28, 31, 34, 37, 53].includes(wpnId)) {
+      // Vera / M60 / M56 Smartgun / Godwyn Bolter: Heavy Ballistic Chamber Boom + Bolt Carrier Clack
+      playNoise(0.08, "lowpass", 1600, 240, 1.0, 0.32);
+      sfxTone(320, 48, 0.085, "sawtooth", 0.26, 0.04);
+      sfxTone(1350, 480, 0.028, "triangle", 0.15, 0.04);
+      return;
+    }
+    if ([33, 44].includes(wpnId) || style === "cone") {
+      // Super Shotgun / Scatter-Blaster: Wide Concussive Buckshot Boom
+      playNoise(0.11, "lowpass", 1200, 140, 0.9, 0.36);
+      sfxTone(210, 42, 0.095, "square", 0.26, 0.05);
+      return;
+    }
+    if ([0, 2, 6, 7, 9, 10, 19, 22, 32, 36, 40, 41, 43, 45, 47].includes(wpnId) || style === "beam") {
+      // Star Wars / Sci-Fi Blaster & Phased-Plasma Rifle (Ben Burtt Guy-Wire Twang)
+      const hi = wpnId === 6 ? 1520 : (wpnId === 40 ? 1180 : 1320);
+      sfxTone(hi, 195, 0.078, "sawtooth", 0.22, 0.04);
+      sfxTone(hi * 0.5, 92, 0.082, "triangle", 0.16, 0.04);
+      playNoise(0.04, "bandpass", 2400, 700, 3.0, 0.12);
+      return;
+    }
+    if (style === "missile") {
+      playNoise(0.16, "bandpass", 1500, 320, 1.4, 0.26);
+      sfxTone(520, 140, 0.14, "sawtooth", 0.19, 0.05);
+    } else {
+      playNoise(0.09, "bandpass", 900, 220, 1.6, 0.18);
+      sfxTone(380, 680, 0.085, "sine", 0.17, 0.06);
+    }
   } catch (e) {}
 }
 
-function sfxRicochet() { sfx(1650, 2950, 0.045, "triangle", 0.16, 0.12); sfx(2600, 780, 0.065, "sine", 0.12, 0.12); }
-function sfxSnap() { sfx(2100, 340, 0.038, "square", 0.20, 0.09); }
+function sfxRicochet() {
+  playNoise(0.035, "highpass", 3200, 1200, 3.5, 0.18);
+  sfxTone(1750, 3100, 0.048, "triangle", 0.18, 0.10);
+  sfxTone(2800, 680, 0.075, "sine", 0.14, 0.10);
+}
 
-/* === 3. ALL 56 INDIVIDUALLY COMPOSED 8-BIT CHARACTER THEMES (#00-#55) ===
-   Format: [tempoSec, waveType, [8-note lead melody Hz]] */
+function sfxSnap() {
+  playNoise(0.032, "bandpass", 3600, 900, 2.8, 0.26);
+  sfxTone(2300, 320, 0.036, "square", 0.22, 0.08);
+}
+
+/* === 3. 56 EXTENDED 16-NOTE ALIGNMENT-STYLED HERO THEMES & ACTIVE-RUN MP3 STREAMER ===
+   Heroes (Good) = Upbeat Heroic Fanfares | Bounty = Badass Bass Grooves | Villains (Bad) = Dark Imposing Marches */
 const CHARACTER_THEMES = [
-  [0.24, "square",   [293, 440, 392, 349, 329, 587, 440, 392]], // #00 Twin-Sun Initiate
-  [0.22, "triangle", [196, 293, 261, 220, 196, 146, 196, 220]], // #01 Beskar Tracker
-  [0.19, "sawtooth", [196, 196, 196, 155, 233, 196, 155, 233]], // #02 Imperial March
-  [0.26, "sawtooth", [146, 155, 146, 110, 146, 155, 185, 174]], // #03 Sith Sovereign
-  [0.14, "square",   [523, 659, 880, 784, 987, 587, 784, 659]], // #04 R2 Chirp Arpeggio
-  [0.25, "sawtooth", [130, 196, 174, 164, 146, 130, 196, 220]], // #05 Kashyyyk Roar
-  [0.18, "square",   [329, 392, 440, 493, 587, 493, 440, 392]], // #06 Corellian Smuggler
-  [0.26, "sawtooth", [220, 233, 277, 293, 277, 233, 220, 164]], // #07 Anupas Solar Phrygian
-  [0.20, "square",   [261, 329, 392, 523, 493, 392, 329, 293]], // #08 Chevron-1 Fanfare
-  [0.21, "sawtooth", [164, 196, 220, 196, 164, 146, 164, 220]], // #09 Serpent Jaffa March
-  [0.23, "triangle", [392, 493, 587, 659, 587, 493, 440, 392]], // #10 Othala Sage Chime
-  [0.25, "sawtooth", [185, 220, 207, 164, 146, 185, 164, 138]], // #11 Pegasus Hive Dirge
-  [0.28, "triangle", [261, 392, 349, 329, 293, 392, 329, 261]], // #12 Hallowed Origin Chant
-  [0.22, "triangle", [220, 246, 293, 329, 293, 246, 196, 220]], // #13 Browncoat Ballad
-  [0.17, "triangle", [329, 392, 493, 587, 523, 493, 392, 329]], // #14 Miranda Music Box
-  [0.20, "square",   [196, 246, 293, 392, 349, 293, 246, 196]], // #15 Hero of Canton
-  [0.18, "triangle", [293, 370, 440, 587, 554, 440, 370, 293]], // #16 Soaring Leaf Breeze
-  [0.15, "sawtooth", [110, 146, 116, 155, 123, 164, 110, 146]], // #17 Reaver Static Grind
-  [0.26, "triangle", [164, 174, 207, 220, 246, 207, 174, 164]], // #18 Muad'Dib Desert Prophecy
-  [0.19, "sawtooth", [130, 130, 196, 196, 174, 164, 130, 98]],  // #19 Sardaukar Throat Chant
-  [0.27, "triangle", [246, 261, 311, 329, 311, 261, 246, 196]], // #20 Bene-Voice Litany
-  [0.28, "sawtooth", [98,  116, 110, 92,  98,  130, 110, 87]],  // #21 Harkonnen Industrial Bass
-  [0.21, "square",   [261, 329, 440, 523, 493, 392, 329, 587]], // #22 Starfleet Bridge Theme
-  [0.20, "sawtooth", [130, 138, 130, 196, 185, 130, 138, 130]], // #23 Borg Collective Pulse
-  [0.19, "sawtooth", [146, 220, 196, 293, 261, 220, 174, 146]], // #24 Klingon Warrior Anthem
-  [0.18, "triangle", [220, 261, 293, 329, 392, 329, 293, 220]], // #25 Viper Watchtower Riff
-  [0.21, "sawtooth", [174, 207, 233, 261, 233, 207, 174, 155]], // #26 Cylon Raider Sweep
-  [0.20, "square",   [220, 329, 293, 440, 392, 329, 261, 220]], // #27 Spectre Normandy Synth
-  [0.17, "square",   [196, 207, 196, 233, 196, 207, 261, 233]], // #28 Sulaco Motion Pulse
-  [0.24, "sawtooth", [146, 164, 146, 110, 146, 196, 174, 146]], // #29 Yautja Jungle Percussion
-  [0.22, "sawtooth", [164, 174, 233, 220, 164, 155, 138, 130]], // #30 Xeno-Queen Hive Suspense
-  [0.18, "square",   [261, 261, 349, 440, 392, 349, 293, 261]], // #31 Klendathu Drop March
-  [0.25, "triangle", [164, 196, 220, 246, 261, 246, 220, 196]], // #32 Spartan Gregorian Chant
-  [0.14, "sawtooth", [82,  82,  164, 82,  82,  146, 82,  138]], // #33 Slayer Rip & Tear Riff
-  [0.22, "sawtooth", [130, 155, 196, 233, 196, 155, 146, 130]], // #34 Astartes Gothic Crusade
-  [0.21, "square",   [174, 220, 261, 277, 261, 220, 196, 174]], // #35 Omnissiah Organ Canticle
-  [0.26, "sawtooth", [123, 146, 185, 164, 123, 110, 123, 146]], // #36 Tomb-World Gauss Hum
-  [0.16, "square",   [146, 146, 196, 174, 146, 220, 196, 146]], // #37 Waaagh Warboss Stomp
-  [0.23, "triangle", [207, 246, 311, 370, 329, 246, 207, 185]], // #38 Inquisitor Tarot Choir
-  [0.16, "square",   [220, 293, 329, 440, 329, 293, 261, 220]], // #39 Zion Breakbeat Arpeggio
-  [0.20, "sawtooth", [146, 146, 146, 174, 164, 146, 130, 110]], // #40 T-800 Brad Fiedel Pulse
-  [0.28, "triangle", [261, 329, 392, 493, 440, 392, 329, 246]], // #41 Neon Rain Blues Synth
-  [0.15, "sawtooth", [246, 293, 370, 440, 392, 370, 293, 246]], // #42 Sandevistan Hyper-Synth
-  [0.23, "triangle", [196, 246, 293, 349, 329, 293, 246, 196]], // #43 Vault-Tec Ink Spots Swing
-  [0.16, "sawtooth", [110, 110, 164, 146, 110, 174, 164, 146]], // #44 Doof-Wagon V8 Guitar
-  [0.18, "square",   [164, 220, 246, 329, 293, 246, 220, 164]], // #45 Black-Mesa Hazard Pulse
-  [0.17, "triangle", [246, 246, 246, 293, 329, 370, 329, 246]], // #46 Gallifrey Time-Vortex
-  [0.21, "triangle", [196, 233, 293, 370, 349, 293, 233, 196]], // #47 Brinstar Chozo Fanfare
-  [0.22, "sawtooth", [220, 261, 293, 311, 293, 261, 220, 196]], // #48 Witcher Slavic Hurdy-Lute
-  [0.27, "triangle", [138, 164, 196, 233, 207, 164, 138, 116]], // #49 R'lyeh Deep-Sea Dissonance
-  [0.25, "triangle", [196, 220, 261, 329, 293, 261, 220, 164]], // #50 Kenshi Scorched Cello
-  [0.17, "sawtooth", [164, 164, 196, 164, 220, 196, 164, 146]], // #51 Baba Yaga Club Bassline
-  [0.23, "square",   [329, 440, 329, 293, 261, 392, 329, 220]], // #52 Ennio Whistle & Whip
-  [0.24, "triangle", [220, 261, 329, 293, 261, 246, 220, 164]], // #53 First Blood Brass Solitude
-  [0.22, "sawtooth", [174, 185, 220, 174, 261, 233, 185, 174]], // #54 Slav-1 Bounty Tracker Motif
-  [0.16, "sawtooth", [146, 174, 207, 233, 207, 174, 146, 110]]  // #55 General Kaleesh War March
+  [0.21,"square",  [293,293,392,587,523,493,440,784,587,523,493,440,784,587,523,493]], // #00 Heroic Twin-Sun Fanfare
+  [0.20,"sawtooth",[146,146,220,196,174,146,130,146,146,220,261,233,196,174,146,130]], // #01 Bounty Beskar Groove
+  [0.21,"sawtooth",[196,196,196,155,233,196,155,233,196,293,293,293,311,233,185,155]], // #02 Villain Imperial March
+  [0.24,"sawtooth",[146,155,146,110,146,155,185,174,146,155,220,207,185,155,146,110]], // #03 Villain Sith Throne Dirge
+  [0.15,"square",  [523,659,784,1046,987,784,659,523,587,784,880,1174,1046,880,784,659]],// #04 Heroic R2 Upbeat Chiptune
+  [0.20,"square",  [196,261,293,392,349,293,261,196,220,293,329,440,392,329,293,261]], // #05 Heroic Wookiee Anthem
+  [0.18,"sawtooth",[164,196,220,246,293,246,220,196,164,220,261,293,329,293,220,164]], // #06 Bounty Kessel Run Bass
+  [0.23,"sawtooth",[164,174,207,220,207,174,164,146,164,174,246,220,207,174,164,130]], // #07 Villain Anupas Phrygian
+  [0.19,"square",  [261,329,392,523,493,440,392,329,349,440,523,659,587,523,392,523]], // #08 Heroic SG-1 Brass March
+  [0.22,"sawtooth",[146,146,174,196,174,146,130,110,146,174,220,207,174,146,130,146]], // #09 Villain Serpent Guard
+  [0.20,"triangle",[392,440,493,587,659,587,493,392,440,523,587,784,659,587,493,392]], // #10 Heroic Othala Starlight
+  [0.23,"sawtooth",[138,164,155,123,138,185,164,123,138,164,207,196,164,155,138,110]], // #11 Villain Wraith Culling
+  [0.24,"sawtooth",[130,155,196,185,155,130,116,130,155,196,233,220,196,155,146,130]], // #12 Villain Origin Crusade
+  [0.19,"triangle",[220,261,293,392,349,293,261,220,246,293,329,440,392,329,293,220]], // #13 Heroic Serenity Ballad
+  [0.17,"square",  [329,392,493,659,587,493,392,329,370,440,587,784,659,587,493,392]], // #14 Heroic Miranda Dance
+  [0.19,"sawtooth",[146,196,220,261,220,196,174,146,164,220,246,293,261,220,196,146]], // #15 Bounty Canton Merc Riff
+  [0.17,"square",  [293,370,440,587,523,440,370,293,329,392,493,659,587,493,440,587]], // #16 Heroic Leaf on the Wind
+  [0.16,"sawtooth",[110,116,146,110,155,146,116,98, 110,116,164,155,146,116,110,92]],  // #17 Villain Reaver Core Terror
+  [0.20,"square",  [220,261,329,440,392,329,293,261,293,349,440,523,493,440,329,440]], // #18 Heroic Muad'Dib Triumph
+  [0.21,"sawtooth",[130,130,155,146,130,98, 116,130,130,174,164,155,130,116,98, 130]], // #19 Villain Sardaukar Chant
+  [0.20,"triangle",[261,329,392,493,440,392,329,261,293,370,440,587,523,440,392,523]], // #20 Heroic Bene Matron
+  [0.24,"sawtooth",[98, 103,130,116,98, 87, 98, 116,98, 103,146,130,116,103,98, 82]],  // #21 Villain Harkonnen Doom
+  [0.18,"square",  [261,349,440,523,493,392,329,587,523,440,392,659,587,523,440,523]], // #22 Heroic Starfleet Fanfare
+  [0.20,"sawtooth",[130,138,130,110,130,164,155,130,130,138,185,174,155,138,130,103]], // #23 Villain Borg Cube Threat
+  [0.19,"square",  [196,261,293,392,349,293,261,392,440,392,349,293,349,392,440,523]], // #24 Heroic Klingon Glory
+  [0.18,"square",  [293,349,440,587,523,440,392,349,392,440,523,659,587,523,440,587]], // #25 Heroic Starbuck Ace
+  [0.21,"sawtooth",[146,155,196,185,155,146,130,116,146,155,220,207,185,155,146,110]], // #26 Villain Cylon Basestar
+  [0.19,"square",  [261,329,392,523,587,523,392,329,349,440,523,659,587,523,440,523]], // #27 Heroic Spectre Vanguard
+  [0.18,"square",  [220,261,329,440,392,329,293,220,261,329,392,523,493,440,392,440]], // #28 Heroic Colonial Marines
+  [0.20,"sawtooth",[146,146,220,174,164,146,130,146,164,220,261,220,196,174,146,130]], // #29 Bounty Predator Hunt
+  [0.22,"sawtooth",[123,130,164,155,130,123,110,98, 123,130,185,174,155,130,123,103]], // #30 Villain Xeno-Queen Horror
+  [0.18,"square",  [261,261,349,440,523,440,392,349,392,440,523,587,523,440,392,523]], // #31 Heroic Klendathu Drop
+  [0.20,"triangle",[220,261,293,329,392,349,329,293,329,392,440,523,493,440,392,440]], // #32 Heroic Spartan-117 Finish
+  [0.15,"sawtooth",[110,110,220,110,196,110,174,146,110,110,261,233,220,196,174,146]], // #33 Heroic Slayer Rip & Tear
+  [0.19,"square",  [196,246,293,392,349,293,246,196,220,261,329,440,392,329,293,392]], // #34 Heroic Astartes Triumph
+  [0.20,"square",  [220,261,329,392,440,392,329,261,293,349,440,523,493,440,392,440]], // #35 Heroic Omnissiah Hymn
+  [0.23,"sawtooth",[123,130,164,146,123,110,103,123,130,185,164,146,130,123,110,98]],  // #36 Villain Necron Tomb March
+  [0.17,"sawtooth",[130,130,174,155,130,196,174,130,146,146,196,174,155,146,130,110]], // #37 Villain Ork Waaagh Stomp
+  [0.19,"square",  [246,293,370,493,440,370,329,293,329,392,493,587,523,493,392,493]], // #38 Heroic Inquisitor Light
+  [0.17,"square",  [261,329,392,523,659,523,392,329,293,370,440,587,659,587,440,523]], // #39 Heroic Bullet-Time One
+  [0.20,"sawtooth",[146,146,146,174,164,146,130,130,146,146,146,220,196,174,164,146]], // #40 Heroic T-800 Brad Fiedel
+  [0.20,"sawtooth",[164,220,246,293,261,220,196,164,174,220,261,329,293,246,220,164]], // #41 Bounty Blade-Runner Bass
+  [0.16,"sawtooth",[196,246,293,392,370,293,246,196,220,261,329,440,392,329,261,196]], // #42 Bounty Edgerunner Synth
+  [0.19,"triangle",[261,329,392,440,523,440,392,329,349,440,523,587,523,440,392,523]], // #43 Heroic Vault Wanderer
+  [0.17,"square",  [196,246,293,392,440,392,293,246,220,293,349,440,493,440,349,392]], // #44 Heroic V8 Interceptor
+  [0.18,"square",  [220,293,329,440,392,329,293,220,261,329,392,523,493,440,392,440]], // #45 Heroic Black-Mesa Pulse
+  [0.17,"triangle",[246,293,370,493,440,370,329,246,293,370,440,587,523,440,370,493]], // #46 Heroic Time-Lord Theme
+  [0.19,"square",  [261,329,392,523,587,523,440,392,349,440,523,659,587,523,440,523]], // #47 Heroic Chozo Brinstar
+  [0.19,"sawtooth",[164,196,220,261,246,220,196,164,174,220,246,293,261,246,220,164]], // #48 Bounty Witcher Hunt
+  [0.24,"sawtooth",[116,123,155,146,123,116,98, 92, 116,123,174,164,146,123,116,87]],  // #49 Villain Cthulhu Abyss
+  [0.20,"sawtooth",[146,174,220,261,220,196,174,146,164,196,246,293,261,220,174,146]], // #50 Bounty Kenshi Ronin Groove
+  [0.16,"sawtooth",[164,164,220,164,246,220,196,164,164,164,261,246,220,196,174,164]], // #51 Bounty Baba Yaga Club Bass
+  [0.20,"square",  [220,293,220,196,174,261,220,146,220,293,329,293,261,349,293,220]], // #52 Bounty High-Noon Ennio
+  [0.19,"square",  [220,261,329,440,392,329,261,220,246,293,392,493,440,392,329,440]], // #53 Heroic First-Blood Brass
+  [0.19,"sawtooth",[146,146,220,174,207,196,164,146,146,146,261,233,220,174,164,146]], // #54 Bounty Slav-1 Boba Groove
+  [0.17,"sawtooth",[130,138,174,164,138,130,110,98, 130,138,196,185,164,138,130,103]]  // #55 Villain Kaleesh War March
 ];
 
 const THEME_MOTIFS = CHARACTER_THEMES.slice(0, 10).map(t => t[2]);
 
+function updateActiveRunMP3(isPlayingRun) {
+  if (typeof opts === "undefined" || !opts.amb || opts.vol <= 0.01) {
+    if (runAudio && !runAudio.paused) runAudio.pause();
+    return;
+  }
+  if (!runAudio && !runAudioFailed) {
+    try {
+      runAudio = new Audio("music/roguelike_active_run_music.mp3");
+      runAudio.loop = true;
+      runAudio.onerror = () => { runAudioFailed = true; };
+    } catch (e) { runAudioFailed = true; }
+  }
+  if (runAudio && !runAudioFailed) {
+    runAudio.volume = Math.min(1.0, opts.vol * 0.65);
+    if (isPlayingRun) {
+      if (runAudio.paused) runAudio.play().catch(() => {});
+    } else {
+      if (!runAudio.paused) runAudio.pause();
+    }
+  }
+}
+
 function updateThemeMusic(rawDt) {
-  if (typeof opts === "undefined" || !opts.amb || opts.vol <= 0.01) return;
+  if (typeof opts === "undefined" || !opts.amb || opts.vol <= 0.01) {
+    updateActiveRunMP3(false);
+    return;
+  }
   const mainScr = document.getElementById("scrMain");
   const lvlScr = document.getElementById("scrLevel");
   const pauseBar = document.getElementById("pauseBar");
   const onMainMenu = mainScr && mainScr.classList.contains("active");
   const onPauseMenu = lvlScr && lvlScr.classList.contains("active") && pauseBar && pauseBar.style.display !== "none";
+  const inActiveRun = (typeof runActive !== "undefined" && runActive && !runPaused);
+
+  // Stream external MP3 during active combat runs; pause MP3 on Main Menu & Pause Menu
+  updateActiveRunMP3(inActiveRun);
   if (!onMainMenu && !onPauseMenu) return;
 
   const cid = (typeof meta !== "undefined" && typeof meta.selChar === "number") ? meta.selChar : 0;
@@ -230,10 +400,15 @@ function updateThemeMusic(rawDt) {
     themeTimer = 0;
     const freq = notes[themeStep % notes.length];
     themeStep++;
-    sfx(freq, freq * 0.995, tempo * 0.78, wave, 0.072, 0.008);
+    sfxTone(freq, freq * 0.996, tempo * 0.82, wave, 0.075, 0.006);
     if (themeStep % 2 === 0) {
-      sfx(freq * 0.5, freq * 0.5, tempo * 0.88, "triangle", 0.048, 0.005);
+      sfxTone(freq * 0.5, freq * 0.498, tempo * 0.92, "triangle", 0.055, 0.004);
     }
   }
 }
+
+// Lock in the upgraded 16-note theme sequencer even if an older ui.js attempts to overwrite it
+window.addEventListener("load", () => {
+  window.updateThemeMusic = updateThemeMusic;
+});
 // EOF:js/chaos.js
