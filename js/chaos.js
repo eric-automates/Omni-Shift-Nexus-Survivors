@@ -385,8 +385,11 @@ function updateThemeMusic(rawDt) {
   const pauseBar = document.getElementById("pauseBar");
   const onMainMenu = mainScr && mainScr.classList.contains("active");
   const onPauseMenu = lvlScr && lvlScr.classList.contains("active") && pauseBar && pauseBar.style.display !== "none";
-  const inActiveRun = (typeof runActive !== "undefined" && runActive && !runPaused);
+  //Keeps music playing during level-up, but pauses it when the manual pause menu is open
+  const manualPauseOpen = pauseBar && pauseBar.style.display === "flex";
+  const inActiveRun = (typeof runActive !== "undefined" && runActive && !manualPauseOpen);
 
+  
   // Stream external MP3 during active combat runs; pause MP3 on Main Menu & Pause Menu
   updateActiveRunMP3(inActiveRun);
   if (!onMainMenu && !onPauseMenu) return;
