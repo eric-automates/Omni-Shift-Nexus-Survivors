@@ -125,3 +125,4 @@ const STAGES = STAGE_DATA.map((d, i) => ({
   hpMul: +(1 + i * 0.38).toFixed(2),
   dmDrop: i === 49 ? 50 : Math.max(1, Math.floor((i + 1) / 3) + 1)
 }));
+// EOF:js/data-factions.js
