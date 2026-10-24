@@ -1,11 +1,10 @@
 // FILE: js/combat.js
 // PART: 11 of 14
-// DETAIL: Run Init, Synced Tactical Visor Unlocks, On-Screen Boss Targeting (`isEnemyOnScreen`), All 56 Hero Signature Gear, Complete Utility Handlers (#00-#55), and Secondary Hardware.
+// DETAIL: v6.0 Physics Overhaul — Zero-Arc Physical Melee, Camera-Stable Arm Reach, Level-Scaling Directional-to-360 Force Push, Parabolic Boomerangs, and Bespoke Gun Ballistics.
 
 "use strict";
 
-/* === 1. ALL 56 HEROES' LV.5 PRIMARY TRANSITIONS, EQUIP CALLOUTS & SECONDARY HARDWARE ===
-   [Lv5PrimaryWeaponName, StartOfRunEquipCallout, SecondaryHardwareName, SecStyle, SecDmgMul, SecCD] */
+/* === 1. ALL 56 HEROES' LV.5 PRIMARY TRANSITIONS, EQUIP CALLOUTS & SECONDARY HARDWARE === */
 const HERO_SIG_GEAR = [
   ["Bespin Master Lightsaber", "SKYWALKER SABER IGNITED!", "Force Telekinetic Push", 6, 1.3, 7.5],
   ["Pure Beskar Spear & Darts", "BESKAR VISOR & WHISTLING BIRDS ARMED!", "Whistling Bird Micro-Salvo", 2, 1.5, 7.0],
@@ -65,7 +64,7 @@ const HERO_SIG_GEAR = [
   ["Quad Jedi Trophy Sabers & Blaster", "CAPE DROPPED — FOUR ARMS UNLOCKED!", "Quad-Claw Grapple Blaster", 4, 1.8, 6.0]
 ];
 
-/* === 3. TACTICAL VISOR SPECS === */
+/* === 2. TACTICAL VISOR SPECS & FORCE PUSH VISUAL STATE === */
 const VISOR_MODES = [
   [0, "Off", "#ffffff", 0.0, "Standard Vision"],
   [1, "Boba Green Rangefinder", "#00e676", 0.10, "Green targeting telemetry + threat lock"],
@@ -73,6 +72,63 @@ const VISOR_MODES = [
   [3, "Predator Thermal Vision", "#ff9100", 0.10, "Heat-map infrared sensor glow on all enemies"],
   [4, "Matrix Prescience Code", "#00ff88", 0.10, "Cascading green code rain predicting enemy vectors"]
 ];
+
+let forcePushVis = { timer: 0, maxT: 0.36, x: 0, y: 0, ang: 0, arc: 1.4, maxR: 135, col: "#00e5ff" };
+
+/* === 3. DIRECTIONAL-TO-360 FORCE KINETIC PUSH ENGINE ===
+   Low levels push forward in a hand-cone; scales with Force Push Level up to a 360° circle at Max Level! */
+function executeForceKineticPush(originX, originY, aimAng, pushLvl = 1, baseDmg = 28) {
+  const clampedLvl = Math.max(1, Math.min(10, pushLvl));
+  // Lv.1 = 75° forward cone -> Lv.5 = 165° wide wave -> Lv.10 = Full 360° Circle!
+  const halfArc = clampedLvl >= 10 ? Math.PI : ((0.65 + (clampedLvl - 1) * 0.24) * 0.5);
+  const maxRange = (125 + clampedLvl * 11) * (player ? player.area : 1.0);
+  const pushDist = (95 + clampedLvl * 12) * (player ? player.kb : 1.0);
+  const stunDur = 1.0 + clampedLvl * 0.08;
+
+  if (player) {
+    player.forceHandTimer = 0.36;
+    player.forceHandAng = aimAng;
+  }
+  forcePushVis.timer = 0.36;
+  forcePushVis.maxT = 0.36;
+  forcePushVis.x = originX;
+  forcePushVis.y = originY;
+  forcePushVis.ang = aimAng;
+  forcePushVis.arc = halfArc * 2;
+  forcePushVis.maxR = maxRange;
+  forcePushVis.col = (player && player.fac) ? player.fac.c1 : "#00e5ff";
+
+  sfx(190, 75, 0.22, "sine", 0.26);
+  playNoise(0.18, "bandpass", 620, 140, 1.4, 0.24);
+
+  for (let i = 0; i < MAX_E; i++) {
+    if (!eAct[i]) continue;
+    const dx = eX[i] - originX, dy = eY[i] - originY;
+    const d = Math.hypot(dx, dy);
+    if (d > maxRange || d < 0.001) continue;
+
+    const angToEnemy = Math.atan2(dy, dx);
+    let diff = angToEnemy - aimAng;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+
+    if (Math.abs(diff) <= halfArc) {
+      const falloff = 0.55 + 0.45 * (1 - d / maxRange);
+      const kb = pushDist * falloff * (eType[i] === 99 ? 0.38 : 1.0);
+      const nx = eX[i] + (dx / d) * kb;
+      const ny = eY[i] + (dy / d) * kb;
+      if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(nx, ny, false)) {
+        eX[i] = nx; eY[i] = ny;
+      }
+      eStun[i] = Math.max(eStun[i], stunDur);
+      eSlow[i] = Math.max(eSlow[i], stunDur + 1.2);
+      const concussDmg = baseDmg * (1 + clampedLvl * 0.14);
+      eHP[i] -= concussDmg;
+      spawnDmg(eX[i], eY[i], concussDmg, clampedLvl >= 10);
+      if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, false);
+    }
+  }
+}
 
 /* === 4. PLAYER RUN INITIALIZATION & PASSIVES === */
 function startRun() {
@@ -111,14 +167,16 @@ function startRun() {
     kb: 1.0, slow: 0, shred: 0, revives: 0, dodge: 0,
     hover: false, hazImmune: false, bossMul: 1.0,
     adaptTimer: 0, sandTimer: 0, sandCD: 6.0, vatsTimer: 0, vatsCD: 4.0, overclockTimer: 0, phaseTimer: 0,
-    cqcCD: 0, autoFlameCD: 0, sigGearCD: sig[5], equipAnimTimer: 1.8,
+    cqcCD: 0, autoFlameCD: 0, sigGearCD: sig[5], sigGearLvl: 1, equipAnimTimer: 1.8,
     sixShotsLeft: 6, sixBurstCD: 0, sixReloadCD: 0,
     fortAnchorX: 256, fortAnchorY: 256, fortTimer: 0, fortFastMul: 1.0,
     inVehicle: 0, vehicleHp: 0, vehBoostMul: 1.0, carryingBarricade: false,
     hasRepulsor: false, utilCdrMul: 1.0, orbVacuumRate: innateVac,
     limbs: [100, 100, 100, 100, 100, 100], guardZone: -1,
-    hasSaber: startsWithSaber, saberMastery: startsWithSaber ? (cid === 55 ? 45 : 8) : 0,
-    swordSwingTimer: 0, swordLungeTimer: 0,
+    hasSaber: startsWithSaber, saberMastery: startsWithSaber ? (cid === 55 ? 45 : 12) : 0,
+    swordSwingTimer: 0, swordLungeTimer: 0, armReach: 0,
+    whirlwindTimer: 0, forceHandTimer: 0, forceHandAng: 0,
+    flourishPhase: 0, flourishForm: 0, flourishTimer: 0, flourishSpeed: 3.4,
     armCap: armCap, handSlotOffset: 0, swapTimer: 0, swapPause: 0,
     unlockedVisors: startVisors,
     visorsUnlocked: startVisors,
@@ -127,7 +185,7 @@ function startRun() {
     relics: [], utils: getHeroUtils(cid),
     xp: 0, nextXp: 10, lvl: 1, kills: 0, dmRun: 0, bossSpawned: false,
     fac: FACTIONS[c[1]], hero: c, cid, stg, diff,
-    weapons: [{ id: cid, name: c[4], superName: c[5], style: c[6], lvl: 1, cd: 0, ang: 0, enabled: true, evolvedLv5: false }],
+    weapons: [{ id: cid, name: c[4], superName: c[5], style: c[6], lvl: 1, cd: 0, ang: 0, angVel: 0, enabled: true, evolvedLv5: false }],
     passives: []
   };
 
@@ -271,6 +329,7 @@ function allocEnemySlot(x, y, type, hpMul = 1.0, formType = 0, leaderIdx = -1) {
       eFireCD[i] = 1.6 + Math.random() * 1.5; eSeed[i] = Math.floor(Math.random() * 1000000);
       eWave[i] = waveNum; eMoveStyle[i] = (type >= 98 || formType > 0) ? 0 : (eSeed[i] % 4);
       clearEnemyLimbState(i, false);
+      if (typeof eScarHeat !== "undefined") eScarHeat[i] = 0;
       eFormType[i] = formType; eFormLeader[i] = leaderIdx;
       eType[i] = type; eRivalCid[i] = -1; eAct[i] = 1;
       return i;
@@ -312,7 +371,7 @@ function spawnEnemy(isBoss = false, isRival = false) {
   } else allocEnemySlot(sx, sy, Math.floor(Math.random() * 4), 1.0, 0, -1);
 }
 
-/* === 6. STRICT ON-SCREEN TARGET LOCK FIRING, FULL UTILITIES & SECONDARY HARDWARE === */
+/* === 6. ZERO-ARC PHYSICAL MELEE, PARABOLIC BOOMERANGS & UNIQUE RANGED BALLISTICS === */
 function fireWeapon(w) {
   if (w.lvl >= 5 && w.lvl < 10 && !w.evolvedLv5) {
     const sig = HERO_SIG_GEAR[w.id];
@@ -339,49 +398,73 @@ function fireWeapon(w) {
   }
   const eyeJitter = ((100 - player.limbs[0]) / 100) * 0.42;
   const aimAng = Math.atan2(ty - player.y, tx - player.x) + (Math.random() - 0.5) * eyeJitter;
-  player.aim = aimAng;
 
-  if (typeof isSwordWeapon === "function" && isSwordWeapon(w.id) && w.style === "orbit") {
-    if (best > 130 * player.area) { w.cd = 0.08; return; }
-    if (best > 68 && !isPointBlockedByObstacle(player.x + Math.cos(aimAng) * 14, player.y + Math.sin(aimAng) * 14, true)) {
-      player.x += Math.cos(aimAng) * 12; player.y += Math.sin(aimAng) * 12; player.swordLungeTimer = 0.16;
+  // 1. PHYSICAL LIGHTSABERS & SWORDS: Zero flying projectile arcs & Zero camera-jerking lunges!
+  if ((typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44].includes(w.id))) {
+    // Only trigger active strike sound & arm reach extension when an enemy is within ~1.5x blade reach
+    if (best <= 54 * player.area) {
+      player.swordSwingTimer = 0.34;
+      player.armReach = 5.5; // Smooth arm extension only — never moves camera!
+      if (typeof sfxWeapon === "function") sfxWeapon("orbit", w.id, true);
+    } else {
+      w.cd = 0.12;
     }
-    player.swordSwingTimer = 0.24;
-    if (typeof sfxWeapon === "function") sfxWeapon("orbit", w.id, true);
-    const slashSpd = 285 * player.projSpd;
-    for (let k = 0; k < Math.min(3, count); k++) {
-      const a = aimAng + (k - (Math.min(3, count) - 1) / 2) * 0.24;
-      spawnProj(player.x, player.y, Math.cos(a) * slashSpd, Math.sin(a) * slashSpd, baseDmg * 1.45, 0.28 * player.dur, 22 * player.area, 99, 7, sup, 0, w.id);
+    return;
+  }
+
+  // 2. PREDATOR SMART-DISCS (#29) & RETURNING BOOMERANG DRONES (#12, #16, #35, #44):
+  //    Flys out in a randomized parabolic/elliptical boomerang curve and returns to player's hand!
+  if (w.style === "orbit") {
+    if (typeof sfxWeapon === "function") sfxWeapon("orbit", w.id, false);
+    const discCnt = Math.min(4, count);
+    for (let k = 0; k < discCnt; k++) {
+      const launchAng = aimAng + (k - (discCnt - 1) / 2) * 0.35 + (Math.random() - 0.5) * 0.22;
+      const curveSign = ((k & 1) ? 1 : -1) * (0.42 + Math.random() * 0.25);
+      // Style 8 = Parabolic Returning Boomerang Disc (pVX = baseAngle, pVY = curveSign, pLife = flight progress)
+      spawnProj(player.x, player.y, launchAng, curveSign, baseDmg * 1.4, 1.35, 13 * player.area, 99, 8, sup, 0, w.id);
     }
     return;
   }
 
   if (typeof sfxWeapon === "function") sfxWeapon(w.style, w.id, false);
-  if (w.id === 52) {
-    const spd = 520 * player.projSpd, spread = (Math.random() - 0.5) * (0.06 + eyeJitter * 0.5);
-    spawnProj(player.x, player.y, Math.cos(aimAng + spread) * spd, Math.sin(aimAng + spread) * spd, baseDmg * 2.2, 0.75 * player.dur, 4, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, 52);
+
+  // 3. BESPOKE RANGED GUN BALLISTICS ACROSS ALL 56 HEROES
+  if (w.id === 52 || w.id === 13) {
+    // High-Velocity Revolver Slug: Instantaneous muzzle velocity + high crit punch
+    const spd = 540 * player.projSpd, spread = (Math.random() - 0.5) * (0.05 + eyeJitter * 0.4);
+    spawnProj(player.x, player.y, Math.cos(aimAng + spread) * spd, Math.sin(aimAng + spread) * spd, baseDmg * 2.2, 0.75 * player.dur, 4.5, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, w.id);
     return;
   }
-  if (w.style === "orbit") {
-    for (let k = 0; k < count; k++) {
-      const a = w.ang + (Math.PI * 2 * k) / count, rad = (58 + (sup ? 24 : 0)) * player.area;
-      spawnProj(player.x + Math.cos(a) * rad, player.y + Math.sin(a) * rad, a, rad, baseDmg, 0.45 * player.dur, 14 * player.area, 99, 1, sup, 0, w.id);
+
+  if (w.id === 54) {
+    // Boba Fett ESB EE-3 Carbine: Signature 3-round burst fire!
+    for (let b = 0; b < 3; b++) {
+      const a = aimAng + (b - 1) * 0.045;
+      const spd = (450 - b * 18) * player.projSpd;
+      spawnProj(player.x + Math.cos(a) * (10 + b * 6), player.y + Math.sin(a) * (10 + b * 6), Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.65, 0.72 * player.dur, 5, 2 + player.pierce, 4, sup, 0, 54);
     }
-  } else if (w.style === "missile") {
+    return;
+  }
+
+  if (w.style === "missile") {
     for (let k = 0; k < count; k++) {
-      const a = aimAng + (k - (count - 1) / 2) * 0.28, spd = 245 * player.projSpd;
+      const a = aimAng + (k - (count - 1) / 2) * 0.26, spd = 235 * player.projSpd;
       spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 1.6 * player.dur, 9 * player.area, player.pierce, 2, sup, 0, w.id);
     }
   } else if (w.style === "cone") {
-    const pellets = count + 2;
+    // Shotguns (#33, #44), Bowcaster (#05), Scatter Blasters (#02, #31) & Heavy M60/Shoota (#37, #53)
+    const isHeavyMG = [37, 53].includes(w.id);
+    const pellets = isHeavyMG ? (count + 1) : (count + 3);
+    const spreadStep = isHeavyMG ? 0.08 : 0.15;
     for (let k = 0; k < pellets; k++) {
-      const a = aimAng + (k - (pellets - 1) / 2) * 0.16, spd = 310 * player.projSpd;
-      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.9, 0.55 * player.dur, 7 * player.area, player.pierce + 1, 3, sup, 0, w.id);
+      const a = aimAng + (k - (pellets - 1) / 2) * spreadStep + (Math.random() - 0.5) * 0.04;
+      const spd = (isHeavyMG ? 410 : (295 + Math.random() * 45)) * player.projSpd;
+      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * (isHeavyMG ? 1.05 : 0.85), (isHeavyMG ? 0.68 : 0.48) * player.dur, 6.5 * player.area, player.pierce + 1, 3, sup, 0, w.id);
     }
   } else if (w.style === "beam") {
     for (let k = 0; k < count; k++) {
-      const a = aimAng + (k - (count - 1) / 2) * 0.12, spd = 460 * player.projSpd;
-      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 1.25, 0.75 * player.dur, 9 * player.area, 4 + player.pierce + (sup ? 6 : 0), 4, sup, 0, w.id);
+      const a = aimAng + (k - (count - 1) / 2) * 0.10, spd = 470 * player.projSpd;
+      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 1.25, 0.75 * player.dur, 8.5 * player.area, 4 + player.pierce + (sup ? 6 : 0), 4, sup, 0, w.id);
     }
   } else if (w.style === "chain") {
     for (let k = 0; k < count; k++) {
@@ -389,7 +472,8 @@ function fireWeapon(w) {
       spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 0.9 * player.dur, 10 * player.area, 2 + player.pierce + (sup ? 4 : 0), 5, sup, 0, w.id);
     }
   } else {
-    spawnProj(player.x, player.y, 0, 0, baseDmg * 1.25, 0.45 * player.dur, (75 + w.lvl * 5) * player.area * (sup ? 1.45 : 1), 99, 6, sup, 0, w.id);
+    // Nova / Telekinetic / Sonic Emitters (#04, #07, #18, #27, #38, #39, #43, #46): Directional-to-360 Kinetic Wave!
+    executeForceKineticPush(player.x, player.y, aimAng, w.lvl, baseDmg * 0.75);
   }
 }
 
@@ -400,12 +484,12 @@ function triggerUtility(uIdx) {
   if (u.type === "buildFort") {
     deployLastStandFort(player.x, player.y);
   } else if (u.type === "quadSpin") {
-    player.swordSwingTimer = 0.5;
-    if (typeof sfxWeapon === "function") sfxWeapon("orbit", 55, true);
-    for (let k = 0; k < 8; k++) {
-      const a = player.aim + (Math.PI * 2 * k) / 8;
-      spawnProj(player.x, player.y, Math.cos(a) * 320, Math.sin(a) * 320, 140 * player.might, 0.38, 22, 99, 7, 1, 0, 55);
-    }
+    // v6.0 Realistic 360° Physical Prequel Moulinet / Buzzsaw Spin (Zero fake projectile arcs!)
+    player.whirlwindTimer = 1.15;
+    player.swordSwingTimer = 1.15;
+    player.armReach = 6.0;
+    if (typeof sfxWeapon === "function") sfxWeapon("orbit", player.cid, true);
+    spawnSpeech(player.x, player.y, u.name.toUpperCase() + "!", "#00f0ff", 1.3);
   } else if (u.type === "grappleHook") {
     let best = -1, bestHP = -1;
     for (let i = 0; i < MAX_E; i++) {
@@ -419,13 +503,20 @@ function triggerUtility(uIdx) {
       sfx(620, 210, 0.16, "sawtooth");
     }
   } else if (u.type === "flameCone") {
-    flameVisTimer = 0.65; sfx(140, 75, 0.25, "sawtooth", 0.28);
+    flameVisTimer = 0.75; sfx(140, 75, 0.25, "sawtooth", 0.28);
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 135 * player.area) {
-        const fDmg = 160 * player.might;
-        eHP[i] -= fDmg;
-        spawnDmg(eX[i], eY[i], fDmg, true);
-        if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, false);
+      if (!eAct[i]) continue;
+      const dx = eX[i] - player.x, dy = eY[i] - player.y, d = Math.hypot(dx, dy);
+      if (d < 138 * player.area) {
+        let diff = Math.atan2(dy, dx) - player.aim;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        if (Math.abs(diff) < 0.75 || d < 42) {
+          const fDmg = 165 * player.might;
+          eHP[i] -= fDmg; eSlow[i] = 2.0;
+          spawnDmg(eX[i], eY[i], fDmg, true);
+          if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, false);
+        }
       }
     }
   } else if (u.type === "fanHammer" || u.type === "critBurst") {
@@ -435,20 +526,20 @@ function triggerUtility(uIdx) {
     }
     if (typeof sfxWeapon === "function") sfxWeapon("beam", player.cid, false);
   } else if (u.type === "executeDash") {
+    player.armReach = 6.5;
     for (let i = 0; i < MAX_E; i++) {
       if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 140) {
-        const flipA = Math.random() * Math.PI * 2;
-        eX[i] += Math.cos(flipA) * 42; eY[i] += Math.sin(flipA) * 42; eStun[i] = 2.5;
+        const pushA = Math.atan2(eY[i] - player.y, eX[i] - player.x);
+        eX[i] += Math.cos(pushA) * 42; eY[i] += Math.sin(pushA) * 42; eStun[i] = 2.5;
         const execDmg = eType[i] >= 98 ? Math.max(280 * player.might, eMax[i] * 0.38) : eHP[i] + 50;
         eHP[i] -= execDmg;
         spawnDmg(eX[i], eY[i], execDmg, true);
         if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, true);
       }
     }
-    spawnSpeech(player.x, player.y, "TAKEDOWN EXECUTED!", "#ffd166", 1.5);
+    spawnSpeech(player.x, player.y, u.name.toUpperCase() + "!", "#ffd166", 1.5);
     sfx(820, 120, 0.14, "sawtooth");
   } else if (u.type === "stareFreeze") {
-    // Hero #52 Squint Showdown: Freezes all on-screen enemies in their tracks for 3.5s
     for (let i = 0; i < MAX_E; i++) {
       if (eAct[i] && (isEnemyOnScreen(i) || Math.hypot(eX[i] - player.x, eY[i] - player.y) < 340)) {
         eStun[i] = Math.max(eStun[i], 3.5);
@@ -458,7 +549,6 @@ function triggerUtility(uIdx) {
     spawnSpeech(player.x, player.y, "HIGH NOON SHOWDOWN!", "#ffd166", 2.0);
     sfx(440, 880, 0.25, "triangle");
   } else if (u.type === "explosiveBow") {
-    // Hero #53 Explosive Arrow: High-yield thermite warhead arrow that detonates on impact
     for (let k = -1; k <= 1; k++) {
       const a = player.aim + k * 0.12;
       spawnProj(player.x, player.y, Math.cos(a) * 390, Math.sin(a) * 390, 210 * player.might, 1.4, 15 * player.area, 0, 2, 1, 0, 53);
@@ -466,13 +556,15 @@ function triggerUtility(uIdx) {
     spawnSpeech(player.x, player.y, "THERMITE EXPLOSIVE ARROW!", "#ff6d00", 1.6);
     sfx(320, 110, 0.18, "sawtooth");
   } else if (u.type === "cyborgRush") {
-    // Hero #55 Cyborg Overclock: Doubles attack rate and movement speed for 4.5s
     player.overclockTimer = 4.5;
     spawnSpeech(player.x, player.y, "FOUR-ARM CYBORG OVERCLOCK!", "#00e676", 2.0);
     sfx(280, 960, 0.24, "sawtooth");
   } else {
-    spawnProj(player.x, player.y, 0, 0, 150 * player.might, 0.45, 135 * player.area, 99, 6, 1, 0, player.cid);
-    sfx(320, 740, 0.16, "triangle");
+    // factionPulse (Force Repulse, Biotic Nova, Sonic Overdrive, Grav-Punt):
+    // Scales from forward directional push at low levels up to full 360° circle at Lv.10!
+    const pushLvl = Math.max(player.sigGearLvl || 1, player.weapons[0] ? player.weapons[0].lvl : 1);
+    executeForceKineticPush(player.x, player.y, player.aim, pushLvl, 38 * player.might);
+    spawnSpeech(player.x, player.y, u.name.toUpperCase() + "!", "#00e5ff", 1.3);
   }
   updateHUD();
 }
@@ -484,39 +576,29 @@ function updateHeroSpecials(simDt) {
   if (player.equipAnimTimer > 0) player.equipAnimTimer = Math.max(0, player.equipAnimTimer - simDt);
   if (player.adaptTimer > 0) player.adaptTimer = Math.max(0, player.adaptTimer - simDt);
   if (player.overclockTimer > 0) player.overclockTimer = Math.max(0, player.overclockTimer - simDt);
+  if (player.whirlwindTimer > 0) player.whirlwindTimer = Math.max(0, player.whirlwindTimer - simDt);
+  if (player.forceHandTimer > 0) player.forceHandTimer = Math.max(0, player.forceHandTimer - simDt);
+  if (player.armReach > 0) player.armReach = Math.max(0, player.armReach - simDt * 18);
+  if (forcePushVis.timer > 0) forcePushVis.timer = Math.max(0, forcePushVis.timer - simDt);
 
-  // Hero #42 Sandevistan Edgerunner: Bursts to 180% Speed & Rate every 6s
   if (player.cid === 42) {
-    if (player.sandTimer > 0) {
-      player.sandTimer = Math.max(0, player.sandTimer - simDt);
-    } else {
+    if (player.sandTimer > 0) player.sandTimer = Math.max(0, player.sandTimer - simDt);
+    else {
       player.sandCD = (player.sandCD || 6.0) - simDt;
-      if (player.sandCD <= 0) {
-        player.sandCD = 6.0;
-        player.sandTimer = 2.2;
-        spawnSpeech(player.x, player.y, "SANDEVISTAN OVERDRIVE!", "#00e676", 1.4);
-      }
+      if (player.sandCD <= 0) { player.sandCD = 6.0; player.sandTimer = 2.2; spawnSpeech(player.x, player.y, "SANDEVISTAN OVERDRIVE!", "#00e676", 1.4); }
     }
   }
 
-  // Hero #43 Vault-Tec Wanderer: Guaranteed Crit V.A.T.S. pulse every 4s
   if (player.cid === 43) {
-    if (player.vatsTimer > 0) {
-      player.vatsTimer = Math.max(0, player.vatsTimer - simDt);
-    } else {
+    if (player.vatsTimer > 0) player.vatsTimer = Math.max(0, player.vatsTimer - simDt);
+    else {
       player.vatsCD = (player.vatsCD || 4.0) - simDt;
-      if (player.vatsCD <= 0) {
-        player.vatsCD = 4.0;
-        player.vatsTimer = 1.25;
-      }
+      if (player.vatsCD <= 0) { player.vatsCD = 4.0; player.vatsTimer = 1.25; }
     }
   }
 
   if (player.swordSwingTimer > 0) player.swordSwingTimer = Math.max(0, player.swordSwingTimer - simDt);
-  if (player.swordLungeTimer > 0) {
-    player.swordLungeTimer = Math.max(0, player.swordLungeTimer - simDt);
-    if (player.swordLungeTimer <= 0.04) { player.x -= Math.cos(player.aim) * 35 * simDt; player.y -= Math.sin(player.aim) * 35 * simDt; }
-  }
+  if (player.swordLungeTimer > 0) player.swordLungeTimer = Math.max(0, player.swordLungeTimer - simDt);
 
   const limbHeal = (0.8 + player.regen * 0.9) * simDt;
   for (let z = 0; z < 6; z++) { if (player.limbs[z] < 100) player.limbs[z] = Math.min(100, player.limbs[z] + limbHeal); }
@@ -531,23 +613,29 @@ function updateHeroSpecials(simDt) {
     }
   }
 
+  // Autonomous Secondary Signature Hardware (Force Push for #00 scales with sigGearLvl!)
   const sig = HERO_SIG_GEAR[player.cid] || HERO_SIG_GEAR[0];
   player.sigGearCD -= simDt;
   if (player.sigGearCD <= 0) {
     let best = -1, maxH = 0;
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && isEnemyOnScreen(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 300 && eHP[i] > maxH) {
+      if (eAct[i] && isEnemyOnScreen(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 280 && eHP[i] > maxH) {
         maxH = eHP[i]; best = i;
       }
     }
     if (best >= 0) {
       player.sigGearCD = sig[5] * player.cdr;
       const ma = Math.atan2(eY[best] - player.y, eX[best] - player.x);
-      const st = sig[3], dmg = 135 * sig[4] * player.might;
-      if (st === 6) spawnProj(player.x, player.y, 0, 0, dmg, 0.42, 115 * player.area, 99, 6, 1, 0, player.cid);
-      else spawnProj(player.x, player.y - 10, Math.cos(ma) * 320, Math.sin(ma) * 320, dmg, 1.5, 12 * player.area, 3, st, 1, 0, player.cid);
-      spawnSpeech(player.x, player.y, sig[2].toUpperCase() + "!", "#ffd166", 1.15);
-      sfx(540, 220, 0.09, "sawtooth", 0.2);
+      const st = sig[3], sLvl = player.sigGearLvl || 1;
+      const dmg = 110 * sig[4] * (1 + (sLvl - 1) * 0.2) * player.might;
+      if (st === 6 || st === 7) {
+        // Directional-to-360 Force Push / Kinetic Wave!
+        executeForceKineticPush(player.x, player.y, ma, sLvl, 26 * sig[4] * player.might);
+      } else {
+        spawnProj(player.x, player.y - 10, Math.cos(ma) * 320, Math.sin(ma) * 320, dmg, 1.5, 12 * player.area, 3, st, 1, 0, player.cid);
+        sfx(540, 220, 0.09, "sawtooth", 0.2);
+      }
+      spawnSpeech(player.x, player.y, `${sig[2].toUpperCase()} (Lv.${sLvl})!`, "#ffd166", 1.15);
     }
   }
 
@@ -555,7 +643,7 @@ function updateHeroSpecials(simDt) {
     let nearCnt = 0;
     for (let i = 0; i < MAX_E; i++) { if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 115) nearCnt++; }
     if (nearCnt >= 4) {
-      player.autoFlameCD = 4.5; flameVisTimer = 0.55;
+      player.autoFlameCD = 4.5; flameVisTimer = 0.65;
       spawnSpeech(player.x, player.y, "WRIST FLAMETHROWER!", "#ff6d00", 1.4); sfx(150, 65, 0.22, "sawtooth", 0.25);
       for (let i = 0; i < MAX_E; i++) {
         if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 125 * player.area) {

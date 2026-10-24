@@ -1,6 +1,6 @@
 // FILE: js/render.js
 // PART: 13 of 14
-// DETAIL: Restored 56-Hero WPN_SVG_56 Icons, Sword/Saber Crescent Slash Waves (st===7), Full Chunk & Poly Renderer (Types 0-6, Forts, Mines, Vehicles), Front-Facing 56-Hero Sprites with Brotato Ball Hands, and Visor HUDs.
+// DETAIL: v6.0 Physics Overhaul — Prequel Wrist-Pivot Saber Flourishes & Motion Trails, Bisected Falling Torso Halves, Glowing-to-Dark Cauterized Slice Scars, Kneeling Impaled Enemies, Force Push Waves & Boomerang Discs.
 
 "use strict";
 
@@ -36,14 +36,13 @@ function makeSVG(type, c1 = "#00e5ff", c2 = "#ffd166", wpnId = -1) {
   return `${sOpen}${p}</svg>`;
 }
 
-/* === 2. BESPOKE 56-HERO KINEMATIC STANCE CLASSIFIER === */
 function getHeroKinematicStyle(cid) {
-  if ([51, 19, 41, 42].includes(cid)) return 0; // CQC Center-Axis Relock
-  if ([52, 6, 13, 22].includes(cid)) return 1;  // Gunslinger One-Hand Duelist
-  if ([15, 28, 31, 33, 34, 37, 40, 44, 53].includes(cid)) return 2; // Heavy Braced Gunner
-  if ([1, 16, 25, 47, 54].includes(cid)) return 3; // Jetpack Bank-Flyer
-  if ([0, 14, 18, 24, 32, 48, 50].includes(cid)) return 4; // Fencing Lunge Duelist
-  if ([3, 7, 10, 11, 12, 20, 21, 27, 38, 39, 46, 49].includes(cid)) return 5; // Telekinetic Conduit
+  if ([51, 19, 41, 42].includes(cid)) return 0;
+  if ([52, 6, 13, 22].includes(cid)) return 1;
+  if ([15, 28, 31, 33, 34, 37, 40, 44, 53].includes(cid)) return 2;
+  if ([1, 16, 25, 47, 54].includes(cid)) return 3;
+  if ([0, 14, 18, 24, 32, 48, 50].includes(cid)) return 4;
+  if ([3, 7, 10, 11, 12, 20, 21, 27, 38, 39, 46, 49].includes(cid)) return 5;
   return 6;
 }
 
@@ -57,60 +56,64 @@ function drawBallHand(tCtx, hx, hy, rad, fillCol, outlineCol = "#08101a") {
   tCtx.stroke();
 }
 
-/* === 3. PROTRUDING WEAPON SILHOUETTES (Grip at 0,0) === */
-function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift = 0) {
+/* === 2. PROTRUDING WEAPON SILHOUETTES + PREQUEL SABER MOTION BLUR TRAIL === */
+function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift = 0, angVel = 0) {
   const lenMul = isLv5 ? 1.24 : 1.0;
   if (style === "orbit") {
+    const bLen = 21 * lenMul;
+    // Prequel Motion Blur Fan Trail when flourishing
+    if (Math.abs(angVel) > 1.2) {
+      const trailSweep = Math.max(-0.65, Math.min(0.65, -angVel * 0.045));
+      tCtx.save();
+      tCtx.fillStyle = [18, 19, 24, 48, 50].includes(wpnId) ? "#cfd8dc" : bladeCol;
+      tCtx.globalAlpha = 0.28;
+      tCtx.beginPath();
+      tCtx.moveTo(3, 0);
+      tCtx.arc(0, 0, bLen, 0, trailSweep, trailSweep < 0);
+      tCtx.closePath();
+      tCtx.fill();
+      tCtx.restore();
+    }
+
     tCtx.fillStyle = "#b0bec5";
-    tCtx.fillRect(-2, -1.4, 5, 2.8);
+    tCtx.fillRect(-2.5, -1.4, 5.5, 2.8);
     if ([18, 19, 24, 48, 50].includes(wpnId)) {
       tCtx.fillStyle = "#cfd8dc";
       tCtx.beginPath();
-      tCtx.moveTo(3, -1.8);
-      tCtx.lineTo(19 * lenMul, 0);
-      tCtx.lineTo(3, 1.8);
+      tCtx.moveTo(3, -1.9);
+      tCtx.lineTo(bLen, 0);
+      tCtx.lineTo(3, 1.9);
       tCtx.closePath();
       tCtx.fill();
     } else {
       tCtx.strokeStyle = bladeCol;
-      tCtx.lineWidth = isSuper ? 3.8 : 2.8;
-      tCtx.beginPath(); tCtx.moveTo(3, 0); tCtx.lineTo(20 * lenMul, 0); tCtx.stroke();
+      tCtx.lineWidth = isSuper ? 4.0 : 3.0;
+      tCtx.lineCap = "round";
+      tCtx.beginPath(); tCtx.moveTo(3, 0); tCtx.lineTo(bLen, 0); tCtx.stroke();
       tCtx.strokeStyle = "#ffffff";
-      tCtx.lineWidth = 1.2;
-      tCtx.beginPath(); tCtx.moveTo(3, 0); tCtx.lineTo(19 * lenMul, 0); tCtx.stroke();
+      tCtx.lineWidth = 1.3;
+      tCtx.beginPath(); tCtx.moveTo(3, 0); tCtx.lineTo(bLen - 1, 0); tCtx.stroke();
     }
     return;
   }
 
   if (wpnId === 54) {
-    tCtx.fillStyle = "#6d4c41";
-    tCtx.fillRect(-5, -1.2, 5, 2.6);
-    tCtx.fillStyle = "#263238";
-    tCtx.fillRect(0, -1.6, 14 * lenMul, 3.0);
-    tCtx.fillStyle = "#37474f";
-    tCtx.fillRect(11 * lenMul, -2.3, 4.5, 4.4);
-    tCtx.fillStyle = "#90a4ae";
-    tCtx.fillRect(2 - rackShift * 2.5, -3.2, 6, 1.3);
+    tCtx.fillStyle = "#6d4c41"; tCtx.fillRect(-5, -1.2, 5, 2.6);
+    tCtx.fillStyle = "#263238"; tCtx.fillRect(0, -1.6, 14 * lenMul, 3.0);
+    tCtx.fillStyle = "#37474f"; tCtx.fillRect(11 * lenMul, -2.3, 4.5, 4.4);
+    tCtx.fillStyle = "#90a4ae"; tCtx.fillRect(2 - rackShift * 2.5, -3.2, 6, 1.3);
     return;
   }
-
   if (wpnId === 52 || wpnId === 13) {
-    tCtx.fillStyle = "#6d4c41";
-    tCtx.fillRect(-2.5, -1.2, 3.5, 2.8);
-    tCtx.fillStyle = wpnId === 13 ? "#ffd166" : "#cfd8dc";
-    tCtx.fillRect(1, -1.8, 3.5, 3.2);
-    tCtx.fillStyle = "#90a4ae";
-    tCtx.fillRect(4, -1.3, 9.5 * lenMul, 2.0);
+    tCtx.fillStyle = "#6d4c41"; tCtx.fillRect(-2.5, -1.2, 3.5, 2.8);
+    tCtx.fillStyle = wpnId === 13 ? "#ffd166" : "#cfd8dc"; tCtx.fillRect(1, -1.8, 3.5, 3.2);
+    tCtx.fillStyle = "#90a4ae"; tCtx.fillRect(4, -1.3, 9.5 * lenMul, 2.0);
     return;
   }
-
   if (wpnId === 51) {
-    tCtx.fillStyle = "#1c262b";
-    tCtx.fillRect(-1.5, -1.4, (isLv5 ? 15 : 10.5), 2.6);
-    tCtx.fillStyle = isLv5 ? "#546e7a" : "#90a4ae";
-    tCtx.fillRect(0.5 - rackShift * 3.5, -1.8, (isLv5 ? 9 : 7.5), 1.6);
-    tCtx.fillStyle = "#ffd166";
-    tCtx.fillRect((isLv5 ? 13 : 8.5), -1.5, 2.4, 2.6);
+    tCtx.fillStyle = "#1c262b"; tCtx.fillRect(-1.5, -1.4, (isLv5 ? 15 : 10.5), 2.6);
+    tCtx.fillStyle = isLv5 ? "#546e7a" : "#90a4ae"; tCtx.fillRect(0.5 - rackShift * 3.5, -1.8, (isLv5 ? 9 : 7.5), 1.6);
+    tCtx.fillStyle = "#ffd166"; tCtx.fillRect((isLv5 ? 13 : 8.5), -1.5, 2.4, 2.6);
     return;
   }
 
@@ -125,7 +128,7 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
   }
 }
 
-/* === 4. FRONT-FACING 56-HERO SPRITE WITH FACES, EYES, VISORS & BALL HANDS === */
+/* === 3. FRONT-FACING 56-HERO SPRITE WITH WRIST-PIVOTED PREQUEL FLOURISHES & FORCE HAND === */
 const HELMET_HEROES = new Set([1, 2, 4, 7, 9, 17, 19, 23, 26, 29, 30, 32, 33, 34, 35, 36, 47, 49, 50, 54, 55]);
 
 function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx, guardZone = -1) {
@@ -147,7 +150,6 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   tCtx.translate(x, y + hoverBob);
   if (bankAng !== 0) tCtx.rotate(bankAng);
 
-  // 1. Vehicle Chassis
   if (inVeh === 1) {
     tCtx.fillStyle = "#00acc1";
     tCtx.beginPath(); tCtx.ellipse(0, 6, 18, 9, 0, 0, Math.PI * 2); tCtx.fill();
@@ -158,7 +160,6 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     tCtx.strokeStyle = "#ffd166"; tCtx.lineWidth = 1.5; tCtx.strokeRect(-15, -10, 30, 24);
   }
 
-  // 2. Back Cape / Jetpack + Detaching Jetpack Rocket
   const hasJetpack = [1, 16, 25, 34, 47, 54].includes(cid);
   if (hasJetpack) {
     tCtx.fillStyle = cBack !== "none" ? cBack : "#37474f";
@@ -177,18 +178,14 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
       tCtx.fillRect(-1.8 + sway, -18.5, 3.6, 6.5);
       tCtx.fillStyle = cid === 54 ? "#d84315" : "#ff1744";
       tCtx.beginPath();
-      tCtx.moveTo(-2.4 + sway, -18.5);
-      tCtx.lineTo(0 + sway, -23.0);
-      tCtx.lineTo(2.4 + sway, -18.5);
-      tCtx.closePath();
-      tCtx.fill();
+      tCtx.moveTo(-2.4 + sway, -18.5); tCtx.lineTo(0 + sway, -23.0); tCtx.lineTo(2.4 + sway, -18.5);
+      tCtx.closePath(); tCtx.fill();
     }
   } else if (cBack && cBack !== "none") {
     tCtx.fillStyle = cBack;
     tCtx.fillRect(-6.5, -3.5, 13, 11.5);
   }
 
-  // 3. Holstered / Slung Unlocked Weapons
   if (isLivePlayer && player.weapons && player.weapons.length > 1) {
     const enabled = player.weapons.filter(w => w.enabled !== false);
     const armCap = player.armCap || 2;
@@ -200,21 +197,15 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     player.weapons.forEach(w => {
       if (activeSet.has(w)) return;
       tCtx.save();
-      if (hIdx % 2 === 0) {
-        tCtx.translate(-4, -3);
-        tCtx.rotate(-0.85 - hIdx * 0.18);
-      } else {
-        tCtx.translate(hIdx === 1 ? -6.5 : 6.5, 4);
-        tCtx.rotate(Math.PI * 0.48);
-      }
+      if (hIdx % 2 === 0) { tCtx.translate(-4, -3); tCtx.rotate(-0.85 - hIdx * 0.18); }
+      else { tCtx.translate(hIdx === 1 ? -6.5 : 6.5, 4); tCtx.rotate(Math.PI * 0.48); }
       tCtx.scale(0.72, 0.72);
-      drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, cBlade, 0);
+      drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, cBlade, 0, 0);
       tCtx.restore();
       hIdx++;
     });
   }
 
-  // 4. Legs + Front-Facing Torso with Chest Collar/Plate & Belt Buckle
   tCtx.fillStyle = cLegs;
   tCtx.fillRect(-4.8, 4 + stride * 0.5, 3.8, 6.5);
   tCtx.fillRect(1.0, 4 - stride * 0.5, 3.8, 6.5);
@@ -224,37 +215,27 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
 
   tCtx.fillStyle = cHead;
   tCtx.beginPath();
-  tCtx.moveTo(-3.2, -5.5);
-  tCtx.lineTo(3.2, -5.5);
-  tCtx.lineTo(0, -1.2);
-  tCtx.closePath();
-  tCtx.fill();
+  tCtx.moveTo(-3.2, -5.5); tCtx.lineTo(3.2, -5.5); tCtx.lineTo(0, -1.2);
+  tCtx.closePath(); tCtx.fill();
 
-  tCtx.fillStyle = "#1c262b";
-  tCtx.fillRect(-5.8, 2.6, 11.6, 2.2);
-  tCtx.fillStyle = "#ffd166";
-  tCtx.fillRect(-1.6, 2.6, 3.2, 2.2);
+  tCtx.fillStyle = "#1c262b"; tCtx.fillRect(-5.8, 2.6, 11.6, 2.2);
+  tCtx.fillStyle = "#ffd166"; tCtx.fillRect(-1.6, 2.6, 3.2, 2.2);
 
-  // 5. Front-Facing Head, Hair Crown, Eyes & Iconic Visors
   const isHelmeted = HELMET_HEROES.has(cid);
   const eyeLookX = Math.cos(aim) * 0.9;
   const eyeLookY = Math.sin(aim) * 0.45;
 
   if (isHelmeted) {
     tCtx.fillStyle = cHead;
-    tCtx.beginPath();
-    tCtx.arc(0, -9.5, 5.5, 0, Math.PI * 2);
-    tCtx.fill();
+    tCtx.beginPath(); tCtx.arc(0, -9.5, 5.5, 0, Math.PI * 2); tCtx.fill();
 
     if (cid === 54 || cid === 1) {
       tCtx.fillStyle = "#111";
       tCtx.fillRect(-3.8, -10.8, 7.6, 1.8);
       tCtx.fillRect(-1.0, -10.8, 2.0, 4.6);
       const visorOn = !isLivePlayer || player.activeVisor === 1;
-      tCtx.strokeStyle = "#b0bec5";
-      tCtx.lineWidth = 1.2;
-      tCtx.beginPath();
-      tCtx.moveTo(5.2, -10);
+      tCtx.strokeStyle = "#b0bec5"; tCtx.lineWidth = 1.2;
+      tCtx.beginPath(); tCtx.moveTo(5.2, -10);
       if (visorOn) {
         tCtx.lineTo(7.2, -12.5); tCtx.lineTo(2.5, -12.5); tCtx.stroke();
         tCtx.fillStyle = "#00e676"; tCtx.fillRect(1.2, -13.2, 2.2, 1.5);
@@ -271,33 +252,23 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
       tCtx.fillStyle = cid === 34 || cid === 2 ? "#ff1744" : "#ffd166";
       tCtx.fillRect(-3.2 + eyeLookX, -10.6, 2.2, 1.6);
       tCtx.fillRect(1.0 + eyeLookX, -10.6, 2.2, 1.6);
-      tCtx.fillStyle = "#263238";
-      tCtx.fillRect(-1.8, -7.8, 3.6, 2.0);
+      tCtx.fillStyle = "#263238"; tCtx.fillRect(-1.8, -7.8, 3.6, 2.0);
     } else {
-      tCtx.fillStyle = "#111";
-      tCtx.fillRect(-3.8, -10.8, 7.6, 2.2);
+      tCtx.fillStyle = "#111"; tCtx.fillRect(-3.8, -10.8, 7.6, 2.2);
       tCtx.fillStyle = cid === 4 ? "#00e5ff" : (cid === 36 ? "#00e676" : "#ff1744");
       tCtx.fillRect(-2.4 + eyeLookX, -10.4, 4.8, 1.5);
     }
   } else {
     const skinCol = cid === 5 ? "#795548" : (cid === 10 ? "#b0bec5" : (cid === 11 ? "#90a4ae" : (cid === 37 ? "#558b2f" : ([8, 9, 24].includes(cid) ? "#c68642" : "#f1c27d"))));
     tCtx.fillStyle = skinCol;
-    tCtx.beginPath();
-    tCtx.arc(0, -9.3, 5.2, 0, Math.PI * 2);
-    tCtx.fill();
+    tCtx.beginPath(); tCtx.arc(0, -9.3, 5.2, 0, Math.PI * 2); tCtx.fill();
 
     tCtx.fillStyle = cHead;
-    tCtx.beginPath();
-    tCtx.arc(0, -10.3, 5.4, Math.PI * 0.92, Math.PI * 2.08);
-    tCtx.fill();
+    tCtx.beginPath(); tCtx.arc(0, -10.3, 5.4, Math.PI * 0.92, Math.PI * 2.08); tCtx.fill();
     tCtx.fillRect(-5.3, -11.0, 1.6, 4.2);
     tCtx.fillRect(3.7, -11.0, 1.6, 4.2);
 
-    if (cid === 51 || cid === 24) {
-      tCtx.fillStyle = "#212121";
-      tCtx.fillRect(-3.6, -6.8, 7.2, 2.2);
-    }
-
+    if (cid === 51 || cid === 24) { tCtx.fillStyle = "#212121"; tCtx.fillRect(-3.6, -6.8, 7.2, 2.2); }
     if (cid === 39) {
       tCtx.fillStyle = "#0a0a0a";
       tCtx.fillRect(-3.8 + eyeLookX * 0.5, -10.6, 3.2, 1.8);
@@ -311,25 +282,15 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
       tCtx.fillStyle = eyeGlow;
       tCtx.fillRect(-2.7 + eyeLookX * 0.6, -10.2 + eyeLookY * 0.4, 1.3, 1.3);
       tCtx.fillRect(1.7 + eyeLookX * 0.6, -10.2 + eyeLookY * 0.4, 1.3, 1.3);
-      if (cid === 40) {
-        tCtx.fillStyle = "#ff1744";
-        tCtx.fillRect(1.2, -10.6, 2.2, 1.9);
-      }
+      if (cid === 40) { tCtx.fillStyle = "#ff1744"; tCtx.fillRect(1.2, -10.6, 2.2, 1.9); }
     }
-
-    if (cid === 52) {
-      tCtx.fillStyle = "#4e342e";
-      tCtx.fillRect(-7.5, -13.2, 15, 2.0);
-    } else if (cid === 53) {
-      tCtx.fillStyle = "#ff1744";
-      tCtx.fillRect(-5.4, -12.2, 10.8, 1.8);
-    }
+    if (cid === 52) { tCtx.fillStyle = "#4e342e"; tCtx.fillRect(-7.5, -13.2, 15, 2.0); }
+    else if (cid === 53) { tCtx.fillStyle = "#ff1744"; tCtx.fillRect(-5.4, -12.2, 10.8, 1.8); }
   }
 
-  // 6. BROTATO BALL HANDS, STABILIZED SABERS & JOHN WICK 3-STAGE SWAP/RACK
   const swapP = isLivePlayer ? (player.swapPause || 0) : 0;
   const recoil = isLivePlayer ? (player.recoilKick || 0) * 2.4 : 0;
-  const lungeOff = isLivePlayer && player.swordLungeTimer > 0 ? 5.5 : 0;
+  const armReach = isLivePlayer ? (player.armReach || 0) : 0;
 
   let reachBack = 0, rackShift = 0;
   if (swapP > 0.16) reachBack = ((swapP - 0.16) / 0.08) * 8.5;
@@ -348,15 +309,33 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
 
   const handCol = isHelmeted ? cHead : "#f1c27d";
 
+  // Outstretched Force Push / Telekinetic Pull Hand Animation
+  if (isLivePlayer && player.forceHandTimer > 0) {
+    tCtx.save();
+    tCtx.rotate(player.forceHandAng || aim);
+    drawBallHand(tCtx, 11.5, -3.5, 2.7, handCol, "#00e5ff");
+    tCtx.strokeStyle = "rgba(0, 229, 255, 0.75)";
+    tCtx.lineWidth = 1.3;
+    tCtx.beginPath(); tCtx.arc(13.5, -3.5, 4.5 + Math.sin(runTime * 35) * 1.5, -0.9, 0.9); tCtx.stroke();
+    tCtx.restore();
+  }
+
   if (guardZone >= 0) {
     drawBallHand(tCtx, 5.5, -7.5, 2.8, handCol);
     drawBallHand(tCtx, -5.5, -5.5, 2.8, handCol);
   } else {
     activeWpns.forEach((w, slotIdx) => {
+      const isMeleeBlade = (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44].includes(w.id));
+      // If primary blade is currently thrown & impaled in an enemy, show outstretched empty Force hand!
+      if (isLivePlayer && slotIdx === 0 && typeof thrownBlade !== "undefined" && thrownBlade.active && isMeleeBlade) {
+        return;
+      }
+
       const isTelekineticSlot = (slotIdx >= 2 && kStyle === 5) || (kStyle === 5 && slotIdx >= 1 && w.style !== "chain");
-      const wAng = (isLivePlayer && typeof w.ang === "number")
-        ? w.ang
+      const armAng = (isLivePlayer && typeof w.armAng === "number")
+        ? w.armAng
         : (aim + (slotIdx === 0 ? 0 : (slotIdx === 1 ? 0.18 : (slotIdx === 2 ? -0.35 : 0.42))));
+      const wristSpin = (isLivePlayer && typeof w.wristSpin === "number") ? w.wristSpin : 0;
 
       if (isTelekineticSlot) {
         const floatAng = (typeof runTime !== "undefined" ? runTime * 2.6 : 0) + slotIdx * 2.1;
@@ -366,24 +345,28 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
         tCtx.strokeStyle = "rgba(0, 229, 255, 0.55)";
         tCtx.lineWidth = 1.0;
         tCtx.beginPath(); tCtx.arc(0, 0, 6.5, 0, Math.PI * 2); tCtx.stroke();
-        tCtx.rotate(wAng);
-        drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, cBlade, 0);
+        tCtx.rotate(armAng + wristSpin);
+        drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, cBlade, 0, w.angVel || 0);
         tCtx.restore();
         return;
       }
 
       const sideSign = (slotIdx % 2 === 0) ? 1 : -1;
       const upperArmY = slotIdx >= 2 ? -6.5 : -1.5;
-      const reachDist = (kStyle === 0 ? 7.2 : (kStyle === 1 ? 9.2 : 8.0)) + lungeOff - recoil - reachBack;
+      const reachDist = (kStyle === 0 ? 7.2 : (kStyle === 1 ? 9.2 : 8.5)) + armReach - recoil - reachBack;
 
       tCtx.save();
-      tCtx.rotate(wAng);
+      tCtx.rotate(armAng);
       const hx = reachDist;
-      const hy = sideSign * (activeWpns.length === 1 && kStyle <= 2 ? 1.5 : 5.2) + (slotIdx >= 2 ? upperArmY * 0.5 : 0);
+      const hy = sideSign * (activeWpns.length === 1 && kStyle <= 2 ? 1.5 : 4.5) + (slotIdx >= 2 ? upperArmY * 0.5 : 0);
 
       tCtx.save();
       tCtx.translate(hx, hy);
-      drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, cBlade, rackShift);
+      // Pivot the hilt inside the ball hand by wristSpin for authentic Prequel flourishes!
+      tCtx.save();
+      tCtx.rotate(wristSpin);
+      drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, cBlade, rackShift, w.angVel || 0);
+      tCtx.restore();
       drawBallHand(tCtx, 0, 0, 2.5, handCol);
 
       if (activeWpns.length === 1 && (kStyle === 0 || kStyle === 2 || kStyle === 3 || rackShift > 0.05)) {
@@ -404,7 +387,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   tCtx.restore();
 }
 
-/* === 5. FULL WORLD CHUNK RENDERER (Synced with world.js Types 0–6, Forts & Mines) === */
+/* === 4. FULL WORLD CHUNK RENDERER === */
 function drawPolyPath(tCtx, poly, fallbackR) {
   tCtx.beginPath();
   if (poly && poly.length > 2) {
@@ -440,12 +423,8 @@ function renderBiomeAndWorld() {
   ctx.lineWidth = 1;
   ctx.strokeStyle = "rgba(128, 222, 234, 0.08)";
   ctx.beginPath();
-  for (let gx = gx0; gx < left + viewW; gx += gStep) {
-    ctx.moveTo(gx, top); ctx.lineTo(gx, top + viewH);
-  }
-  for (let gy = gy0; gy < top + viewH; gy += gStep) {
-    ctx.moveTo(left, gy); ctx.lineTo(left + viewW, gy);
-  }
+  for (let gx = gx0; gx < left + viewW; gx += gStep) { ctx.moveTo(gx, top); ctx.lineTo(gx, top + viewH); }
+  for (let gy = gy0; gy < top + viewH; gy += gStep) { ctx.moveTo(left, gy); ctx.lineTo(left + viewW, gy); }
   ctx.stroke();
 
   const cSize = typeof CHUNK_SIZE !== "undefined" ? CHUNK_SIZE : 256;
@@ -474,70 +453,37 @@ function renderBiomeAndWorld() {
 
         if (o.type === 0) {
           ctx.save(); ctx.translate(4, 5);
-          ctx.fillStyle = "rgba(0,0,0,0.45)";
-          drawPolyPath(ctx, o.poly, r); ctx.fill();
+          ctx.fillStyle = "rgba(0,0,0,0.45)"; drawPolyPath(ctx, o.poly, r); ctx.fill();
           ctx.restore();
-
-          ctx.fillStyle = "#16222f";
-          ctx.strokeStyle = gridCol;
-          ctx.lineWidth = 1.8;
-          drawPolyPath(ctx, o.poly, r);
-          ctx.fill(); ctx.stroke();
-
+          ctx.fillStyle = "#16222f"; ctx.strokeStyle = gridCol; ctx.lineWidth = 1.8;
+          drawPolyPath(ctx, o.poly, r); ctx.fill(); ctx.stroke();
           ctx.save(); ctx.scale(0.62, 0.62);
-          ctx.fillStyle = "#223548";
-          drawPolyPath(ctx, o.poly, r); ctx.fill();
+          ctx.fillStyle = "#223548"; drawPolyPath(ctx, o.poly, r); ctx.fill();
           ctx.restore();
-          ctx.fillStyle = accCol;
-          ctx.fillRect(-r * 0.35, -2, r * 0.7, 3);
+          ctx.fillStyle = accCol; ctx.fillRect(-r * 0.35, -2, r * 0.7, 3);
         } else if (o.type === 1) {
-          ctx.fillStyle = "#2b3945";
-          ctx.strokeStyle = accCol;
-          ctx.lineWidth = 1.4;
-          drawPolyPath(ctx, o.poly, r);
-          ctx.fill(); ctx.stroke();
-          ctx.strokeStyle = "rgba(255,255,255,0.18)";
-          ctx.strokeRect(-r * 0.45, -r * 0.45, r * 0.9, r * 0.9);
+          ctx.fillStyle = "#2b3945"; ctx.strokeStyle = accCol; ctx.lineWidth = 1.4;
+          drawPolyPath(ctx, o.poly, r); ctx.fill(); ctx.stroke();
+          ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.strokeRect(-r * 0.45, -r * 0.45, r * 0.9, r * 0.9);
         } else if (o.type === 2) {
-          ctx.fillStyle = gridCol;
-          ctx.globalAlpha = 0.78;
-          drawPolyPath(ctx, o.poly, r);
-          ctx.fill();
-          ctx.globalAlpha = 1.0;
-          ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 1.0;
-          ctx.stroke();
+          ctx.fillStyle = gridCol; ctx.globalAlpha = 0.78; drawPolyPath(ctx, o.poly, r); ctx.fill();
+          ctx.globalAlpha = 1.0; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.0; ctx.stroke();
         } else if (o.type === 3) {
           const pulse = 0.22 + Math.sin(runTime * 5 + o.seed) * 0.06;
-          ctx.fillStyle = `rgba(255, 82, 82, ${pulse})`;
-          drawPolyPath(ctx, o.poly, r);
-          ctx.fill();
-          ctx.strokeStyle = "rgba(255, 145, 0, 0.65)";
-          ctx.lineWidth = 1.4;
-          ctx.stroke();
+          ctx.fillStyle = `rgba(255, 82, 82, ${pulse})`; drawPolyPath(ctx, o.poly, r); ctx.fill();
+          ctx.strokeStyle = "rgba(255, 145, 0, 0.65)"; ctx.lineWidth = 1.4; ctx.stroke();
         } else if (o.type === 4) {
-          ctx.fillStyle = "#1e3246";
-          ctx.strokeStyle = "#ffd166";
-          ctx.lineWidth = 1.8;
-          ctx.fillRect(-11, -9, 22, 18);
-          ctx.strokeRect(-11, -9, 22, 18);
-          ctx.fillStyle = "#00e676";
-          ctx.fillRect(-6, -2, 12, 4);
+          ctx.fillStyle = "#1e3246"; ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 1.8;
+          ctx.fillRect(-11, -9, 22, 18); ctx.strokeRect(-11, -9, 22, 18);
+          ctx.fillStyle = "#00e676"; ctx.fillRect(-6, -2, 12, 4);
         } else if (o.type === 5) {
-          ctx.fillStyle = "#00acc1";
-          ctx.strokeStyle = "#00e5ff";
-          ctx.lineWidth = 1.6;
+          ctx.fillStyle = "#00acc1"; ctx.strokeStyle = "#00e5ff"; ctx.lineWidth = 1.6;
           ctx.beginPath(); ctx.ellipse(0, 0, 18, 10, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-          ctx.fillStyle = "#102027";
-          ctx.fillRect(-6, -5, 10, 10);
+          ctx.fillStyle = "#102027"; ctx.fillRect(-6, -5, 10, 10);
         } else if (o.type === 6) {
-          ctx.fillStyle = "#37474f";
-          ctx.strokeStyle = "#ffd166";
-          ctx.lineWidth = 1.8;
-          ctx.fillRect(-14, -12, 28, 24);
-          ctx.strokeRect(-14, -12, 28, 24);
-          ctx.fillStyle = "#ff1744";
-          ctx.fillRect(-5, -4, 10, 4);
+          ctx.fillStyle = "#37474f"; ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 1.8;
+          ctx.fillRect(-14, -12, 28, 24); ctx.strokeRect(-14, -12, 28, 24);
+          ctx.fillStyle = "#ff1744"; ctx.fillRect(-5, -4, 10, 4);
         }
         ctx.restore();
       }
@@ -548,13 +494,10 @@ function renderBiomeAndWorld() {
     for (let i = 0; i < movedBarricades.length; i++) {
       const b = movedBarricades[i];
       if (b.used) continue;
-      ctx.save();
-      ctx.translate(b.x, b.y);
+      ctx.save(); ctx.translate(b.x, b.y);
       ctx.fillStyle = b.type === 6 ? "#4a148c" : "#2b3945";
-      ctx.strokeStyle = b.type === 6 ? "#ffd166" : accCol;
-      ctx.lineWidth = 2.0;
-      ctx.fillRect(-12, -10, 24, 20);
-      ctx.strokeRect(-12, -10, 24, 20);
+      ctx.strokeStyle = b.type === 6 ? "#ffd166" : accCol; ctx.lineWidth = 2.0;
+      ctx.fillRect(-12, -10, 24, 20); ctx.strokeRect(-12, -10, 24, 20);
       ctx.restore();
     }
   }
@@ -562,15 +505,12 @@ function renderBiomeAndWorld() {
   if (typeof activeForts !== "undefined") {
     for (let i = 0; i < activeForts.length; i++) {
       const ft = activeForts[i];
-      ctx.save();
-      ctx.translate(ft.x, ft.y);
-      ctx.strokeStyle = "#00e676";
-      ctx.lineWidth = 3.0;
+      ctx.save(); ctx.translate(ft.x, ft.y);
+      ctx.strokeStyle = "#00e676"; ctx.lineWidth = 3.0;
       ctx.strokeRect(-ft.rad * 0.7, -ft.rad * 0.7, ft.rad * 1.4, ft.rad * 1.4);
       ctx.fillStyle = "rgba(0, 230, 118, 0.12)";
       ctx.fillRect(-ft.rad * 0.7, -ft.rad * 0.7, ft.rad * 1.4, ft.rad * 1.4);
-      ctx.fillStyle = "#ffd166";
-      ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#ffd166"; ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
   }
@@ -587,20 +527,35 @@ function renderBiomeAndWorld() {
     if (tgt && tgt.kind !== "exitVeh" && typeof tgt.x === "number") {
       const pulse = 20 + Math.sin(runTime * 7) * 3;
       ctx.save();
-      ctx.strokeStyle = "#ffd166";
-      ctx.lineWidth = 2.0;
+      ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 2.0;
       ctx.beginPath(); ctx.arc(tgt.x, tgt.y, pulse, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = "#ffd166";
-      ctx.font = "bold 8.5px monospace";
-      ctx.textAlign = "center";
+      ctx.fillStyle = "#ffd166"; ctx.font = "bold 8.5px monospace"; ctx.textAlign = "center";
       ctx.fillText(tgt.label || "[INTERACT]", tgt.x, tgt.y - pulse - 5);
       ctx.restore();
     }
   }
 }
 
-/* === 6. MASTER SCENE RENDERER === */
+/* === 5. MASTER SCENE RENDERER (BISECTED HALVES, SMOLDERING SCARS, IMPALED KNEEL & FORCE PUSH) === */
 const ENEMY_NAMES = ["SECTOR HENCHMAN", "CYBER-WOLF", "ARACHNID DRONE", "HEAVY BRUTE"];
+
+function drawSmolderingSliceLine(tCtx, len, heat, glowCol) {
+  // 1. Dark Charring / Smoldering Cut Seam (Always visible)
+  tCtx.strokeStyle = "#08080a";
+  tCtx.lineWidth = 3.2;
+  tCtx.lineCap = "round";
+  tCtx.beginPath(); tCtx.moveTo(-len, 0); tCtx.lineTo(len, 0); tCtx.stroke();
+
+  // 2. Glowing Hot Plasma / Ember Core that fades to dark char as heat -> 0
+  if (heat > 0.04) {
+    tCtx.save();
+    tCtx.globalAlpha = Math.min(1, heat * 1.15);
+    tCtx.strokeStyle = heat > 0.55 ? "#fff59d" : (glowCol || "#ff6d00");
+    tCtx.lineWidth = 1.8 * heat + 0.6;
+    tCtx.beginPath(); tCtx.moveTo(-len * 0.92, 0); tCtx.lineTo(len * 0.92, 0); tCtx.stroke();
+    tCtx.restore();
+  }
+}
 
 function renderScene() {
   ctx.fillStyle = "#060b14";
@@ -612,24 +567,19 @@ function renderScene() {
   ctx.scale(opts.zoom, opts.zoom);
   ctx.translate(-player.x, -player.y);
 
-  // 0. Render Biome Floor, Chunks, Spires, Crates, Hazards, Pods, Vehicles & Forts
   renderBiomeAndWorld();
 
   // 1. Blood Puddles & Drips
   for (let i = 0; i < MAX_DRIP; i++) {
     if (!drAct[i]) continue;
     ctx.fillStyle = drZ[i] > 0.5 ? "#ff1744" : "rgba(155, 12, 28, 0.72)";
-    ctx.beginPath();
-    ctx.arc(drX[i], drY[i] - drZ[i], drRad[i], 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(drX[i], drY[i] - drZ[i], drRad[i], 0, Math.PI * 2); ctx.fill();
   }
 
-  // 2. Severed Limbs & Persistent Corpses
+  // 2. Severed Limbs, Persistent Corpses & v6.0 Bisected Falling Torso Halves!
   for (let i = 0; i < MAX_LIMB; i++) {
     if (!lmbAct[i]) continue;
-    ctx.save();
-    ctx.translate(lmbX[i], lmbY[i]);
-    ctx.rotate(lmbRot[i]);
+    ctx.save(); ctx.translate(lmbX[i], lmbY[i]); ctx.rotate(lmbRot[i]);
     ctx.fillStyle = lmbCol[i];
     if (lmbKind[i] === 2) { ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill(); }
     else ctx.fillRect(-4, -1.8, 8, 3.6);
@@ -640,17 +590,38 @@ function renderScene() {
     ctx.fillStyle = "rgba(45, 52, 64, 0.68)";
     ctx.fillRect(corpX[i] - 7, corpY[i] - 4, 14, 8);
   }
+  if (typeof slAct !== "undefined") {
+    for (let i = 0; i < MAX_SLICE; i++) {
+      if (!slAct[i]) continue;
+      const r = slRad[i] || 11;
+      ctx.save();
+      ctx.translate(slX[i], slY[i] - slZ[i]);
+      ctx.rotate(slCutAng[i] + slRot[i]);
+      ctx.fillStyle = slBodyCol[i];
+      if (slHalf[i] === 0) {
+        // Upper bisected torso + head half
+        ctx.fillRect(-r * 0.65, -r * 0.85, r * 1.3, r * 0.85);
+        ctx.beginPath(); ctx.arc(0, -r * 0.95, r * 0.42, 0, Math.PI * 2); ctx.fill();
+      } else {
+        // Lower bisected waist + legs half
+        ctx.fillRect(-r * 0.6, 0, r * 1.2, r * 0.65);
+        ctx.fillRect(-4, r * 0.5, 3, 5);
+        ctx.fillRect(1, r * 0.5, 3, 5);
+      }
+      // Glowing-to-dark cauterized slice seam right along the cut plane (y = 0)
+      drawSmolderingSliceLine(ctx, r * 0.72, slHeat[i], slGlowCol[i]);
+      ctx.restore();
+    }
+  }
 
   // 3. XP Orbs
   for (let i = 0; i < MAX_O; i++) {
     if (!oAct[i]) continue;
     ctx.fillStyle = oHome[i] ? "#00ff88" : "#00e5ff";
-    ctx.beginPath();
-    ctx.arc(oX[i], oY[i], oVal[i] > 15 ? 4.8 : 3.2, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(oX[i], oY[i], oVal[i] > 15 ? 4.8 : 3.2, 0, Math.PI * 2); ctx.fill();
   }
 
-  // 4. Enemies (with Front-Facing Eyes/Visors) + Predator Thermal Heat-Map
+  // 4. Enemies (with Kneeling Impaled State + Cauterized Angular Slice Scars)
   const visorMode = player.activeVisor || 0;
   let bestTarget = -1, bestTargetScore = -1;
 
@@ -659,12 +630,14 @@ function renderScene() {
     const score = eHP[i] * (eType[i] >= 98 ? 10 : 1);
     if (score > bestTargetScore) { bestTargetScore = score; bestTarget = i; }
 
-    const ex = eX[i], ey = eY[i], et = eType[i];
+    const isKneeling = typeof eKneel !== "undefined" && eKneel[i] > 0;
+    const ex = eX[i], ey = eY[i] + (isKneeling ? 5 : 0), et = eType[i];
+    const baseR = et === 99 ? 22 : (et === 3 ? 15 : 11);
+
     if (et === 98 && eRivalCid[i] >= 0) {
       const rFac = FACTIONS[CHAR_RAW[eRivalCid[i]][1]] || player.fac;
       drawHeroSprite(ex, ey, rFac, eRivalCid[i], runTime * 4, Math.atan2(player.y - ey, player.x - ex), 0, ctx, -1);
     } else {
-      const baseR = et === 99 ? 22 : (et === 3 ? 15 : 11);
       if (visorMode === 3) {
         ctx.fillStyle = "rgba(48, 79, 254, 0.45)";
         ctx.beginPath(); ctx.arc(ex, ey, baseR + 4, 0, Math.PI * 2); ctx.fill();
@@ -674,9 +647,15 @@ function renderScene() {
         ctx.beginPath(); ctx.arc(ex, ey - baseR * 0.55, baseR * 0.45, 0, Math.PI * 2); ctx.fill();
       } else {
         ctx.fillStyle = et === 99 ? "#ff1744" : (eFormType[i] === 1 ? "#ffd166" : player.fac.c2);
-        const crawlOff = eLegsLost[i] >= 2 ? 4 : 0;
-        if (eLegsLost[i] < 1) ctx.fillRect(ex - 4, ey + 4, 3, 6);
-        if (eLegsLost[i] < 2) ctx.fillRect(ex + 1, ey + 4, 3, 6);
+        const crawlOff = (eLegsLost[i] >= 2 || isKneeling) ? 4 : 0;
+        if (!isKneeling) {
+          if (eLegsLost[i] < 1) ctx.fillRect(ex - 4, ey + 4, 3, 6);
+          if (eLegsLost[i] < 2) ctx.fillRect(ex + 1, ey + 4, 3, 6);
+        } else {
+          // Bent knees on the ground when impaled by thrown lightsaber!
+          ctx.fillRect(ex - 6, ey + 5, 5, 3);
+          ctx.fillRect(ex + 1, ey + 5, 5, 3);
+        }
         ctx.fillRect(ex - baseR * 0.6, ey - baseR * 0.5 + crawlOff, baseR * 1.2, baseR);
         ctx.beginPath(); ctx.arc(ex, ey - baseR * 0.75 + crawlOff, baseR * 0.45, 0, Math.PI * 2); ctx.fill();
 
@@ -696,6 +675,15 @@ function renderScene() {
         ctx.strokeStyle = "#00e5ff"; ctx.lineWidth = 1.6;
         ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(ex, ey); ctx.stroke();
       }
+    }
+
+    // Live Angular Cauterized Slice Scar on Enemy Body (Glows hot -> cools to dark smoldering line)
+    if (typeof eScarHeat !== "undefined" && eScarHeat[i] > 0.05) {
+      ctx.save();
+      ctx.translate(ex, ey + (eScarOffY[i] || 0));
+      ctx.rotate(eScarAng[i]);
+      drawSmolderingSliceLine(ctx, baseR * 0.68, eScarHeat[i], player.fac ? player.fac.c1 : "#00f0ff");
+      ctx.restore();
     }
 
     if (eHP[i] < eMax[i] || et >= 98) {
@@ -724,18 +712,14 @@ function renderScene() {
     } else if (visorMode === 2) {
       ctx.strokeStyle = "#ff1744"; ctx.lineWidth = 1.8;
       ctx.strokeRect(bx - pulse, by - pulse, pulse * 2, pulse * 2);
-      ctx.fillStyle = "rgba(255, 23, 68, 0.88)";
-      ctx.font = "bold 7.5px monospace";
+      ctx.fillStyle = "rgba(255, 23, 68, 0.88)"; ctx.font = "bold 7.5px monospace";
       ctx.fillText(`TARGET: ${tName}`, bx - 44, by - pulse - 13);
       ctx.fillText(`HEAD LIFE: ${headPct}% | WEAKNESS: HEAD`, bx - 44, by - pulse - 4);
     } else if (visorMode === 3) {
       ctx.strokeStyle = "#ff1744"; ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.moveTo(bx, by - pulse);
-      ctx.lineTo(bx - pulse, by + pulse * 0.8);
-      ctx.lineTo(bx + pulse, by + pulse * 0.8);
-      ctx.closePath();
-      ctx.stroke();
+      ctx.moveTo(bx, by - pulse); ctx.lineTo(bx - pulse, by + pulse * 0.8); ctx.lineTo(bx + pulse, by + pulse * 0.8);
+      ctx.closePath(); ctx.stroke();
       ctx.fillStyle = "#ff1744";
       [[0, -6], [-5, 4], [5, 4]].forEach(([ox, oy]) => {
         ctx.beginPath(); ctx.arc(bx + ox, by - 6 + oy, 1.8, 0, Math.PI * 2); ctx.fill();
@@ -750,7 +734,25 @@ function renderScene() {
     ctx.restore();
   }
 
-  // 6. WRIST-TRACKED FLAMETHROWER CONE
+  // 6. DIRECTIONAL-TO-360 FORCE KINETIC PUSH SHOCKWAVE CONE / RING!
+  if (typeof forcePushVis !== "undefined" && forcePushVis.timer > 0) {
+    const prog = 1 - (forcePushVis.timer / Math.max(0.01, forcePushVis.maxT));
+    const curR = 14 + (forcePushVis.maxR - 14) * prog;
+    const halfA = forcePushVis.arc * 0.5;
+    ctx.save();
+    ctx.strokeStyle = forcePushVis.col || "#00e5ff";
+    ctx.globalAlpha = Math.max(0, 1 - prog * 0.85);
+    for (let ring = 0; ring < 3; ring++) {
+      const rr = Math.max(6, curR - ring * 14);
+      ctx.lineWidth = 3.2 - ring * 0.8;
+      ctx.beginPath();
+      ctx.arc(forcePushVis.x, forcePushVis.y, rr, forcePushVis.ang - halfA, forcePushVis.ang + halfA);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // 7. WRIST-TRACKED FLAMETHROWER CONE
   if (flameVisTimer > 0) {
     const wristX = player.x + Math.cos(player.aim) * 10;
     const wristY = player.y + Math.sin(player.aim) * 10;
@@ -768,42 +770,45 @@ function renderScene() {
     ctx.restore();
   }
 
-  // 7. Draw Player Sprite
+  // 8. Draw Player Sprite
   drawHeroSprite(player.x, player.y, player.fac, player.cid, player.walk, player.aim, player.inVehicle, ctx, player.guardZone);
 
-  // 8. Projectiles: ROTJ Force Lightning, Sword/Saber Crescent Slash Waves (st===7), Finned Rockets & Bolts
+  // 9. Draw 4-Stage Thrown & Impaled Lightsaber / Blade (Flight -> Impaled Wiggle -> Force-Pull Recall)
+  if (typeof thrownBlade !== "undefined" && thrownBlade.active) {
+    ctx.save();
+    // Telekinetic Force tether line when pulling the impaled blade back!
+    if (thrownBlade.stage >= 2) {
+      ctx.strokeStyle = "rgba(0, 229, 255, 0.45)";
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(player.x, player.y - 4); ctx.lineTo(thrownBlade.x, thrownBlade.y); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.translate(thrownBlade.x, thrownBlade.y);
+    const wiggleAng = thrownBlade.stage === 2 ? Math.sin(runTime * 65) * 0.24 : 0;
+    ctx.rotate(thrownBlade.ang + wiggleAng);
+    drawWeaponModel(ctx, thrownBlade.wpnId, "orbit", true, false, thrownBlade.glowCol, 0, thrownBlade.stage === 2 ? 0 : 18);
+    ctx.restore();
+  }
+
+  // 10. Projectiles: Parabolic Returning Smart-Discs (st===8), ROTJ Lightning, Rockets & Bolts
   const handOriginX = player.x + Math.cos(player.aim) * 9;
   const handOriginY = player.y + Math.sin(player.aim) * 9;
 
   for (let i = 0; i < MAX_P; i++) {
     if (!pAct[i]) continue;
     const st = pStyle[i];
-    if (st === 7) {
-      // Sword & Lightsaber Crescent Slash Wave (Oriented along attack velocity vector)
-      const sAng = Math.atan2(pVY[i], pVX[i]);
-      const slashR = Math.max(14, (pRad[i] || 20) * 0.85);
+    if (st === 8) {
+      // Spinning Parabolic Boomerang Smart-Disc / Chakram
       ctx.save();
       ctx.translate(pX[i], pY[i]);
-      ctx.rotate(sAng);
+      ctx.rotate(runTime * 24 + i);
       ctx.strokeStyle = pSup[i] ? "#ffd166" : player.fac.c1;
-      ctx.lineWidth = pSup[i] ? 4.2 : 3.0;
-      ctx.beginPath();
-      ctx.arc(-slashR * 0.35, 0, slashR, -0.72, 0.72);
-      ctx.stroke();
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.arc(-slashR * 0.35, 0, slashR * 0.92, -0.58, 0.58);
-      ctx.stroke();
-      ctx.restore();
-    } else if (st === 1) {
-      ctx.save();
-      ctx.strokeStyle = pSup[i] ? "#ffd166" : player.fac.c1;
-      ctx.lineWidth = 2.6;
-      ctx.globalAlpha = 0.65;
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, pVY[i] || 28, pVX[i] - 0.55, pVX[i] + 0.55);
-      ctx.stroke();
+      ctx.fillStyle = "#37474f";
+      ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.arc(0, 0, 7.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#ff1744";
+      ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     } else if (st === 5 && !pEnemy[i]) {
       ctx.save();
@@ -848,7 +853,7 @@ function renderScene() {
     }
   }
 
-  // 9. Multi-Ring Fiery Explosion Shockwaves
+  // 11. Multi-Ring Fiery Explosion Shockwaves
   if (typeof blAct !== "undefined") {
     for (let i = 0; i < MAX_BLAST; i++) {
       if (!blAct[i]) continue;
@@ -864,7 +869,7 @@ function renderScene() {
     }
   }
 
-  // 10. Particles & Floating Damage / Speech Text
+  // 12. Particles & Floating Damage / Speech Text
   ctx.fillStyle = "#ffd166";
   for (let i = 0; i < MAX_PT; i++) {
     if (ptAct[i]) ctx.fillRect(ptX[i] - 1.5, ptY[i] - 1.5, 3, 3);
@@ -879,7 +884,6 @@ function renderScene() {
 
   ctx.restore();
 
-  // Virtual Joystick Overlay
   if (joy.act) {
     ctx.strokeStyle = "rgba(0, 229, 255, 0.38)";
     ctx.lineWidth = 2;
