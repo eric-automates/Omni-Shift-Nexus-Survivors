@@ -1,11 +1,29 @@
 // FILE: js/ui.js
 // PART: 14 of 14
-// DETAIL: Strict Dynamic EOF Scanner, Non-Conflicting Theme Hook (Delegates to chaos.js), Protected Pause/Resume Modal, and Safe Loop.
+// DETAIL: Strict Dynamic EOF Scanner, 350ms Inspector, Active Weapon Toggler, Tactical Visor Selector Bar (#visorToggleBar), Lootable Visor Level-Up Cards, Range Telemetry, and Safe Loop.
 
 "use strict";
 
-/* === 1. STRICT DYNAMIC EOF SENTINEL SCANNER & SCRIPT CHECKER === */
 let eofAuditResults = [];
+
+const UI_VISOR_DEFS = [
+  { id: 0, short: "OFF", name: "Visor Off", desc: "Standard naked-eye optics." },
+  { id: 1, short: "BOBA RF", name: "Mandalorian Rangefinder", desc: "Green telemetry lock on strongest on-screen threat (+10% Crit)." },
+  { id: 2, short: "T-800 HUD", name: "Cyberdyne T-800 HUD", desc: "Red neural target box with Head Life % & T-Zone readout (+10% Crit)." },
+  { id: 3, short: "THERMAL", name: "Yautja Thermal Vision", desc: "Full-spectrum infrared heat signatures on all hostiles + Tri-Laser lock (+10% Crit)." },
+  { id: 4, short: "MATRIX", name: "Matrix Code Prescience", desc: "Construct code-rain target lock with movement vector prediction (+10% Crit)." }
+];
+
+function ensurePlayerVisors() {
+  if (typeof player === "undefined" || !player) return;
+  if (!Array.isArray(player.unlockedVisors)) {
+    const startVisor = (typeof player.activeVisor === "number" && player.activeVisor > 0)
+      ? player.activeVisor
+      : ([1, 54].includes(player.cid) ? 1 : (player.cid === 40 ? 2 : (player.cid === 29 ? 3 : (player.cid === 39 ? 4 : 0))));
+    player.unlockedVisors = startVisor > 0 ? [startVisor] : [];
+    if (typeof player.activeVisor !== "number") player.activeVisor = startVisor;
+  }
+}
 
 async function runDynamicEOFScan() {
   const files = ["js/chaos.js", "js/data-factions.js", "js/data-heroes.js", "js/data-relics.js", "js/state.js", "js/world.js", "js/combat.js", "js/sim.js", "js/render.js", "js/ui.js"];
@@ -55,7 +73,6 @@ function checkLoadedScripts() {
   return true;
 }
 
-/* === 2. 350ms INSPECTOR & CANON OUTFIT CUSTOMIZER === */
 let pressTimer = null, wasLongPress = false;
 function openInspector(title, sub, body, iconHTML = "", heroCid = -1) {
   if (navigator.vibrate) navigator.vibrate(18);
@@ -132,9 +149,9 @@ document.getElementById("ttClose").onclick = () => {
   if (typeof runActive !== "undefined" && runActive && !document.getElementById("scrLevel").classList.contains("active")) runPaused = false;
 };
 
-/* === 3. WEAPON TOGGLER, PAPER TARGETS & LEVEL-UP === */
 function renderWeaponToggler() {
   if (!player) return;
+  ensurePlayerVisors();
   window._inHudUpdate = true;
   try {
     let tBar = document.getElementById("wpnToggleBar");
@@ -144,23 +161,51 @@ function renderWeaponToggler() {
       tBar.className = "bar"; tBar.style.margin = "4px auto";
       grid.parentNode.insertBefore(tBar, grid.nextSibling);
     }
-    if (!tBar) return;
-    tBar.innerHTML = `<div style="font-size:0.6rem;color:#ffd166;width:100%;text-align:center">ACTIVE WEAPONS (TAP TO TOGGLE — MAX ${player.armCap || 2} HANDS AT ONCE):</div>`;
-    player.weapons.forEach(w => {
-      if (typeof w.enabled === "undefined") w.enabled = true;
-      const btn = document.createElement("button");
-      btn.className = "btn" + (w.enabled ? " sel" : " warn");
-      btn.style.padding = "3px 7px";
-      btn.style.fontSize = "0.58rem";
-      btn.textContent = `${w.enabled ? "ON" : "OFF"}: ${w.name.split(" ")[0]} (L${w.lvl})`;
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        if (w.enabled && player.weapons.filter(x => x.enabled !== false).length <= 1) return;
-        w.enabled = !w.enabled;
-        renderWeaponToggler(); updateHUD();
-      };
-      tBar.appendChild(btn);
-    });
+    if (tBar) {
+      tBar.innerHTML = `<div style="font-size:0.6rem;color:#ffd166;width:100%;text-align:center">ACTIVE WEAPONS (TAP TO TOGGLE — MAX ${player.armCap || 2} HANDS AT ONCE):</div>`;
+      player.weapons.forEach(w => {
+        if (typeof w.enabled === "undefined") w.enabled = true;
+        const btn = document.createElement("button");
+        btn.className = "btn" + (w.enabled ? " sel" : " warn");
+        btn.style.padding = "3px 7px";
+        btn.style.fontSize = "0.58rem";
+        btn.textContent = `${w.enabled ? "ON" : "OFF"}: ${w.name.split(" ")[0]} (L${w.lvl})`;
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          if (w.enabled && player.weapons.filter(x => x.enabled !== false).length <= 1) return;
+          w.enabled = !w.enabled;
+          renderWeaponToggler(); updateHUD();
+        };
+        tBar.appendChild(btn);
+      });
+    }
+
+    let vBar = document.getElementById("visorToggleBar");
+    if (!vBar && tBar) {
+      vBar = document.createElement("div"); vBar.id = "visorToggleBar";
+      vBar.className = "bar"; vBar.style.margin = "3px auto";
+      tBar.parentNode.insertBefore(vBar, tBar.nextSibling);
+    }
+    if (vBar) {
+      const unlocked = player.unlockedVisors || [];
+      vBar.innerHTML = `<div style="font-size:0.58rem;color:#00e5ff;width:100%;text-align:center">TACTICAL VISOR HUD (${player.activeVisor > 0 ? "+10% CRIT ACTIVE" : "STANDBY — LOOT ON LEVEL-UP"}):</div>`;
+      [0, ...unlocked].forEach(vid => {
+        const vDef = UI_VISOR_DEFS[vid] || UI_VISOR_DEFS[0];
+        const isSel = (player.activeVisor || 0) === vid;
+        const btn = document.createElement("button");
+        btn.className = "btn" + (isSel ? (vid > 0 ? " gold" : " sel") : "");
+        btn.style.padding = "3px 7px";
+        btn.style.fontSize = "0.56rem";
+        btn.textContent = vid === 0 ? "VISOR: OFF" : `👁 ${vDef.short}`;
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          player.activeVisor = vid;
+          sfx(vid > 0 ? 520 : 320, vid > 0 ? 960 : 180, 0.06, "sine", 0.12);
+          renderWeaponToggler(); updateHUD();
+        };
+        vBar.appendChild(btn);
+      });
+    }
   } finally {
     window._inHudUpdate = false;
   }
@@ -233,6 +278,8 @@ function drawRangeTarget(tabIdx = selRangeTab) {
 }
 
 function triggerLevelUp() {
+  if (window.trackProgress) window.trackProgress("Level Up Modal Opened: Lv." + player.lvl);
+  ensurePlayerVisors();
   runPaused = true; sfx(330, 880, 0.22, "triangle");
   document.getElementById("lvlTitle").textContent = "NEXUS LEVEL " + player.lvl + " — PICK 1 OF 3";
   document.getElementById("pauseBar").style.display = "none";
@@ -253,6 +300,13 @@ function triggerLevelUp() {
     const ex = player.passives.find(x => x.id === idx);
     if ((ex && ex.lvl < 5) || (!ex && player.passives.length < 6)) pool.push({ type: "pas", idx, p, lvl: ex ? ex.lvl + 1 : 1 });
   });
+
+  const missingVisors = [1, 2, 3, 4].filter(v => !player.unlockedVisors.includes(v));
+  if (missingVisors.length > 0 && Math.random() < 0.45) {
+    const vPick = missingVisors[Math.floor(Math.random() * missingVisors.length)];
+    pool.push({ type: "visor", vid: vPick });
+  }
+
   if (curVac < 1.0 && typeof vacuumDistantOrbs === "function") pool.push({ type: Math.random() < 0.22 ? "vac100" : "vac35" });
 
   pool.sort(() => Math.random() - 0.5);
@@ -276,6 +330,13 @@ function triggerLevelUp() {
         title = "NEW WEAPON: " + ch.c[4]; sub = FACTIONS[ch.c[1]].name + " Tech";
         desc = `Lv.5 Primary: ${sig ? sig[0] : ch.c[4]} | Lv.10: ${ch.c[5]}`;
         ico = makeSVG(ch.c[6], FACTIONS[ch.c[1]].c1, FACTIONS[ch.c[1]].c2, ch.c[0]);
+      } else if (ch.type === "visor") {
+        const vDef = UI_VISOR_DEFS[ch.vid];
+        card.className = "card unlocked";
+        title = `👁 TACTICAL VISOR: ${vDef.name.toUpperCase()}`;
+        sub = "HUD Optics Module (+10% Crit Chance When Active)";
+        desc = vDef.desc;
+        ico = makeSVG("relic", "#00e5ff", "#ffd166");
       } else if (ch.type === "vac35") {
         card.className = "card unlocked";
         title = `SUBSPACE ORB SIPHON (+35% -> ${Math.min(100, Math.round((curVac + 0.35) * 100))}%)`;
@@ -302,6 +363,10 @@ function triggerLevelUp() {
         } else if (ch.type === "wnew") {
           player.weapons.push({ id: ch.c[0], name: ch.c[4], superName: ch.c[5], style: ch.c[6], lvl: 1, cd: 0, ang: 0, enabled: true, evolvedLv5: false });
           if (ch.c[6] === "orbit") { player.hasSaber = true; player.saberMastery = Math.max(10, player.saberMastery); }
+        } else if (ch.type === "visor") {
+          if (!player.unlockedVisors.includes(ch.vid)) player.unlockedVisors.push(ch.vid);
+          player.activeVisor = ch.vid;
+          spawnSpeech(player.x, player.y, UI_VISOR_DEFS[ch.vid].short + " ONLINE (+10% CRIT)!", "#00e5ff", 2.2);
         } else if (ch.type === "vac35") {
           player.orbVacuumRate = Math.min(1.0, +(curVac + 0.35).toFixed(2)); vacuumDistantOrbs(0.35);
         } else if (ch.type === "vac100") {
@@ -318,9 +383,9 @@ function triggerLevelUp() {
 }
 
 const LIMB_LBLS = ["HD", "TR", "LA", "RA", "LL", "RL"];
-
 function updateHUD() {
   if (typeof player === "undefined" || !player) return;
+  ensurePlayerVisors();
   window._inHudUpdate = true;
   try {
     document.getElementById("hpBar").style.width = Math.max(0, (player.hp / player.maxHp) * 100) + "%";
@@ -343,6 +408,18 @@ function updateHUD() {
         p.onpointerdown = () => { player.guardZone = player.guardZone === idx ? -1 : idx; updateHUD(); };
         bHud.appendChild(p);
       });
+      if (player.activeVisor > 0) {
+        const vp = document.createElement("div");
+        vp.className = "stat-pill"; vp.style.padding = "2px 5px"; vp.style.fontSize = "0.56rem"; vp.style.borderColor = "#00e5ff"; vp.style.color = "#00e5ff"; vp.style.cursor = "pointer";
+        vp.textContent = `👁 ${UI_VISOR_DEFS[player.activeVisor].short} (+10% CRIT)`;
+        vp.onpointerdown = () => {
+          const list = [0, ...(player.unlockedVisors || [])];
+          const nextIdx = (list.indexOf(player.activeVisor) + 1) % list.length;
+          player.activeVisor = list[nextIdx];
+          updateHUD();
+        };
+        bHud.appendChild(vp);
+      }
       const spdLoss = Math.round((1 - (player.limbs[4] + player.limbs[5]) / 200) * 100);
       const drift = Math.round(player.limbs[4] - player.limbs[5]);
       const aimLoss = Math.round(100 - player.limbs[0]);

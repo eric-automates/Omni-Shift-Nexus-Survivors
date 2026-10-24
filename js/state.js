@@ -1,9 +1,10 @@
 // FILE: js/state.js
 // PART: 9 of 14
-// DETAIL: Complete Zero-GC SoA Pools (Enemies, Limbs, Corpses, Drips, Shots, Projectiles), Fallbacks, and Muzzle-Tip Spawner.
+// DETAIL: Meta-Save, Zero-GC SoA Pools, Tactical Visor States (T-800, Predator Thermal, Boba Rangefinder, Matrix), Jetpack Rocket State, and On-Screen Target Locking.
 
 "use strict";
 
+/* === 1. PERSISTENT META-STORAGE & TACTICAL VISOR CONFIG === */
 const META_KEY = "OMNISHIFT_META_V1";
 let meta = {
   dmEarned: 0, dmSpent: 0, chars: [0], stages: [1],
@@ -18,54 +19,7 @@ let opts = {
 
 let timeScale = 1.0;
 
-// Safety fallbacks in case data-heroes.js or chaos.js is from an earlier batch
-if (typeof isSwordWeapon !== "function") {
-  window.isSwordWeapon = function(id) { return [0, 3, 14, 18, 19, 24, 32, 33, 34, 48, 50, 55].includes(id); };
-}
-if (typeof getHeroArmCap !== "function") {
-  window.getHeroArmCap = function(id) { return id === 55 ? 4 : ([0, 3, 7, 12, 38, 39].includes(id) ? 3 : 2); };
-}
-
-function loadMeta() {
-  try {
-    const raw = localStorage.getItem(META_KEY);
-    if (raw) {
-      meta = { ...meta, ...JSON.parse(raw) };
-      if (typeof meta.diff !== "number") meta.diff = 1;
-      if (!meta.outfits || typeof meta.outfits !== "object") meta.outfits = {};
-    }
-  } catch (e) {}
-}
-
-function saveMeta() {
-  try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {}
-  if (typeof updateMenuUI === "function") updateMenuUI();
-}
-
-function getOutfit(cid) {
-  if (!meta.outfits) meta.outfits = {};
-  if (!meta.outfits[cid]) meta.outfits[cid] = { head: 0, torso: 0, legs: 0, back: 0, blade: cid === 3 ? 2 : 0 };
-  if (typeof meta.outfits[cid].blade !== "number") meta.outfits[cid].blade = cid === 3 ? 2 : 0;
-  return meta.outfits[cid];
-}
-
-function cycleOutfitPart(cid, partKey) {
-  const o = getOutfit(cid), spec = typeof getHeroOutfits === "function" ? getHeroOutfits(cid) : null;
-  const maxLen = (spec && spec[partKey]) ? spec[partKey].length : 3;
-  o[partKey] = ((o[partKey] || 0) + 1) % maxLen;
-  saveMeta(); sfx(380, 620, 0.06, "triangle", 0.14);
-}
-
-function availDM() { return Math.max(0, meta.dmEarned - meta.dmSpent); }
-function respecAll() { meta.dmSpent = 0; meta.chars = [0]; meta.ranks.fill(0); meta.selChar = 0; saveMeta(); sfx(280, 680, 0.22, "triangle"); }
-
-function setTimeScale(delta, reset = false) {
-  timeScale = reset ? 1.0 : Math.max(0.1, +(timeScale + delta).toFixed(1));
-  const lbl = document.getElementById("timeScaleLbl");
-  if (lbl) lbl.textContent = timeScale.toFixed(1) + "x";
-  sfx(300 + timeScale * 80, 420 + timeScale * 80, 0.05, "sine", 0.12);
-}
-
+/* === 2. CANVAS & ZERO-GC SOA TYPEDARRAY POOLS === */
 const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
 let W = window.innerWidth, H = window.innerHeight;
 function resize() { W = cv.width = window.innerWidth; H = cv.height = window.innerHeight; }
@@ -143,6 +97,53 @@ let activeForts = [], activeMines = [], movedBarricades = [];
 let runActive = false, runPaused = false, runSeed = 1337, runTime = 0, totalRunTime = 0, waveNum = 1;
 let rivalTimer = 0, orbWarpTimer = 0, fpsCount = 60, frameMs = 4.2, flashAlpha = 0, flameVisTimer = 0, muzzleFlashTimer = 0;
 let player = null, joy = { act: false, id: -1, ox: 0, oy: 0, dx: 0, dy: 0 }, pinchDist = 0;
+
+/* === 3. STRICT ON-SCREEN TARGET LOCK HELPER === */
+function isEnemyOnScreen(j) {
+  if (!eAct[j] || !player) return false;
+  const screenW = (W / (opts.zoom || 1)) * 0.52, screenH = (H / (opts.zoom || 1)) * 0.52;
+  return Math.abs(eX[j] - player.x) <= screenW && Math.abs(eY[j] - player.y) <= screenH;
+}
+
+function loadMeta() {
+  try {
+    const raw = localStorage.getItem(META_KEY);
+    if (raw) {
+      meta = { ...meta, ...JSON.parse(raw) };
+      if (typeof meta.diff !== "number") meta.diff = 1;
+      if (!meta.outfits || typeof meta.outfits !== "object") meta.outfits = {};
+    }
+  } catch (e) {}
+}
+
+function saveMeta() {
+  try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {}
+  if (typeof updateMenuUI === "function") updateMenuUI();
+}
+
+function getOutfit(cid) {
+  if (!meta.outfits) meta.outfits = {};
+  if (!meta.outfits[cid]) meta.outfits[cid] = { head: 0, torso: 0, legs: 0, back: 0, blade: cid === 3 ? 2 : 0 };
+  if (typeof meta.outfits[cid].blade !== "number") meta.outfits[cid].blade = cid === 3 ? 2 : 0;
+  return meta.outfits[cid];
+}
+
+function cycleOutfitPart(cid, partKey) {
+  const o = getOutfit(cid), spec = typeof getHeroOutfits === "function" ? getHeroOutfits(cid) : null;
+  const maxLen = (spec && spec[partKey]) ? spec[partKey].length : 3;
+  o[partKey] = ((o[partKey] || 0) + 1) % maxLen;
+  saveMeta(); sfx(380, 620, 0.06, "triangle", 0.14);
+}
+
+function availDM() { return Math.max(0, meta.dmEarned - meta.dmSpent); }
+function respecAll() { meta.dmSpent = 0; meta.chars = [0]; meta.ranks.fill(0); meta.selChar = 0; saveMeta(); sfx(280, 680, 0.22, "triangle"); }
+
+function setTimeScale(delta, reset = false) {
+  timeScale = reset ? 1.0 : Math.max(0.1, +(timeScale + delta).toFixed(1));
+  const lbl = document.getElementById("timeScaleLbl");
+  if (lbl) lbl.textContent = timeScale.toFixed(1) + "x";
+  sfx(300 + timeScale * 80, 420 + timeScale * 80, 0.05, "sine", 0.12);
+}
 
 function clearEnemyLimbState(idx, fadeDrips = true) {
   eLegDmg[idx] = 0; eTailDmg[idx] = 0; eLegsLost[idx] = 0; eArmsLost[idx] = 0;

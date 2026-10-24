@@ -1,6 +1,6 @@
 // FILE: js/combat.js
 // PART: 11 of 14
-// DETAIL: All 56 Heroes' Lv.5 Primary Weapon Transitions, Start-of-Run Equip Callouts/Animations, Autonomous Secondary Signature Hardware Attacks, and Formations.
+// DETAIL: Run Init, Synced Tactical Visor Unlocks, On-Screen Boss Targeting (`isEnemyOnScreen`), All 56 Hero Signature Gear, Complete Utility Handlers (#00-#55), and Secondary Hardware.
 
 "use strict";
 
@@ -28,7 +28,7 @@ const HERO_SIG_GEAR = [
   ["Maker's Tooth & Maula Pistol", "CRYSKNIFE DRAWN — MAY THY KNIFE CHIP!", "Weirding Way Voice Blast", 3, 1.6, 6.5],
   ["Emperor's Lasgun & Slow-Blade", "SALUSA SECUNDUS SHIELD BELT ON!", "Shigawire Garrote Lash", 5, 1.4, 7.0],
   ["Gom Jabbar & Reverend Voice", "LITANY AGAINST FEAR RECITED!", "Mind-Paralyzing Pitch", 6, 1.5, 7.5],
-  ["Heart-Plug Poison & Artillery", "SUSPENSOR BELT LEVITATING!", "Giedi Mortar Shell", 2, 1.5, 8.0],
+  ["Bald Pale Baron's Mortar", "SUSPENSOR BELT LEVITATING!", "Giedi Mortar Shell", 2, 1.5, 8.0],
   ["Type-III Compression Phaser Rifle", "PHASERS SET TO VAPORIZE!", "Photon Grenade Volley", 2, 1.4, 7.5],
   ["Queen's Assimilation Matrix", "OCULAR IMPLANT & NANOPROBES LOCKED!", "Borg Cutting Laser", 4, 1.5, 7.0],
   ["Sword of Kahless & Mek'leth", "BAT'LETH RAISED FOR STO-VO-KOR!", "Disruptor Pistol Shot", 4, 1.5, 6.5],
@@ -45,7 +45,7 @@ const HERO_SIG_GEAR = [
   ["Solar Atomizer & Eradication Ray", "MECHADENDRITES & SERVO-SKULLS BLESSED!", "Mechadendrite Arc-Claw", 5, 1.5, 6.5],
   ["Synaptic Disintegrator & Warscythe", "REANIMATION PROTOCOLS & GAUSS LIT!", "Tesseract Scarab Swarm", 2, 1.5, 7.5],
   ["Deffgun & Power Klaw", "POWER KLAW CLAMPED — WAAAGH!", "Stickbomb & Rokkit Salvo", 2, 1.5, 7.0],
-  ["Nemesis Force Halberd & Inferno", "ROSETTE SHOWN — WARP CHANNELING!", "Purging Smite Bolt", 5, 1.5, 6.5],
+  ["Inquisitor Rosette & Force-Staff", "ROSETTE SHOWN — WARP CHANNELING!", "Purging Smite Bolt", 5, 1.5, 6.5],
   ["Lobby Arsenal & Awakened Code", "SHADES ON — BULLET TIME ENGAGED!", "Telekinetic Code Wave", 6, 1.6, 6.5],
   ["Phased-Plasma 40W & Minigun", "HUD TARGET ACQUIRED — TITANIUM ARMED!", "M79 Thumper Grenade", 2, 1.6, 7.0],
   ["Deckard Double-Trigger Blaster", "VOIGHT-KAMPFF CALIBRATED!", "Spinner Flechette Burst", 3, 1.5, 7.5],
@@ -65,7 +65,16 @@ const HERO_SIG_GEAR = [
   ["Quad Jedi Trophy Sabers & Blaster", "CAPE DROPPED — FOUR ARMS UNLOCKED!", "Quad-Claw Grapple Blaster", 4, 1.8, 6.0]
 ];
 
-/* === 2. PLAYER RUN INITIALIZATION & ALL 56 HERO PASSIVES === */
+/* === 3. TACTICAL VISOR SPECS === */
+const VISOR_MODES = [
+  [0, "Off", "#ffffff", 0.0, "Standard Vision"],
+  [1, "Boba Green Rangefinder", "#00e676", 0.10, "Green targeting telemetry + threat lock"],
+  [2, "T-800 Cybernetic Red HUD", "#ff1744", 0.10, "Red reticle with Head Life telemetry & weakness info"],
+  [3, "Predator Thermal Vision", "#ff9100", 0.10, "Heat-map infrared sensor glow on all enemies"],
+  [4, "Matrix Prescience Code", "#00ff88", 0.10, "Cascading green code rain predicting enemy vectors"]
+];
+
+/* === 4. PLAYER RUN INITIALIZATION & PASSIVES === */
 function startRun() {
   purgeRunMemory();
   const c = CHAR_RAW[meta.selChar] || CHAR_RAW[0];
@@ -82,6 +91,14 @@ function startRun() {
   const startsWithSaber = (typeof isSwordWeapon === "function" && isSwordWeapon(cid)) || c[6] === "orbit";
   const armCap = typeof getHeroArmCap === "function" ? getHeroArmCap(cid) : 2;
 
+  let innateVisor = 0;
+  if ([1, 54].includes(cid)) innateVisor = 1;
+  else if ([40, 23, 26, 36, 55].includes(cid)) innateVisor = 2;
+  else if ([28, 29, 31, 32, 33, 34, 47].includes(cid)) innateVisor = 3;
+  else if ([0, 3, 7, 10, 14, 18, 20, 38, 39, 46, 48].includes(cid)) innateVisor = 4;
+
+  const startVisors = innateVisor > 0 ? [innateVisor] : [];
+
   player = {
     x: 256, y: 256, aim: 0, moveDir: 0, walk: 0, vx: 0, vy: 0,
     hp: 100, maxHp: 100 * (1 + r[2] * 0.15) * diff.plrHp,
@@ -93,7 +110,7 @@ function startRun() {
     projCnt: 0, projSpd: 1.0, dur: 1.0, pierce: 0,
     kb: 1.0, slow: 0, shred: 0, revives: 0, dodge: 0,
     hover: false, hazImmune: false, bossMul: 1.0,
-    adaptTimer: 0, sandTimer: 0, vatsTimer: 0, phaseTimer: 0,
+    adaptTimer: 0, sandTimer: 0, sandCD: 6.0, vatsTimer: 0, vatsCD: 4.0, overclockTimer: 0, phaseTimer: 0,
     cqcCD: 0, autoFlameCD: 0, sigGearCD: sig[5], equipAnimTimer: 1.8,
     sixShotsLeft: 6, sixBurstCD: 0, sixReloadCD: 0,
     fortAnchorX: 256, fortAnchorY: 256, fortTimer: 0, fortFastMul: 1.0,
@@ -103,6 +120,9 @@ function startRun() {
     hasSaber: startsWithSaber, saberMastery: startsWithSaber ? (cid === 55 ? 45 : 8) : 0,
     swordSwingTimer: 0, swordLungeTimer: 0,
     armCap: armCap, handSlotOffset: 0, swapTimer: 0, swapPause: 0,
+    unlockedVisors: startVisors,
+    visorsUnlocked: startVisors,
+    activeVisor: innateVisor,
     maxRelics: ([7, 10, 35].includes(cid)) ? 4 : 3,
     relics: [], utils: getHeroUtils(cid),
     xp: 0, nextXp: 10, lvl: 1, kills: 0, dmRun: 0, bossSpawned: false,
@@ -121,6 +141,7 @@ function startRun() {
   if (cid === 7) { player.might += 0.25; player.revives += 1; }
   if (cid === 8) { player.projSpd += 0.25; player.cdr *= 0.88; }
   if (cid === 9) { player.regen += 2.0; player.maxHp *= 1.2; }
+  if (cid === 10) { player.dodge += 0.22; }
   if (cid === 11) { player.slow += 0.25; }
   if (cid === 12) { player.area *= 1.35; player.dur += 0.25; }
   if (cid === 13) { player.spd *= 1.2; }
@@ -161,7 +182,6 @@ function startRun() {
   if (cid === 55) { player.might += 0.35; player.projCnt += 1; player.spd *= 1.2; }
 
   player.hp = player.maxHp;
-  // Trigger bespoke Start-of-Run Equip Callout & Animation for EVERY hero (#00-#55)!
   spawnSpeech(256, 256, sig[1], "#00e676", 2.2);
   showScreen(null);
   document.getElementById("hud").classList.add("active");
@@ -170,7 +190,7 @@ function startRun() {
   sfx(220, 660, 0.18, "triangle");
 }
 
-/* === 3. RELIC, PASSIVE & FORMATION SPAWNERS === */
+/* === 5. RELIC, PASSIVE & FORMATION SPAWNERS === */
 function grantRelic(forcedId = -1) {
   if (!player) return;
   const avail = RELICS_DB.filter(r => !player.relics.some(pr => pr.id === r[0]));
@@ -246,7 +266,7 @@ function allocEnemySlot(x, y, type, hpMul = 1.0, formType = 0, leaderIdx = -1) {
       const waveScale = 1 + (waveNum - 1) * 0.22 + ChaosMath.range(i + waveNum * 31, -0.04, 0.14);
       const base = type === 99 ? 950 : (type === 98 ? 680 : (42 + runTime * 1.15));
       eHP[i] = eMax[i] = base * hpMul * player.stg.hpMul * player.diff.hpMul * waveScale;
-      eSpd[i] = (type === 99 ? 56 : (type === 98 ? 78 : (40 + (type % 4) * 9 + Math.min(28, waveNum * 1.7)))) * player.diff.spdMul;
+      eSpd[i] = (type === 99 ? 56 : (type === 98 ? 78 : (40 + (type % 4) * 9 + Math.min(28, waveNum * 1.7)))) * (player.diff.spdMul || 1.0);
       eSlow[i] = 0; eShred[i] = 0; eStun[i] = 0; eGrapple[i] = 0;
       eFireCD[i] = 1.6 + Math.random() * 1.5; eSeed[i] = Math.floor(Math.random() * 1000000);
       eWave[i] = waveNum; eMoveStyle[i] = (type >= 98 || formType > 0) ? 0 : (eSeed[i] % 4);
@@ -292,21 +312,17 @@ function spawnEnemy(isBoss = false, isRival = false) {
   } else allocEnemySlot(sx, sy, Math.floor(Math.random() * 4), 1.0, 0, -1);
 }
 
-/* === 4. WEAPON FIRING, ALL-56 LV.5 PRIMARY TRANSITIONS & ALL-56 SECONDARY HARDWARE === */
+/* === 6. STRICT ON-SCREEN TARGET LOCK FIRING, FULL UTILITIES & SECONDARY HARDWARE === */
 function fireWeapon(w) {
-  // Universal Lv.5 Mid-Tier Primary Weapon Transition for ALL 56 Weapons!
   if (w.lvl >= 5 && w.lvl < 10 && !w.evolvedLv5) {
     const sig = HERO_SIG_GEAR[w.id];
     if (sig && sig[0]) {
-      w.name = sig[0];
-      w.evolvedLv5 = true;
-      player.equipAnimTimer = 1.2;
+      w.name = sig[0]; w.evolvedLv5 = true; player.equipAnimTimer = 1.2;
       spawnSpeech(player.x, player.y, "PRIMARY ARSENAL: " + sig[0].toUpperCase() + "!", "#ffd166", 2.0);
     }
   }
 
-  const sup = w.lvl >= 10 ? 1 : 0;
-  const lv5Boost = w.lvl >= 5 ? 1.25 : 1.0;
+  const sup = w.lvl >= 10 ? 1 : 0, lv5Boost = w.lvl >= 5 ? 1.25 : 1.0;
   const count = 1 + Math.floor(w.lvl / 3) + player.projCnt + (sup ? 2 : 0);
   const lowHpBonus = (player.cid === 13 && player.hp < player.maxHp * 0.5) ? 1.35 : 1;
   const killBonus = player.cid === 24 ? Math.min(2, 1 + Math.floor(player.kills / 15) * 0.01) : 1;
@@ -316,7 +332,10 @@ function fireWeapon(w) {
 
   let tx = player.x + Math.cos(player.aim) * 120, ty = player.y + Math.sin(player.aim) * 120, best = 1e9;
   for (let i = 0; i < MAX_E; i++) {
-    if (eAct[i]) { const d = Math.hypot(eX[i] - player.x, eY[i] - player.y); if (d < best) { best = d; tx = eX[i]; ty = eY[i]; } }
+    if (eAct[i] && isEnemyOnScreen(i)) {
+      const d = Math.hypot(eX[i] - player.x, eY[i] - player.y);
+      if (d < best) { best = d; tx = eX[i]; ty = eY[i]; }
+    }
   }
   const eyeJitter = ((100 - player.limbs[0]) / 100) * 0.42;
   const aimAng = Math.atan2(ty - player.y, tx - player.x) + (Math.random() - 0.5) * eyeJitter;
@@ -377,8 +396,10 @@ function fireWeapon(w) {
 function triggerUtility(uIdx) {
   if (!player || !player.utils[uIdx]) return;
   const u = player.utils[uIdx]; if (u.cd > 0) return; u.cd = u.cdMax * player.utilCdrMul;
-  if (u.type === "buildFort") deployLastStandFort(player.x, player.y);
-  else if (u.type === "quadSpin") {
+
+  if (u.type === "buildFort") {
+    deployLastStandFort(player.x, player.y);
+  } else if (u.type === "quadSpin") {
     player.swordSwingTimer = 0.5;
     if (typeof sfxWeapon === "function") sfxWeapon("orbit", 55, true);
     for (let k = 0; k < 8; k++) {
@@ -387,12 +408,25 @@ function triggerUtility(uIdx) {
     }
   } else if (u.type === "grappleHook") {
     let best = -1, bestHP = -1;
-    for (let i = 0; i < MAX_E; i++) { if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 320 && eHP[i] > bestHP) { bestHP = eHP[i]; best = i; } }
-    if (best >= 0) { eGrapple[best] = 5.5; eStun[best] = 5.5; spawnSpeech(eX[best], eY[best], "GRAPPLED!", "#00e5ff", 1.8); sfx(620, 210, 0.16, "sawtooth"); }
+    for (let i = 0; i < MAX_E; i++) {
+      if (eAct[i] && isEnemyOnScreen(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 320 && eHP[i] > bestHP) {
+        bestHP = eHP[i]; best = i;
+      }
+    }
+    if (best >= 0) {
+      eGrapple[best] = 5.5; eStun[best] = 5.5;
+      spawnSpeech(eX[best], eY[best], "GRAPPLED!", "#00e5ff", 1.8);
+      sfx(620, 210, 0.16, "sawtooth");
+    }
   } else if (u.type === "flameCone") {
     flameVisTimer = 0.65; sfx(140, 75, 0.25, "sawtooth", 0.28);
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 135 * player.area) { eHP[i] -= 160 * player.might; spawnDmg(eX[i], eY[i], 160 * player.might, true); }
+      if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 135 * player.area) {
+        const fDmg = 160 * player.might;
+        eHP[i] -= fDmg;
+        spawnDmg(eX[i], eY[i], fDmg, true);
+        if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, false);
+      }
     }
   } else if (u.type === "fanHammer" || u.type === "critBurst") {
     for (let k = 0; k < 10; k++) {
@@ -406,12 +440,39 @@ function triggerUtility(uIdx) {
         const flipA = Math.random() * Math.PI * 2;
         eX[i] += Math.cos(flipA) * 42; eY[i] += Math.sin(flipA) * 42; eStun[i] = 2.5;
         const execDmg = eType[i] >= 98 ? Math.max(280 * player.might, eMax[i] * 0.38) : eHP[i] + 50;
-        eHP[i] -= execDmg; spawnDmg(eX[i], eY[i], execDmg, true);
+        eHP[i] -= execDmg;
+        spawnDmg(eX[i], eY[i], execDmg, true);
+        if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, true);
       }
     }
-    spawnSpeech(player.x, player.y, "BABA YAGA TAKEDOWN!", "#ffd166", 1.5); sfx(820, 120, 0.14, "sawtooth");
+    spawnSpeech(player.x, player.y, "TAKEDOWN EXECUTED!", "#ffd166", 1.5);
+    sfx(820, 120, 0.14, "sawtooth");
+  } else if (u.type === "stareFreeze") {
+    // Hero #52 Squint Showdown: Freezes all on-screen enemies in their tracks for 3.5s
+    for (let i = 0; i < MAX_E; i++) {
+      if (eAct[i] && (isEnemyOnScreen(i) || Math.hypot(eX[i] - player.x, eY[i] - player.y) < 340)) {
+        eStun[i] = Math.max(eStun[i], 3.5);
+        eSlow[i] = Math.max(eSlow[i], 5.0);
+      }
+    }
+    spawnSpeech(player.x, player.y, "HIGH NOON SHOWDOWN!", "#ffd166", 2.0);
+    sfx(440, 880, 0.25, "triangle");
+  } else if (u.type === "explosiveBow") {
+    // Hero #53 Explosive Arrow: High-yield thermite warhead arrow that detonates on impact
+    for (let k = -1; k <= 1; k++) {
+      const a = player.aim + k * 0.12;
+      spawnProj(player.x, player.y, Math.cos(a) * 390, Math.sin(a) * 390, 210 * player.might, 1.4, 15 * player.area, 0, 2, 1, 0, 53);
+    }
+    spawnSpeech(player.x, player.y, "THERMITE EXPLOSIVE ARROW!", "#ff6d00", 1.6);
+    sfx(320, 110, 0.18, "sawtooth");
+  } else if (u.type === "cyborgRush") {
+    // Hero #55 Cyborg Overclock: Doubles attack rate and movement speed for 4.5s
+    player.overclockTimer = 4.5;
+    spawnSpeech(player.x, player.y, "FOUR-ARM CYBORG OVERCLOCK!", "#00e676", 2.0);
+    sfx(280, 960, 0.24, "sawtooth");
   } else {
-    spawnProj(player.x, player.y, 0, 0, 150 * player.might, 0.45, 135 * player.area, 99, 6, 1, 0, player.cid); sfx(320, 740, 0.16, "triangle");
+    spawnProj(player.x, player.y, 0, 0, 150 * player.might, 0.45, 135 * player.area, 99, 6, 1, 0, player.cid);
+    sfx(320, 740, 0.16, "triangle");
   }
   updateHUD();
 }
@@ -421,6 +482,36 @@ function updateHeroSpecials(simDt) {
   if (player.cqcCD > 0) player.cqcCD -= simDt;
   if (player.autoFlameCD > 0) player.autoFlameCD -= simDt;
   if (player.equipAnimTimer > 0) player.equipAnimTimer = Math.max(0, player.equipAnimTimer - simDt);
+  if (player.adaptTimer > 0) player.adaptTimer = Math.max(0, player.adaptTimer - simDt);
+  if (player.overclockTimer > 0) player.overclockTimer = Math.max(0, player.overclockTimer - simDt);
+
+  // Hero #42 Sandevistan Edgerunner: Bursts to 180% Speed & Rate every 6s
+  if (player.cid === 42) {
+    if (player.sandTimer > 0) {
+      player.sandTimer = Math.max(0, player.sandTimer - simDt);
+    } else {
+      player.sandCD = (player.sandCD || 6.0) - simDt;
+      if (player.sandCD <= 0) {
+        player.sandCD = 6.0;
+        player.sandTimer = 2.2;
+        spawnSpeech(player.x, player.y, "SANDEVISTAN OVERDRIVE!", "#00e676", 1.4);
+      }
+    }
+  }
+
+  // Hero #43 Vault-Tec Wanderer: Guaranteed Crit V.A.T.S. pulse every 4s
+  if (player.cid === 43) {
+    if (player.vatsTimer > 0) {
+      player.vatsTimer = Math.max(0, player.vatsTimer - simDt);
+    } else {
+      player.vatsCD = (player.vatsCD || 4.0) - simDt;
+      if (player.vatsCD <= 0) {
+        player.vatsCD = 4.0;
+        player.vatsTimer = 1.25;
+      }
+    }
+  }
+
   if (player.swordSwingTimer > 0) player.swordSwingTimer = Math.max(0, player.swordSwingTimer - simDt);
   if (player.swordLungeTimer > 0) {
     player.swordLungeTimer = Math.max(0, player.swordLungeTimer - simDt);
@@ -440,13 +531,14 @@ function updateHeroSpecials(simDt) {
     }
   }
 
-  // Universal Periodic Secondary Signature Hardware Trigger for ALL 56 Heroes (#00-#55)!
   const sig = HERO_SIG_GEAR[player.cid] || HERO_SIG_GEAR[0];
   player.sigGearCD -= simDt;
   if (player.sigGearCD <= 0) {
     let best = -1, maxH = 0;
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 300 && eHP[i] > maxH) { maxH = eHP[i]; best = i; }
+      if (eAct[i] && isEnemyOnScreen(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 300 && eHP[i] > maxH) {
+        maxH = eHP[i]; best = i;
+      }
     }
     if (best >= 0) {
       player.sigGearCD = sig[5] * player.cdr;
@@ -467,7 +559,10 @@ function updateHeroSpecials(simDt) {
       spawnSpeech(player.x, player.y, "WRIST FLAMETHROWER!", "#ff6d00", 1.4); sfx(150, 65, 0.22, "sawtooth", 0.25);
       for (let i = 0; i < MAX_E; i++) {
         if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 125 * player.area) {
-          eHP[i] -= 130 * player.might; eStun[i] = 1.0; spawnDmg(eX[i], eY[i], 130 * player.might, true);
+          const flmDmg = 130 * player.might;
+          eHP[i] -= flmDmg; eStun[i] = 1.0;
+          spawnDmg(eX[i], eY[i], flmDmg, true);
+          if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, false);
         }
       }
     }
