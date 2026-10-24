@@ -1,8 +1,13 @@
 // FILE: js/combat.js
 // PART: 11 of 14
-// DETAIL: v6.0 Physics Overhaul — Zero-Arc Physical Melee, Camera-Stable Arm Reach, Level-Scaling Directional-to-360 Force Push, Parabolic Boomerangs, and Bespoke Gun Ballistics.
+// DETAIL: v6.0 Physics Overhaul — Authentic Ballistics & Melee Physics for All 56 Heroes (#00-#55), Level-Scaling Directional-to-360 Force Push, 4-Stage Thrown Blade Impale Trigger, and Secondary Hardware.
 
 "use strict";
+
+// Expand sword/melee registry so all physical blades, knives, whips & tails use real-time blade slicing
+const V6_MELEE_IDS = [0, 3, 14, 18, 19, 24, 30, 32, 33, 34, 42, 48, 50, 55];
+const PURE_MELEE_IDS = [0, 14, 18, 24, 42, 48, 50, 55];
+window.isSwordWeapon = function(wpnId) { return V6_MELEE_IDS.includes(wpnId); };
 
 /* === 1. ALL 56 HEROES' LV.5 PRIMARY TRANSITIONS, EQUIP CALLOUTS & SECONDARY HARDWARE === */
 const HERO_SIG_GEAR = [
@@ -10,21 +15,21 @@ const HERO_SIG_GEAR = [
   ["Pure Beskar Spear & Darts", "BESKAR VISOR & WHISTLING BIRDS ARMED!", "Whistling Bird Micro-Salvo", 2, 1.5, 7.0],
   ["DLT-19 Heavy Repeating Blaster", "IMPERIAL COMLINK & E-11 LOCKED!", "Thermal Detonator Toss", 2, 1.4, 8.0],
   ["Dual Senate Guard Sabers", "DARK SIDE LIGHTNING CHARGED!", "Force Choke & Chain Arc", 5, 1.5, 6.5],
-  ["Dual Periscope Arc-Welder", "ASTROMECH SERVOS & THRUSTERS ONLINE!", "Burning Oil Slick & Zap", 6, 1.3, 6.0],
+  ["Dual Periscope Arc-Welder", "ASTROMECH SERVOS & THRUSTERS ONLINE!", "Burning Oil Slick & Zap", 5, 1.3, 6.0],
   ["Heavy Twin-Quarrel Bowcaster", "BANDOLIER CHARGED — WOOKIEE ROAR!", "Kashyyyk Satchel Charge", 2, 1.6, 8.0],
-  ["Modified Hair-Trigger DL-44", "DL-44 UNHOLSTERED — NEVER TELL ME THE ODDS!", "Lucky Sabacc Detonator", 3, 1.4, 7.5],
+  ["Modified Hair-Trigger DL-44", "DL-44 UNHOLSTERED — NEVER TELL ME THE ODDS!", "Lucky Sabacc Detonator", 2, 1.4, 7.5],
   ["Ascended Staff of Ra", "GOA'ULD KARA KESH RIBBON ARMED!", "Solar Orb Bombardment", 6, 1.6, 7.0],
-  ["Carter Special Micro-Carbine", "FN-P90 RACKED & C4 DETONATOR SET!", "Remote C4 Blast", 6, 1.5, 8.0],
+  ["Carter Special Micro-Carbine", "FN-P90 RACKED & C4 DETONATOR SET!", "Remote C4 Blast", 2, 1.5, 8.0],
   ["First-Prime Twin Ma'Tok", "SERPENT HELM LOCKED — JAFFA KREE!", "Zat'nik'tel Triple-Arc", 5, 1.4, 7.0],
   ["Thor's Chariot Ion Array", "ASGARD BEAMING SENSORS ONLINE!", "Asgard Drone Strike", 4, 1.5, 6.5],
   ["Queen's Feeding Hand & Stunner", "HIVE TELEPATHY & BIO-STUNNER ARMED!", "Wraith Culling Beam", 5, 1.4, 7.5],
   ["Staff of the Ori Crusade", "HALLOWED ARE THE ORI — STAFF LIT!", "Prior Plague Shockwave", 6, 1.5, 8.0],
-  ["Serenity Bridge Carbine & Pistol", "MOSES BROTHERS SIDEARM DRAWN!", "Browncoat Grenade Toss", 3, 1.4, 7.5],
-  ["Tam Twin Miranda Cleavers", "TWO BY TWO, HANDS OF BLUE — BLADES OUT!", "Psychic Precog Slash", 7, 1.6, 6.0],
+  ["Serenity Bridge Carbine & Pistol", "MOSES BROTHERS SIDEARM DRAWN!", "Browncoat Grenade Toss", 2, 1.4, 7.5],
+  ["Tam Twin Miranda Cleavers", "TWO BY TWO, HANDS OF BLUE — BLADES OUT!", "Psychic Precog Slash", 6, 1.6, 6.0],
   ["Vera Custom Sniper-Mod", "VERA CHAMBERED IN SPACE-SUIT!", "Luxan Frag Grenade", 2, 1.5, 7.5],
   ["Crazy-Ivan Thruster Array", "FLIGHT CONTROLS & DINOSAURS SET!", "Shuttle Exhaust Blast", 6, 1.4, 7.0],
   ["Twin Reactor-Core Buzzsaws", "HARPOON CHAINS & SPIKES LOCKED!", "Mutagenic Acid Spit", 3, 1.5, 6.5],
-  ["Maker's Tooth & Maula Pistol", "CRYSKNIFE DRAWN — MAY THY KNIFE CHIP!", "Weirding Way Voice Blast", 3, 1.6, 6.5],
+  ["Maker's Tooth & Maula Pistol", "CRYSKNIFE DRAWN — MAY THY KNIFE CHIP!", "Weirding Way Voice Blast", 6, 1.6, 6.5],
   ["Emperor's Lasgun & Slow-Blade", "SALUSA SECUNDUS SHIELD BELT ON!", "Shigawire Garrote Lash", 5, 1.4, 7.0],
   ["Gom Jabbar & Reverend Voice", "LITANY AGAINST FEAR RECITED!", "Mind-Paralyzing Pitch", 6, 1.5, 7.5],
   ["Bald Pale Baron's Mortar", "SUSPENSOR BELT LEVITATING!", "Giedi Mortar Shell", 2, 1.5, 8.0],
@@ -49,22 +54,21 @@ const HERO_SIG_GEAR = [
   ["Phased-Plasma 40W & Minigun", "HUD TARGET ACQUIRED — TITANIUM ARMED!", "M79 Thumper Grenade", 2, 1.6, 7.0],
   ["Deckard Double-Trigger Blaster", "VOIGHT-KAMPFF CALIBRATED!", "Spinner Flechette Burst", 3, 1.5, 7.5],
   ["Arasaka Mantis Blades & Guts", "SANDEVISTAN SPINE IMPLANT PULSING!", "Wrist Projectile Launcher", 2, 1.6, 6.5],
-  ["Gatling Laser & Fat-Man MIRV", "PIP-BOY 3000 & V.A.T.S. LOCKED!", "Nuka-Grenade Toss", 6, 1.6, 8.0],
+  ["Gatling Laser & Fat-Man MIRV", "PIP-BOY 3000 & V.A.T.S. LOCKED!", "Nuka-Grenade Toss", 2, 1.6, 8.0],
   ["Quad-Barrel Boomstick & Harpoon", "GUZZOLINE INJECTED — WITNESS ME!", "Explosive Thunderstick", 2, 1.5, 7.0],
-  ["Overcharged Blue Grav-Gun & Tau", "HEV SUIT & CROWBAR EQUIPPED!", "Punted Sawblade Ricochet", 4, 1.6, 6.5],
+  ["Overcharged Blue Grav-Gun & Tau", "HEV SUIT & CROWBAR EQUIPPED!", "Punted Sawblade Ricochet", 8, 1.6, 6.5],
   ["Gallifreyan Moment & Sonic Matrix", "SONIC EMITTER EXTENDED — ALLONS-Y!", "Temporal Stasis Pulse", 6, 1.5, 7.5],
   ["Plasma-Ice-Wave Hyper Cannon", "VARIA SUIT & ARM CANNON CHARGED!", "Super Missile Salvo", 2, 1.6, 6.5],
   ["Grandmaster Aerondight & Crossbow", "SILVER SWORD DRAWN — MEDALLION HUMS!", "Igni Firestream Sign", 3, 1.6, 6.5],
   ["Necronomicon Eldritch Conduit", "ABYSSAL TOME OPENED — STARS ALIGNED!", "Void Tentacle Eruption", 5, 1.6, 7.0],
   ["Meitou Cross-Nodachi & Eagle Cross", "MEITOU BLADE UNSHEATHED IN THE ASH!", "Masterwork Crossbow Bolt", 4, 1.7, 6.0],
   ["Baba Yaga Primary 2011 & Benelli M4", "KEVLAR SUIT BUTTONED & KIMBER CHECKED!", "Continental Throwing Knife", 4, 1.7, 5.5],
-  ["Dual Navy Revolvers & Henry Rifle", "PONCHO FLIPPED BACK — IRON READY!", "Lit Dynamite Bundle", 6, 1.7, 8.0],
+  ["Dual Navy Revolvers & Henry Rifle", "PONCHO FLIPPED BACK — IRON READY!", "Lit Dynamite Bundle", 2, 1.7, 8.0],
   ["Dual-Belt M60E3 & Thermite Bow", "RED HEADBAND TIED & BOW STRINGED!", "Thermite Explosive Arrow", 2, 1.7, 7.0],
   ["Modified ESB EE-3 & Concussion Rifle", "WRIST GAUNTLETS & Z-6 JETPACK ARMED!", "Z-6 Jetpack Anti-Armor Missile", 2, 1.8, 7.5],
   ["Quad Jedi Trophy Sabers & Blaster", "CAPE DROPPED — FOUR ARMS UNLOCKED!", "Quad-Claw Grapple Blaster", 4, 1.8, 6.0]
 ];
 
-/* === 2. TACTICAL VISOR SPECS & FORCE PUSH VISUAL STATE === */
 const VISOR_MODES = [
   [0, "Off", "#ffffff", 0.0, "Standard Vision"],
   [1, "Boba Green Rangefinder", "#00e676", 0.10, "Green targeting telemetry + threat lock"],
@@ -75,22 +79,21 @@ const VISOR_MODES = [
 
 let forcePushVis = { timer: 0, maxT: 0.36, x: 0, y: 0, ang: 0, arc: 1.4, maxR: 135, col: "#00e5ff" };
 
-/* === 3. DIRECTIONAL-TO-360 FORCE KINETIC PUSH ENGINE ===
-   Low levels push forward in a hand-cone; scales with Force Push Level up to a 360° circle at Max Level! */
-function executeForceKineticPush(originX, originY, aimAng, pushLvl = 1, baseDmg = 28) {
+/* === 2. LEVEL-SCALING DIRECTIONAL-TO-360 FORCE KINETIC PUSH ===
+   Lv.1 pushes forward in a 75° hand-cone; widens each level up to a full 360° circle at Lv.10! */
+function executeForceKineticPush(originX, originY, aimAng, pushLvl = 1, baseDmg = 24) {
   const clampedLvl = Math.max(1, Math.min(10, pushLvl));
-  // Lv.1 = 75° forward cone -> Lv.5 = 165° wide wave -> Lv.10 = Full 360° Circle!
   const halfArc = clampedLvl >= 10 ? Math.PI : ((0.65 + (clampedLvl - 1) * 0.24) * 0.5);
-  const maxRange = (125 + clampedLvl * 11) * (player ? player.area : 1.0);
-  const pushDist = (95 + clampedLvl * 12) * (player ? player.kb : 1.0);
-  const stunDur = 1.0 + clampedLvl * 0.08;
+  const maxRange = (128 + clampedLvl * 11) * (player ? player.area : 1.0);
+  const pushDist = (98 + clampedLvl * 13) * (player ? player.kb : 1.0);
+  const stunDur = 1.05 + clampedLvl * 0.08;
 
   if (player) {
-    player.forceHandTimer = 0.36;
+    player.forceHandTimer = 0.38;
     player.forceHandAng = aimAng;
   }
-  forcePushVis.timer = 0.36;
-  forcePushVis.maxT = 0.36;
+  forcePushVis.timer = 0.38;
+  forcePushVis.maxT = 0.38;
   forcePushVis.x = originX;
   forcePushVis.y = originY;
   forcePushVis.ang = aimAng;
@@ -99,7 +102,7 @@ function executeForceKineticPush(originX, originY, aimAng, pushLvl = 1, baseDmg 
   forcePushVis.col = (player && player.fac) ? player.fac.c1 : "#00e5ff";
 
   sfx(190, 75, 0.22, "sine", 0.26);
-  playNoise(0.18, "bandpass", 620, 140, 1.4, 0.24);
+  if (typeof playNoise === "function") playNoise(0.18, "bandpass", 620, 140, 1.4, 0.24);
 
   for (let i = 0; i < MAX_E; i++) {
     if (!eAct[i]) continue;
@@ -107,16 +110,14 @@ function executeForceKineticPush(originX, originY, aimAng, pushLvl = 1, baseDmg 
     const d = Math.hypot(dx, dy);
     if (d > maxRange || d < 0.001) continue;
 
-    const angToEnemy = Math.atan2(dy, dx);
-    let diff = angToEnemy - aimAng;
+    let diff = Math.atan2(dy, dx) - aimAng;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
 
     if (Math.abs(diff) <= halfArc) {
       const falloff = 0.55 + 0.45 * (1 - d / maxRange);
       const kb = pushDist * falloff * (eType[i] === 99 ? 0.38 : 1.0);
-      const nx = eX[i] + (dx / d) * kb;
-      const ny = eY[i] + (dy / d) * kb;
+      const nx = eX[i] + (dx / d) * kb, ny = eY[i] + (dy / d) * kb;
       if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(nx, ny, false)) {
         eX[i] = nx; eY[i] = ny;
       }
@@ -130,9 +131,10 @@ function executeForceKineticPush(originX, originY, aimAng, pushLvl = 1, baseDmg 
   }
 }
 
-/* === 4. PLAYER RUN INITIALIZATION & PASSIVES === */
+/* === 3. PLAYER RUN INITIALIZATION === */
 function startRun() {
   purgeRunMemory();
+  if (typeof thrownBlade !== "undefined") thrownBlade.active = false;
   const c = CHAR_RAW[meta.selChar] || CHAR_RAW[0];
   const stg = STAGES[meta.selStage - 1] || STAGES[0];
   const diff = DIFFICULTIES[meta.diff] || DIFFICULTIES[1];
@@ -144,7 +146,7 @@ function startRun() {
   runTime = 0; totalRunTime = 0; orbWarpTimer = 0; waveNum = 1; rivalTimer = 0;
 
   const innateVac = (typeof hasInnateVacuum === "function" && hasInnateVacuum(cid)) ? 1.0 : 0.0;
-  const startsWithSaber = (typeof isSwordWeapon === "function" && isSwordWeapon(cid)) || c[6] === "orbit";
+  const startsWithSaber = isSwordWeapon(cid);
   const armCap = typeof getHeroArmCap === "function" ? getHeroArmCap(cid) : 2;
 
   let innateVisor = 0;
@@ -173,10 +175,10 @@ function startRun() {
     inVehicle: 0, vehicleHp: 0, vehBoostMul: 1.0, carryingBarricade: false,
     hasRepulsor: false, utilCdrMul: 1.0, orbVacuumRate: innateVac,
     limbs: [100, 100, 100, 100, 100, 100], guardZone: -1,
-    hasSaber: startsWithSaber, saberMastery: startsWithSaber ? (cid === 55 ? 45 : 12) : 0,
+    hasSaber: startsWithSaber, saberMastery: startsWithSaber ? (cid === 55 ? 45 : 14) : 0,
     swordSwingTimer: 0, swordLungeTimer: 0, armReach: 0,
     whirlwindTimer: 0, forceHandTimer: 0, forceHandAng: 0,
-    flourishPhase: 0, flourishForm: 0, flourishTimer: 0, flourishSpeed: 3.4,
+    flourishPhase: 0, flourishForm: 0, flourishTimer: 0, flourishSpeed: 4.2,
     armCap: armCap, handSlotOffset: 0, swapTimer: 0, swapPause: 0,
     unlockedVisors: startVisors,
     visorsUnlocked: startVisors,
@@ -248,7 +250,7 @@ function startRun() {
   sfx(220, 660, 0.18, "triangle");
 }
 
-/* === 5. RELIC, PASSIVE & FORMATION SPAWNERS === */
+/* === 4. RELIC, PASSIVE & FORMATION SPAWNERS === */
 function grantRelic(forcedId = -1) {
   if (!player) return;
   const avail = RELICS_DB.filter(r => !player.relics.some(pr => pr.id === r[0]));
@@ -330,6 +332,7 @@ function allocEnemySlot(x, y, type, hpMul = 1.0, formType = 0, leaderIdx = -1) {
       eWave[i] = waveNum; eMoveStyle[i] = (type >= 98 || formType > 0) ? 0 : (eSeed[i] % 4);
       clearEnemyLimbState(i, false);
       if (typeof eScarHeat !== "undefined") eScarHeat[i] = 0;
+      if (typeof eKneel !== "undefined") eKneel[i] = 0;
       eFormType[i] = formType; eFormLeader[i] = leaderIdx;
       eType[i] = type; eRivalCid[i] = -1; eAct[i] = 1;
       return i;
@@ -371,7 +374,7 @@ function spawnEnemy(isBoss = false, isRival = false) {
   } else allocEnemySlot(sx, sy, Math.floor(Math.random() * 4), 1.0, 0, -1);
 }
 
-/* === 6. ZERO-ARC PHYSICAL MELEE, PARABOLIC BOOMERANGS & UNIQUE RANGED BALLISTICS === */
+/* === 5. BESPOKE 56-HERO WEAPON BALLISTICS & PHYSICAL MELEE === */
 function fireWeapon(w) {
   if (w.lvl >= 5 && w.lvl < 10 && !w.evolvedLv5) {
     const sig = HERO_SIG_GEAR[w.id];
@@ -399,60 +402,144 @@ function fireWeapon(w) {
   const eyeJitter = ((100 - player.limbs[0]) / 100) * 0.42;
   const aimAng = Math.atan2(ty - player.y, tx - player.x) + (Math.random() - 0.5) * eyeJitter;
 
-  // 1. PHYSICAL LIGHTSABERS & SWORDS: Zero flying projectile arcs & Zero camera-jerking lunges!
-  if ((typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44].includes(w.id))) {
-    // Only trigger active strike sound & arm reach extension when an enemy is within ~1.5x blade reach
-    if (best <= 54 * player.area) {
+  // 1. PURE PHYSICAL MELEE HEROES (#00, #14, #18, #24, #42, #48, #50, #55):
+  //    Zero flying projectile arcs! Blade contact is handled in real-time by checkBladeSegmentSlice in sim.js!
+  if (PURE_MELEE_IDS.includes(w.id)) {
+    if (best <= 56 * player.area) {
       player.swordSwingTimer = 0.34;
-      player.armReach = 5.5; // Smooth arm extension only — never moves camera!
+      player.armReach = 5.5;
       if (typeof sfxWeapon === "function") sfxWeapon("orbit", w.id, true);
     } else {
-      w.cd = 0.12;
+      w.cd = 0.10;
     }
     return;
   }
 
-  // 2. PREDATOR SMART-DISCS (#29) & RETURNING BOOMERANG DRONES (#12, #16, #35, #44):
-  //    Flys out in a randomized parabolic/elliptical boomerang curve and returns to player's hand!
-  if (w.style === "orbit") {
+  // 2. RETURNING BOOMERANG SMART-DISCS & DRONES (#12 Prior Stones, #16 Drones, #29 Yautja Smart-Disc):
+  if ([12, 16, 29].includes(w.id)) {
     if (typeof sfxWeapon === "function") sfxWeapon("orbit", w.id, false);
     const discCnt = Math.min(4, count);
     for (let k = 0; k < discCnt; k++) {
       const launchAng = aimAng + (k - (discCnt - 1) / 2) * 0.35 + (Math.random() - 0.5) * 0.22;
       const curveSign = ((k & 1) ? 1 : -1) * (0.42 + Math.random() * 0.25);
-      // Style 8 = Parabolic Returning Boomerang Disc (pVX = baseAngle, pVY = curveSign, pLife = flight progress)
-      spawnProj(player.x, player.y, launchAng, curveSign, baseDmg * 1.4, 1.35, 13 * player.area, 99, 8, sup, 0, w.id);
+      spawnProj(player.x, player.y, launchAng, curveSign, baseDmg * 1.45, 1.35, 13 * player.area, 99, 8, sup, 0, w.id);
+    }
+    return;
+  }
+
+  // 3. SERVO-SKULLS (#35): Orbit player and fire targeted las-bolts at enemies!
+  if (w.id === 35) {
+    if (typeof sfxWeapon === "function") sfxWeapon("beam", 35, false);
+    for (let k = 0; k < count; k++) {
+      const skullAng = (runTime * 2.5) + (k * Math.PI * 2) / count;
+      const sx = player.x + Math.cos(skullAng) * 20, sy = player.y + Math.sin(skullAng) * 20;
+      const fa = aimAng + (k - (count - 1) / 2) * 0.08;
+      spawnProj(sx, sy, Math.cos(fa) * 440, Math.sin(fa) * 440, baseDmg * 1.15, 0.72, 6, 3 + player.pierce, 4, sup, 0, 35);
     }
     return;
   }
 
   if (typeof sfxWeapon === "function") sfxWeapon(w.style, w.id, false);
 
-  // 3. BESPOKE RANGED GUN BALLISTICS ACROSS ALL 56 HEROES
+  // 4. SPECIFIC OVERHAULED WEAPONS (Previously misclassified as generic "nova" or "orbit" in CHAR_RAW)
+  if (w.id === 4) {
+    // #04 R2-Chirp Astro-Droid: Short-range Electro-Prod arc zap + oil spark
+    for (let k = 0; k < count; k++) {
+      const a = aimAng + (k - (count - 1) / 2) * 0.25;
+      spawnProj(player.x, player.y, Math.cos(a) * 290, Math.sin(a) * 290, baseDmg * 1.2, 0.45, 10 * player.area, 3, 5, sup, 0, 4);
+    }
+    return;
+  }
+  if (w.id === 7) {
+    // #07 Anupas Eye of Ra Solar Staff: Searing golden solar plasma lances
+    for (let k = 0; k < count; k++) {
+      const a = aimAng + (k - (count - 1) / 2) * 0.12;
+      spawnProj(player.x, player.y, Math.cos(a) * 450, Math.sin(a) * 450, baseDmg * 1.35, 0.8, 9 * player.area, 4 + player.pierce, 4, 1, 0, 7);
+    }
+    return;
+  }
+  if (w.id === 25) {
+    // #25 Viper Starbuck-Ace KEW Flak Magnum: Explosive fragmentation flak shells!
+    for (let k = 0; k < count; k++) {
+      const a = aimAng + (k - (count - 1) / 2) * 0.16;
+      spawnProj(player.x, player.y, Math.cos(a) * 340, Math.sin(a) * 340, baseDmg * 1.25, 0.9, 10 * player.area, 0, 2, sup, 0, 25);
+    }
+    return;
+  }
+  if (w.id === 27) {
+    // #27 Spectre Biotic Vanguard: M-8 Avenger 3-round burst + Biotic Warp Orb
+    for (let b = 0; b < 3; b++) {
+      const a = aimAng + (b - 1) * 0.05;
+      spawnProj(player.x, player.y, Math.cos(a) * 460, Math.sin(a) * 460, baseDmg * 0.6, 0.7, 5, 2 + player.pierce, 4, sup, 0, 27);
+    }
+    if (w.lvl >= 3 || sup) {
+      spawnProj(player.x, player.y, Math.cos(aimAng) * 240, Math.sin(aimAng) * 240, baseDmg * 1.3, 1.2, 12 * player.area, 0, 2, 1, 0, 27);
+    }
+    return;
+  }
+  if (w.id === 38) {
+    // #38 Warp Psyker Inquisitor: Purging Force-Staff warp-fire bolts
+    const bolts = count + 1;
+    for (let k = 0; k < bolts; k++) {
+      const a = aimAng + (k - (bolts - 1) / 2) * 0.18;
+      spawnProj(player.x, player.y, Math.cos(a) * 360, Math.sin(a) * 360, baseDmg * 1.15, 0.75, 9 * player.area, 3 + player.pierce, 5, sup, 0, 38);
+    }
+    return;
+  }
+  if (w.id === 39) {
+    // #39 Zion Bullet-Time One (Neo): Dual Micro-Uzi high-rate bullet stream + close telekinetic repulse
+    const bullets = count + 3;
+    for (let k = 0; k < bullets; k++) {
+      const side = (k & 1) ? 5 : -5;
+      const a = aimAng + (Math.random() - 0.5) * 0.16;
+      const spd = (440 + (k % 3) * 25) * player.projSpd;
+      spawnProj(player.x - Math.sin(aimAng) * side, player.y + Math.cos(aimAng) * side, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.65, 0.65, 4.5, 2 + player.pierce, 3, sup, 0, 39);
+    }
+    if (best < 75) executeForceKineticPush(player.x, player.y, aimAng, w.lvl, baseDmg * 0.4);
+    return;
+  }
+  if (w.id === 43) {
+    // #43 Vault-Tec Wanderer: AER9 Laser Rifle beams + occasional Bottlecap Proximity Mine
+    for (let k = 0; k < count; k++) {
+      const a = aimAng + (k - (count - 1) / 2) * 0.09;
+      spawnProj(player.x, player.y, Math.cos(a) * 490, Math.sin(a) * 490, baseDmg * 1.25, 0.75, 6, 4 + player.pierce, 4, sup, 0, 43);
+    }
+    if (typeof activeMines !== "undefined" && activeMines.length < 10 && Math.random() < 0.28) {
+      activeMines.push({ x: player.x - Math.cos(aimAng) * 14, y: player.y - Math.sin(aimAng) * 14, rad: 12, dmg: baseDmg * 2.2 });
+    }
+    return;
+  }
+  if (w.id === 44) {
+    // #44 V8 Chrome Interceptor: Sawed-Off Double-Barrel wide buckshot blast!
+    const pellets = count + 4;
+    for (let k = 0; k < pellets; k++) {
+      const a = aimAng + (k - (pellets - 1) / 2) * 0.17 + (Math.random() - 0.5) * 0.05;
+      const spd = (310 + Math.random() * 45) * player.projSpd;
+      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.95, 0.42 * player.dur, 7 * player.area, player.pierce + 1, 3, sup, 0, 44);
+    }
+    return;
+  }
   if (w.id === 52 || w.id === 13) {
-    // High-Velocity Revolver Slug: Instantaneous muzzle velocity + high crit punch
     const spd = 540 * player.projSpd, spread = (Math.random() - 0.5) * (0.05 + eyeJitter * 0.4);
     spawnProj(player.x, player.y, Math.cos(aimAng + spread) * spd, Math.sin(aimAng + spread) * spd, baseDmg * 2.2, 0.75 * player.dur, 4.5, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, w.id);
     return;
   }
-
   if (w.id === 54) {
-    // Boba Fett ESB EE-3 Carbine: Signature 3-round burst fire!
+    // #54 Boba Fett ESB EE-3 Carbine 3-round burst
     for (let b = 0; b < 3; b++) {
-      const a = aimAng + (b - 1) * 0.045;
-      const spd = (450 - b * 18) * player.projSpd;
+      const a = aimAng + (b - 1) * 0.045, spd = (450 - b * 18) * player.projSpd;
       spawnProj(player.x + Math.cos(a) * (10 + b * 6), player.y + Math.sin(a) * (10 + b * 6), Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.65, 0.72 * player.dur, 5, 2 + player.pierce, 4, sup, 0, 54);
     }
     return;
   }
 
+  // 5. STANDARD ARCHETYPE BALLISTICS (Missile, Cone/Shotgun/MG, Beam, Chain, Sonic Wave)
   if (w.style === "missile") {
     for (let k = 0; k < count; k++) {
       const a = aimAng + (k - (count - 1) / 2) * 0.26, spd = 235 * player.projSpd;
       spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 1.6 * player.dur, 9 * player.area, player.pierce, 2, sup, 0, w.id);
     }
   } else if (w.style === "cone") {
-    // Shotguns (#33, #44), Bowcaster (#05), Scatter Blasters (#02, #31) & Heavy M60/Shoota (#37, #53)
     const isHeavyMG = [37, 53].includes(w.id);
     const pellets = isHeavyMG ? (count + 1) : (count + 3);
     const spreadStep = isHeavyMG ? 0.08 : 0.15;
@@ -472,11 +559,12 @@ function fireWeapon(w) {
       spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 0.9 * player.dur, 10 * player.area, 2 + player.pierce + (sup ? 4 : 0), 5, sup, 0, w.id);
     }
   } else {
-    // Nova / Telekinetic / Sonic Emitters (#04, #07, #18, #27, #38, #39, #43, #46): Directional-to-360 Kinetic Wave!
-    executeForceKineticPush(player.x, player.y, aimAng, w.lvl, baseDmg * 0.75);
+    // #46 Gallifrey Sonic Emitter & Telekinetic Wave Weapons
+    executeForceKineticPush(player.x, player.y, aimAng, w.lvl, baseDmg * 0.8);
   }
 }
 
+/* === 6. ALL 56 HERO UTILITIES & AUTONOMOUS SIGNATURE HARDWARE === */
 function triggerUtility(uIdx) {
   if (!player || !player.utils[uIdx]) return;
   const u = player.utils[uIdx]; if (u.cd > 0) return; u.cd = u.cdMax * player.utilCdrMul;
@@ -484,11 +572,19 @@ function triggerUtility(uIdx) {
   if (u.type === "buildFort") {
     deployLastStandFort(player.x, player.y);
   } else if (u.type === "quadSpin") {
-    // v6.0 Realistic 360° Physical Prequel Moulinet / Buzzsaw Spin (Zero fake projectile arcs!)
-    player.whirlwindTimer = 1.15;
-    player.swordSwingTimer = 1.15;
-    player.armReach = 6.0;
-    if (typeof sfxWeapon === "function") sfxWeapon("orbit", player.cid, true);
+    if (player.cid === 55) {
+      // #55 General Kaleesh 4-Arm Cyborg Moulinet Buzzsaw
+      player.whirlwindTimer = 1.0;
+      player.swordSwingTimer = 1.0;
+      player.armReach = 6.0;
+      if (typeof sfxWeapon === "function") sfxWeapon("orbit", 55, true);
+    } else if (typeof launchThrownBladeImpale === "function") {
+      // 4-Stage Thrown Lightsaber / Blade Impale -> Fall to Knees -> Force-Pull Wiggle -> Rip-Back & Collapse!
+      const out = typeof getOutfit === "function" ? getOutfit(player.cid) : { blade: 0 };
+      const pal = typeof getHeroOutfits === "function" ? getHeroOutfits(player.cid) : null;
+      const gCol = (pal && pal.blade && pal.blade[out.blade || 0]) ? pal.blade[out.blade || 0][1] : (player.fac ? player.fac.c1 : "#00f0ff");
+      launchThrownBladeImpale(player.weapons[0], gCol);
+    }
     spawnSpeech(player.x, player.y, u.name.toUpperCase() + "!", "#00f0ff", 1.3);
   } else if (u.type === "grappleHook") {
     let best = -1, bestHP = -1;
@@ -534,7 +630,7 @@ function triggerUtility(uIdx) {
         const execDmg = eType[i] >= 98 ? Math.max(280 * player.might, eMax[i] * 0.38) : eHP[i] + 50;
         eHP[i] -= execDmg;
         spawnDmg(eX[i], eY[i], execDmg, true);
-        if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, true);
+        if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, true, pushA + 0.5, player.fac ? player.fac.c1 : "#00f0ff");
       }
     }
     spawnSpeech(player.x, player.y, u.name.toUpperCase() + "!", "#ffd166", 1.5);
@@ -560,11 +656,9 @@ function triggerUtility(uIdx) {
     spawnSpeech(player.x, player.y, "FOUR-ARM CYBORG OVERCLOCK!", "#00e676", 2.0);
     sfx(280, 960, 0.24, "sawtooth");
   } else {
-    // factionPulse (Force Repulse, Biotic Nova, Sonic Overdrive, Grav-Punt):
-    // Scales from forward directional push at low levels up to full 360° circle at Lv.10!
     const pushLvl = Math.max(player.sigGearLvl || 1, player.weapons[0] ? player.weapons[0].lvl : 1);
-    executeForceKineticPush(player.x, player.y, player.aim, pushLvl, 38 * player.might);
-    spawnSpeech(player.x, player.y, u.name.toUpperCase() + "!", "#00e5ff", 1.3);
+    executeForceKineticPush(player.x, player.y, player.aim, pushLvl, 34 * player.might);
+    spawnSpeech(player.x, player.y, `${u.name.toUpperCase()} (Lv.${pushLvl})!`, "#00e5ff", 1.3);
   }
   updateHUD();
 }
@@ -613,7 +707,6 @@ function updateHeroSpecials(simDt) {
     }
   }
 
-  // Autonomous Secondary Signature Hardware (Force Push for #00 scales with sigGearLvl!)
   const sig = HERO_SIG_GEAR[player.cid] || HERO_SIG_GEAR[0];
   player.sigGearCD -= simDt;
   if (player.sigGearCD <= 0) {
@@ -628,9 +721,11 @@ function updateHeroSpecials(simDt) {
       const ma = Math.atan2(eY[best] - player.y, eX[best] - player.x);
       const st = sig[3], sLvl = player.sigGearLvl || 1;
       const dmg = 110 * sig[4] * (1 + (sLvl - 1) * 0.2) * player.might;
-      if (st === 6 || st === 7) {
-        // Directional-to-360 Force Push / Kinetic Wave!
+      if (st === 6) {
         executeForceKineticPush(player.x, player.y, ma, sLvl, 26 * sig[4] * player.might);
+      } else if (st === 8) {
+        spawnProj(player.x, player.y, ma, 0.5, dmg, 1.35, 14 * player.area, 99, 8, 1, 0, player.cid);
+        sfx(540, 220, 0.09, "sawtooth", 0.2);
       } else {
         spawnProj(player.x, player.y - 10, Math.cos(ma) * 320, Math.sin(ma) * 320, dmg, 1.5, 12 * player.area, 3, st, 1, 0, player.cid);
         sfx(540, 220, 0.09, "sawtooth", 0.2);

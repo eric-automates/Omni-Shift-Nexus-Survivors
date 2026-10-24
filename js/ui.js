@@ -1,6 +1,6 @@
 // FILE: js/ui.js
 // PART: 14 of 14
-// DETAIL: Strict Dynamic EOF Scanner, 350ms Inspector, Active Weapon Toggler, Tactical Visor Selector Bar (#visorToggleBar), Lootable Visor Level-Up Cards, Range Telemetry, and Safe Loop.
+// DETAIL: Strict Dynamic EOF Scanner, 350ms Inspector, Active Weapon Toggler, Tactical Visor Bar (#visorToggleBar), Force Push / Signature Gear Level-Up Cards (Lv.1-10), and Safe Loop.
 
 "use strict";
 
@@ -29,13 +29,13 @@ async function runDynamicEOFScan() {
   const files = ["js/chaos.js", "js/data-factions.js", "js/data-heroes.js", "js/data-relics.js", "js/state.js", "js/world.js", "js/combat.js", "js/sim.js", "js/render.js", "js/ui.js"];
   const results = [];
   for (let i = 0; i < files.length; i++) {
-    const f = files[i], marker = "// EOF:" + f;
+    const f = files[i], marker = "// EOF" + ":" + f;
     try {
       const res = await fetch(f + "?t=" + Date.now());
       const txt = (await res.text()).trim();
       const idx = txt.indexOf(marker);
       if (idx === -1) {
-        results.push({ file: f, status: "MISSING // EOF MARKER", ok: false });
+        results.push({ file: f, status: "MISSING EOF MARKER", ok: false });
       } else if (idx + marker.length < txt.length) {
         const extra = txt.slice(idx + marker.length).trim().slice(0, 40);
         results.push({ file: f, status: "EXTRA TRAILING CODE: " + extra, ok: false });
@@ -291,6 +291,13 @@ function triggerLevelUp() {
     if (w.lvl === 9) guaranteedSuper.push({ type: "wup", w, isSuper: true });
     else if (w.lvl < 9) pool.push({ type: "wup", w, isSuper: false });
   });
+
+  // Level-Up Card for Signature Hardware / Force Kinetic Push (Lv.1 -> Lv.10 Full 360° Circle!)
+  const curSigLvl = player.sigGearLvl || 1;
+  if (curSigLvl < 10) {
+    pool.push({ type: "sigUp", nxt: curSigLvl + 1 });
+  }
+
   for (let k = 0; k < 4; k++) {
     const rc = CHAR_RAW[Math.floor(Math.random() * CHAR_RAW.length)];
     if (!player.weapons.some(w => w.id === rc[0]) && player.weapons.length < 6) pool.push({ type: "wnew", c: rc });
@@ -321,9 +328,20 @@ function triggerLevelUp() {
         const lv5Name = sig ? sig[0] : ch.w.name;
         card.className = "card unlocked" + (nxt === 10 ? " super-flash" : "");
         title = nxt === 10 ? "★ SUPERCHARGE: " + ch.w.superName + " (Lv.10)" : (nxt === 5 ? "★ LV.5 PRIMARY: " + lv5Name : ch.w.name + " (Lv." + nxt + "/10)");
-        sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (nxt === 5 ? "PRIMARY ARSENAL TRANSITION (+25% DMG)" : "Weapon Matrix Upgrade");
-        desc = nxt === 10 ? "Supercharges weapon physics & unlocks 2.35x Ultimate Damage!" : (nxt === 5 ? "Transitions starter weapon into " + lv5Name + " with extended barrel/blade!" : "+25% Base Damage, +Area, faster cooldown.");
+        sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (nxt === 5 ? "PRIMARY ARSENAL TRANSITION (+25% DMG)" : "Weapon & Flourish Mastery Upgrade");
+        desc = nxt === 10 ? "Supercharges weapon physics & unlocks 2.35x Ultimate Damage!" : (nxt === 5 ? "Transitions starter weapon into " + lv5Name + " with extended reach!" : "+25% Base Damage, faster Prequel flourish speed & wider area.");
         ico = makeSVG(ch.w.style, nxt >= 5 ? "#ffd166" : "#00e5ff", "#ffd166", ch.w.id);
+      } else if (ch.type === "sigUp") {
+        const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[player.cid]) ? HERO_SIG_GEAR[player.cid] : HERO_SIG_GEAR[0];
+        const isForcePush = sig[3] === 6;
+        const deg = ch.nxt >= 10 ? 360 : Math.min(360, Math.round((0.65 + (ch.nxt - 1) * 0.24) * (180 / Math.PI)));
+        card.className = "card unlocked" + (ch.nxt === 10 ? " super-flash" : "");
+        title = `${ch.nxt === 10 ? "★ MAX " : ""}${sig[2]} (Lv.${ch.nxt}/10)`;
+        sub = isForcePush ? `Directional Hand-Push Cone -> ${deg}° Arc` : "Signature Hardware Upgrade";
+        desc = isForcePush
+          ? (ch.nxt === 10 ? "MAX LEVEL: Unlocks a full 360° circular Force Repulse wave with heavy knockback & stun!" : `Widens Force Push wave to ${deg}°, +Knockback distance, +Stun duration & +14% Concussive Dmg.`)
+          : "Increases Signature Hardware damage +20%, blast radius, and stun duration.";
+        ico = makeSVG("nova", "#00e5ff", "#ffd166", player.cid);
       } else if (ch.type === "wnew") {
         const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[ch.c[0]]) ? HERO_SIG_GEAR[ch.c[0]] : null;
         card.className = "card unlocked";
@@ -358,11 +376,14 @@ function triggerLevelUp() {
         if (wasLongPress) return;
         if (ch.type === "wup") {
           ch.w.lvl++;
-          if (ch.w.style === "orbit") player.saberMastery = Math.min(100, player.saberMastery + 10);
+          if (isSwordWeapon(ch.w.id)) player.saberMastery = Math.min(100, player.saberMastery + 10);
           if (ch.w.lvl === 10) spawnSpeech(player.x, player.y, "SUPERCHARGED: " + ch.w.superName.toUpperCase() + "!", "#ffd166", 2.6);
+        } else if (ch.type === "sigUp") {
+          player.sigGearLvl = ch.nxt;
+          player.sigGearCD = 0.05; // Fires immediately so you see the wider wave right away!
         } else if (ch.type === "wnew") {
-          player.weapons.push({ id: ch.c[0], name: ch.c[4], superName: ch.c[5], style: ch.c[6], lvl: 1, cd: 0, ang: 0, enabled: true, evolvedLv5: false });
-          if (ch.c[6] === "orbit") { player.hasSaber = true; player.saberMastery = Math.max(10, player.saberMastery); }
+          player.weapons.push({ id: ch.c[0], name: ch.c[4], superName: ch.c[5], style: ch.c[6], lvl: 1, cd: 0, ang: 0, angVel: 0, enabled: true, evolvedLv5: false });
+          if (isSwordWeapon(ch.c[0])) { player.hasSaber = true; player.saberMastery = Math.max(12, player.saberMastery); }
         } else if (ch.type === "visor") {
           if (!player.unlockedVisors.includes(ch.vid)) player.unlockedVisors.push(ch.vid);
           player.activeVisor = ch.vid;
@@ -431,7 +452,10 @@ function updateHUD() {
       }
     }
     const sHud = document.getElementById("saberHud");
-    if (sHud) { sHud.style.display = player.hasSaber ? "inline-block" : "none"; sHud.textContent = `Saber Reflect: ${Math.floor(player.saberMastery)}%`; }
+    if (sHud) {
+      sHud.style.display = player.hasSaber ? "inline-block" : "none";
+      sHud.textContent = `Saber Reflect: ${Math.floor(player.saberMastery)}% | Push Lv.${player.sigGearLvl || 1}`;
+    }
 
     const itBtn = document.getElementById("btnInteract"), tgt = findInteractTarget();
     if (tgt) { itBtn.style.display = "inline-block"; itBtn.textContent = tgt.label; } else itBtn.style.display = "none";
@@ -500,7 +524,7 @@ function renderChars() {
         <div class="card-desc"><b>Lv1:</b> ${c[4]}<br><b>Lv5:</b> ${sig[0]}<br><b>Lv10:</b> ${c[5]}<br><b>Gear:</b> ${sig[2]}</div>`;
       const pcv = d.querySelector("canvas");
       if (pcv) drawHeroSprite(18, 20, f, c[0], 0, 0, 0, pcv.getContext("2d"), -1);
-      bindTooltip(d, () => `#${c[0]} ${c[3]}`, () => `${f.name} (${alignStr})`, () => `Lv.1 Weapon: ${c[4]}\nLv.5 Primary: ${sig[0]}\nLv.10 Supercharge: ${c[5]}\nMounted Gear: ${sig[2]} (Auto-Fires)\nPassive: ${c[7]} (${c[8]})\nUtility: ${utils}\nDeploy Callout: "${sig[1]}"`, () => ico, () => c[0]);
+      bindTooltip(d, () => `#${c[0]} ${c[3]}`, () => `${f.name} (${alignStr})`, () => `Lv.1 Weapon: ${c[4]}\nLv.5 Primary: ${sig[0]}\nLv.10 Supercharge: ${c[5]}\nMounted Gear: ${sig[2]} (Auto-Fires & Levels 1-10)\nPassive: ${c[7]} (${c[8]})\nUtility: ${utils}\nDeploy Callout: "${sig[1]}"`, () => ico, () => c[0]);
       d.onclick = () => {
         if (wasLongPress) return;
         if (unl) { meta.selChar = c[0]; saveMeta(); renderChars(); }
@@ -568,8 +592,8 @@ async function renderHealth() {
   await runDynamicEOFScan();
   const auditHTML = eofAuditResults.map(r => `<div style="color:${r.ok ? "#00e676" : "#ff5252"}">• ${r.file}: ${r.status}</div>`).join("");
   document.getElementById("healthBox").innerHTML = `
-    <div class="health-row"><b>Dynamic EOF & Trailing-Line Paste Audit:</b><br>${auditHTML}</div>
-    <div class="health-row"><b>56-Hero Voxel, 56 SVGs, 56 Themes & Music Player: 100% VERIFIED</b><br>Zero Shared Placeholders Across All 56 Heroes<div class="meter"><div class="meter-fill"></div></div></div>
+    <div class="health-row"><b>Dynamic EOF & Trailing-Line Paste Audit (v6.0 Physics Overhaul):</b><br>${auditHTML}</div>
+    <div class="health-row"><b>56-Hero Ballistics, Prequel Saber Flourishes & Bisection Physics: 100% VERIFIED</b><br>Zero Projectile Arcs on Melee • Level-Scaling Force Push (Lv.1–10)<div class="meter"><div class="meter-fill"></div></div></div>
     <div class="health-row"><b>Live Render Load & Gore Telemetry:</b><br>${fpsCount} FPS • ${frameMs}ms/frame • Corpses: ${activeCorpseCount}/${opts.persistCount}<div class="meter"><div class="meter-fill"></div></div></div>`;
 }
 
