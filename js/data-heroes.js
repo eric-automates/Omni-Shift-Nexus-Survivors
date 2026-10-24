@@ -1,10 +1,10 @@
-// FILE: js/data-heroes.js (PART 1 OF 3)
+// FILE: js/data-heroes.js
 // PART: 7 of 14
-// DETAIL: All 56 Heroes (#00-#55), 56 Bespoke Canon Outfit Palettes, 56 2-Button Utility Kits, and 56 3-Line Quotes.
+// DETAIL: v7.0 Arcane Sanctum Overhaul — All 76 Multiverse Heroes (#00-#75), 11 Genre Starters (0 DM), 76 Canon Outfit Palettes, 76 2-Button Utility Kits, and 76 3-Line Quotes.
 
 "use strict";
 
-/* === 1. 56 MULTIVERSE HEROES (#00-#55) === */
+/* === 1. 76 MULTIVERSE HEROES (#00-#75) === */
 const CHAR_RAW = [
   [0, 0, 0, "Aether-Blade Initiate", "Cyan Plasma Saber", "Twin-Sun Saber Mastery", "orbit", "Force Reflex", "+15% Speed, Saber Lunge/Reflect & 100% Force Vacuum"],
   [1, 0, 3, "Beskar Creed Tracker", "Whistling Micro-Darts", "Darksaber Phoenix Salvo", "missile", "Beskar Plating", "+4 Flat Armor & -20% Damage Taken"],
@@ -14,21 +14,21 @@ const CHAR_RAW = [
   [5, 0, 5, "Kashyyyk Bow-Roarer", "Quarrel Laser-Bowcaster", "Thermal Detonator Volley", "cone", "Wookiee Rage", "+30% Max HP & +20% Weapon Area"],
   [6, 0, 5, "Corellian Kessel Runner", "Heavy DL-44 Blaster", "Freighter Orbital Strafe", "beam", "Shoots First", "+30% Crit Chance & +25% XP/DM Greed"],
   [7, 1, 12, "Anupas Jackal-Gold", "Eye of Ra Solar Staff", "Dakara Ascended Wave", "nova", "Half-Ascended Divinity", "100% Telekinetic Vacuum, +25% Dmg & Revive"],
-  [8, 1, 4, "Chevron-1 Tac-Colonel", "FN-P90 Tactical Burst", "Stargate Kawoosh Vortex", "beam", "C4 Improviser", "+25% Projectile Speed & -12% Cooldown"],
+  [8, 1, 0, "Chevron-1 Tac-Colonel", "FN-P90 Tactical Burst", "Stargate Kawoosh Vortex", "beam", "C4 Improviser", "+25% Projectile Speed & -12% Cooldown"],
   [9, 1, 5, "Serpent-Guard Prime", "Ma'Tok Plasma Staff", "Twin Staff & Zat Disintegrator", "missile", "Symbiote Regen", "+2.0 HP/s Regen & +20% Max HP"],
   [10, 1, 9, "Othala Grey Sage", "Asgard Ion Beam", "O'Neill Orbital Pillar", "beam", "Beaming Phase", "100% Beaming Vacuum, +1 Relic & Phase Dodge"],
   [11, 1, 8, "Pegasus Hive Matron", "Wraith Bio-Stunner", "Culling Dart Squadron", "chain", "Life-Force Drain", "Heals 3 HP every 10 kills & slows foes"],
   [12, 1, 10, "Hallowed Origin Prior", "Levitating Sacred Stones", "Supergate Inferno Nova", "orbit", "Hallowed Zeal", "100% Telekinetic Vacuum, +35% Area & +25% Dur"],
-  [13, 2, 4, "Browncoat Captain", "Moses Brothers Brass Pistol", "Crazy-Ivan Full Burn", "cone", "Aim to Misbehave", "+20% Speed & +35% Damage below 50% HP"],
+  [13, 2, 0, "Browncoat Captain", "Moses Brothers Brass Pistol", "Crazy-Ivan Full Burn", "cone", "Aim to Misbehave", "+20% Speed & +35% Damage below 50% HP"],
   [14, 2, 9, "Miranda Psychic Dancer", "Twin River Axes & Sabers", "Precog Blade Dance", "orbit", "Hands of Blue Evasion", "100% Psychic Vacuum, +30% Dodge & +25% Crit"],
   [15, 2, 5, "Canton Heavy Merc", "Vera Callahan Full-Bore", "Airlock Sonic Shell", "beam", "Hero of Canton", "+30% Might & +3 Armor"],
   [16, 2, 4, "Soaring Leaf Pilot", "Orbiting Thruster Drones", "Shuttle Gun-Pod Drift", "orbit", "Leaf on the Wind", "+35% Move Speed & Hazard Resistance"],
   [17, 2, 7, "Reaver Blood-Harpooner", "Tethered Harpoon Rip-Saw", "Reactor Meltdown Saws", "chain", "Core-Radiation Frenzy", "Up to +60% Fire Rate as HP drops"],
   [18, 3, 10, "Muad'Dib Sand-Prophet", "Crysknife Weirding Lunge", "Shai-Hulud Maker Eruption", "nova", "Prescience", "100% Voice Vacuum, +25% Dodge & +30% Magnet"],
-  [19, 3, 6, "Sardaukar Executioner", "Holtzman Slow-Blade", "Subatomic Shield Lasgun", "beam", "Salusa Conditioning", "+30% Crit Damage & +2 Pierce"],
+  [19, 3, 0, "Sardaukar Executioner", "Holtzman Slow-Blade", "Subatomic Shield Lasgun", "beam", "Salusa Conditioning", "+30% Crit Damage & +2 Pierce"],
   [20, 3, 8, "Bene-Voice Matron", "The Voice Pitch Cone", "Kwisatz Mind-Crush", "cone", "Litany Against Fear", "100% Voice Vacuum, Hazard Immune & -15% CD"],
   [21, 3, 7, "Harkonnen Hover-Baron", "Hunter-Seeker Needle", "Giedi Artillery Rain", "missile", "Suspensor Levitation", "Flies over Rocks/Hazards & +40% Greed"],
-  [22, 4, 3, "Red-Shirt Commander", "Type-II Phaser Pistol", "Quantum Torpedo Array", "beam", "Plot-Armor Shield", "Survives lethal damage with 1 Revival"],
+  [22, 4, 0, "Red-Shirt Commander", "Type-II Phaser Pistol", "Quantum Torpedo Array", "beam", "Plot-Armor Shield", "Survives lethal damage with 1 Revival"],
   [23, 4, 9, "Hive-Cube Assimilator", "Nanoprobe Assimilation Whip", "Tactical Cube Trench Beam", "chain", "Adaptive Shielding", "Taking damage grants +5 Armor for 5s"],
   [24, 4, 5, "Qo'noS Bat'leth Guard", "Crescent Bat'leth Cleave", "Bird-of-Prey Decloak", "orbit", "Sto-Vo-Kor Bloodlust", "+1% Damage per 15 kills (up to +100%)"],
   [25, 4, 5, "Viper Starbuck-Ace", "KEW Flak Magnum", "Battlestar Nuke Salvo", "nova", "Combat Thrusters", "+25% Move Speed & +1 Extra Projectile"],
@@ -37,52 +37,69 @@ const CHAR_RAW = [
   [28, 5, 5, "Sulaco Smart-Gunner", "M56 Auto-Smartgun", "Sentry & Napalm Ring", "missile", "Motion Tracker Ping", "+35% Crit Chance & +20% Fire Rate"],
   [29, 5, 10, "Yautja Trophy Hunter", "Autonomous Smart-Discs", "Wrist-Bracer Grid Nova", "orbit", "Active Camo Cloak", "+25% Dodge & +40% Crit Damage"],
   [30, 5, 9, "Acid-Blood Xeno-Queen", "Inner-Jaw & Tail Whip", "Royal Broodling Swarm", "cone", "Pressurized Acid Blood", "Enemies touching you take 80 Thorns Dmg"],
-  [31, 5, 4, "Klendathu Drop-Trooper", "Morita MK1 Split-Rifle", "Tactical Mini-Nuke", "cone", "Live Forever", "+20% Fire Rate & +25% Area"],
+  [31, 5, 0, "Klendathu Drop-Trooper", "Morita MK1 Split-Rifle", "Tactical Mini-Nuke", "cone", "Live Forever", "+20% Fire Rate & +25% Area"],
   [32, 5, 8, "Mjolnir Spartan-117", "MA5B & Type-1 Energy Sword", "Spartan Laser & Sword", "beam", "Mjolnir Energy Shield", "+2.5 HP/s Regen & +30% Area"],
   [33, 5, 12, "Praetor Crucible Slayer", "Lucifer Super Shotgun", "BFG-10000 Tendril Orb", "chain", "Rip & Tear Glory-Heal", "Kills within 90px heal 1.5 HP"],
-  [34, 6, 7, "Astartes Chainsword", "Godwyn Bolter & Chainsword", "Exterminatus Lance", "cone", "Know No Fear", "+6 Flat Armor & +20% Might"],
+  [34, 6, 0, "Astartes Chainsword", "Godwyn Bolter & Chainsword", "Exterminatus Lance", "cone", "Know No Fear", "+6 Flat Armor & +20% Might"],
   [35, 6, 8, "Omnissiah Tech-Magos", "Floating Servo-Skulls", "Noospheric Arc Hexagon", "orbit", "Machine Spirit Canticle", "+2 Projectiles, +1 Relic Slot & +25% Magnet"],
   [36, 6, 10, "Tomb-World Gauss Necron", "Emerald Gauss Flayer", "C'tan Tesseract Vault", "beam", "Reanimation Protocol", "+2.5 HP/s Regen & +1 Revival"],
   [37, 6, 6, "Waaagh Dakka Warboss", "Twin Belt-Fed Big-Shoota", "Rokkit & Squig Storm", "cone", "More Dakka!", "+2 Extra Projectiles & +20% Move Speed"],
   [38, 6, 8, "Warp Psyker Inquisitor", "Purging Force-Staff Flame", "Astronomican Sun Nova", "nova", "Emperor's Tarot", "100% Warp Vacuum, +25% Crit & +30% Crit Dmg"],
   [39, 7, 11, "Zion Bullet-Time One", "Dual Micro-Uzis & Telekinesis", "Source-Code Decompiler", "nova", "There Is No Spoon", "100% Telekinetic Vacuum, +35% Dodge & -20% CD"],
   [40, 7, 7, "T-800 Endo-Enforcer", "Westinghouse M-25 Plasma", "Time-Sphere Lightning", "beam", "Hyperalloy Titanium Arm", "+50% HP, +6 Armor; Guarding Head (HD) blocks 95% eye/head damage!"],
-  [41, 7, 6, "Neon Origami Runner", "LAPD 2019 PKD Blaster", "Spinner Railgun Sweep", "missile", "Voight-Kampff Lock", "+50% Damage vs Bosses & +20% Crit"],
+  [41, 7, 0, "Neon Origami Runner", "LAPD 2019 PKD Blaster", "Spinner Railgun Sweep", "missile", "Voight-Kampff Lock", "+50% Damage vs Bosses & +20% Crit"],
   [42, 7, 9, "Sandevistan Edgerunner", "Thermal Monowire Whip", "Cyberpsychosis Daemons", "chain", "Sandevistan Overdrive", "Bursts to 180% Speed & Rate every 6s"],
   [43, 7, 6, "Vault-Tec Wanderer", "AER9 Laser Rifle & Mine", "MIRV Fat-Man Catapult", "nova", "V.A.T.S. Crit Lock", "Guaranteed Crit pulses every 4s"],
   [44, 7, 5, "V8 Chrome Interceptor", "Sawed-Off Double-Barrel", "Doof-Wagon Fire Tornado", "orbit", "Witness Me! Nitro", "+35% Move Speed & +25% Area"],
-  [45, 8, 8, "Black-Mesa Physicist", "Zero-Point Gravity Gun", "Supercharged Gluon Beam", "beam", "HEV Morphine Suit", "100% Grav-Gun Vacuum, +5 Armor & Haz Immune"],
+  [45, 8, 0, "Black-Mesa Physicist", "Zero-Point Gravity Gun", "Supercharged Gluon Beam", "beam", "HEV Morphine Suit", "100% Grav-Gun Vacuum, +5 Armor & Haz Immune"],
   [46, 8, 10, "Gallifrey Sonic Traveler", "Mark-VII Sonic Emitter", "TARDIS Time Vortex", "nova", "Time-Lord Regeneration", "2 Revivals that boost all stats +20%"],
   [47, 8, 9, "Chozo Morph Hunter", "Chozo Power Arm-Cannon", "Power-Bomb Hyper-Beam", "cone", "Screw-Attack Thrusters", "+25% Speed & Contact Dash Damage"],
-  [48, 9, 7, "Silver-Sword Mutagen", "Aerondight Silver Longsword", "Quen-Yrden Storm", "orbit", "Trial of the Grasses", "+2 HP/s Regen & +25% Crit Chance"],
+  [48, 9, 0, "Silver-Sword Mutagen", "Aerondight Silver Longsword", "Quen-Yrden Storm", "orbit", "Trial of the Grasses", "+2 HP/s Regen & +25% Crit Chance"],
   [49, 9, 11, "R'lyeh Star Cultist", "Abyssal Eldritch Tome", "Great Cthulhu Singularity", "chain", "Non-Euclidean Madness", "100% Abyssal Vacuum, 35% Slow & +25% Area"],
   [50, 9, 15, "Kenshi-Moon Ronin", "Meitou Falling-Sun Nodachi", "Venge Orbital Beak-Storm", "orbit", "Toughness Conditioning", "Every hit taken grants +2 Max HP, +2% Might & bonus Toughness XP"],
   [51, 7, 14, "Baba Yaga Suit-Assassin", "Baba Yaga Backup Kimber", "Continental Dragon's Breath", "beam", "Bulletproof Kevlar Suit & CQC", "Lv.5 transitions to Primary Benelli/2011; Guarding Head/Torso blocks 95%!"],
   [52, 2, 14, "The Man With No Name", "Colt 1851 Navy Six-Shooter", "Deadeye Eight-Shooter", "cone", "High-Noon Deadeye", "Poncho gunslinger: blazing 6-shot right-hand bursts with lethal crit & 0.55s quick-reload"],
   [53, 5, 14, "Green-Beret Last-Stand Vet", "Belt-Fed M60 & Comp-Bow", "First Blood Firestorm", "cone", "Last-Stand Fortifier", "Staying within 180px for 120s (or Utility) deploys shoot-over Fort & Claymore mines"],
   [54, 0, 15, "Slav-1 Bounty Tracker", "Sawed-Stock EE-3 Carbine", "Disintegrations Authorized", "beam", "Mandalorian Arsenal", "ESB Jetpack Missile & Cape + Auto-Flamethrower (>=4 foes) + Grapple Hook"],
-  [55, 6, 16, "General Kaleesh Cyborg", "Quad-Saber Lunge & Blasters", "General's Grievous Wrath", "orbit", "Four-Armed General", "4-Armed Cyborg Warlord: fires 4 weapons simultaneously with built-in Saber Deflection!"]
+  [55, 6, 16, "General Kaleesh Cyborg", "Quad-Saber Lunge & Blasters", "General's Grievous Wrath", "orbit", "Four-Armed General", "4-Armed Cyborg Warlord: fires 4 weapons simultaneously with built-in Saber Deflection!"],
+  [56, 10, 0, "Scarred Boy-Wizard", "Holly Phoenix-Feather Wand", "Master of Death Hallows", "beam", "Chosen Boy-Who-Lived", "Unlocks cumulative spells on top bar (Stupefy, Leviosa, Expelliarmus, Stag Patronus) + 100% Vacuum!"],
+  [57, 10, 2, "Time-Turner Arithmancer", "Vine Dragon-Heartstring Wand", "Chronos Arithmancy Storm", "beam", "Brightest Witch of Her Age", "-20% Spell Cooldowns, Cumulative Spellbook Bar & Time-Turner Rewind"],
+  [58, 10, 3, "Red-Mane Pyro-Keeper", "Ash Wand & Wildfire Whiz-Bangs", "Weasley Dragon-Fire Barrage", "cone", "Wizard's Chess Tactician", "+25% Spell Area, Cumulative Spell Bar & Summons Allied Chess Knight"],
+  [59, 10, 3, "Spectrespec Moon-Seer", "Dirigible Plum Astral Wand", "Lovegood Hare Patronus", "chain", "Spectrespec Second Sight", "Innate Spectrespecs Visor (+10% Crit), 100% Vacuum & Levitation Float"],
+  [60, 10, 4, "Golden-Badger Champion", "Springy Ash Triwizard Wand", "Triwizard Cup Golden Flare", "beam", "Hufflepuff Loyalty", "+30% Max HP, +3 Armor & Transfigures Rocks into Allied Hounds"],
+  [61, 10, 4, "Pink-Umbrella Half-Giant", "Concealed Pink Umbrella & Bow", "Forbidden Forest Dragon-Roar", "cone", "Half-Giant Constitution", "+60% Max HP, +6 Armor, Spell Resistance & Summons Fang + Norbert Dragon"],
+  [62, 10, 5, "Silver-Serpent Prefect", "Hawthorn Unicorn-Hair Wand", "Room of Requirement Fiendfyre", "missile", "Pure-Blood Ambition", "+25% Crit Damage, +30% Greed & Conjures Serpensortia Vipers"],
+  [63, 10, 6, "Moony Full-Moon Professor", "Cypress Defense Wand", "Full-Moon Alpha Lycanthrope", "cone", "Marauder's Defense", "+2.5 HP/s Regen, +20% Speed & Periodic Werewolf Frenzy"],
+  [64, 10, 6, "Padfoot Azka-Fugitive", "Runed Azkaban Wand", "Grim Shadow-Pack Onslaught", "beam", "Animagus Grim Hound", "+25% Move Speed, +25% Crit & Summons Allied Grim Hounds"],
+  [65, 10, 7, "Mad-Eye Auror Veteran", "Thumping Auror Staff & Wand", "Constant Vigilance Barrage", "beam", "Magical Spinning Eye", "Innate 360° Magical Eye Visor (+10% Crit), +30% Boss Dmg & Staff Shockwaves"],
+  [66, 10, 8, "Emerald Animagus Deputy", "Fir Transfiguration Wand", "Piertotum Locomotor Legion", "beam", "Transfiguration Grandmaster", "Animates Allied Stone Armor Knights to fight for you & -18% Cooldowns"],
+  [67, 10, 9, "Half-Blood Potions Master", "Ebony Hex Wand", "Sectumsempra Invisible Laceration", "orbit", "Half-Blood Prince", "Sectumsempra wand-slashes sever limbs at range & open arterial bleeds"],
+  [68, 10, 10, "Azka-Born Cruciatus Witch", "Curved Walnut Wand & Dagger", "Lestrange Dark-Mark Tempest", "chain", "Cruciatus Sadism", "+35% Crit Chance, Returning Silver Dagger Impale & Crimson Stun Webs"],
+  [69, 10, 12, "Elder-Wand Headmaster", "The Elder Wand & Fawkes", "Parting Inferno & Fawkes Song", "nova", "Phoenix Rebirth & Mastery", "100% Arcane Vacuum, Cumulative Arch-Spells & +1 Fawkes Phoenix Revival"],
+  [70, 10, 14, "Nameless Dark Lord", "Yew Phoenix Wand & Nagini", "Avada Kedavra Killing Storm", "chain", "Seven Horcruxes", "Avada Kedavra green lightning vaporizes foes, +2 Horcrux Revivals & 100% Vacuum"],
+  [71, 10, 13, "Flame of Anor Istari", "Staff of Light & Glamdring", "White Rider Dawn Sunburst", "orbit", "Servant of the Secret Fire", "Wields Glamdring + Staff simultaneously (3 Hands) & 'You Shall Not Pass!' Barrier"],
+  [72, 10, 10, "White-Hand Voice Wizard", "Orthanc Obsidian Staff", "Caradhras Tempest & Ruin", "missile", "Voice of Saruman", "100% Telekinetic Vacuum, +30% Area & Stuns/Blasts Foes"],
+  [73, 10, 11, "Kamar-Taj Time Sorcerer", "Eldritch Mandala Whips", "Eye of Agamotto Time-Loop", "orbit", "Sorcerer Supreme", "100% Mystic Vacuum, Mirror Dimension Reflect & Time-Freeze"],
+  [74, 10, 12, "Sokovian Chaos Hex-Witch", "Chaos Probability Hex-Orbs", "Darkhold Reality Rewrite", "nova", "Chaos Magic Levitation", "100% Chaos Vacuum, Levitates & Floats Enemies Off-Screen for Instant XP"],
+  [75, 10, 15, "Book of the Dead Arch-Lich", "Flesh-Bound Grimoire", "Army of the Dead Necropolis", "chain", "Corpse-Raiser Grimoire", "Lv.1 Soul-Drain creates corpses; Lv.2-10 raises Swordsmen, Critters, Bowmen, Knights & Bone Golem from corpses!"]
 ];
 
-const FORCE_VACUUM_HEROES = [0, 3, 7, 10, 12, 14, 18, 20, 27, 38, 39, 45, 49];
+const FORCE_VACUUM_HEROES = [0, 3, 7, 10, 12, 14, 18, 20, 27, 38, 39, 45, 49, 56, 57, 59, 66, 67, 69, 70, 71, 72, 73, 74, 75];
 function hasInnateVacuum(cid) { return FORCE_VACUUM_HEROES.includes(cid); }
 
-const SWORD_HEROES = [0, 3, 14, 18, 19, 24, 32, 33, 34, 48, 50, 55];
+const SWORD_HEROES = [0, 3, 14, 18, 19, 24, 32, 33, 34, 48, 50, 55, 67, 71];
 function isSwordWeapon(wpnId) { return SWORD_HEROES.includes(wpnId); }
 
 function getHeroArmCap(cid) {
   if (cid === 55) return 4;
-  if ([0, 3, 7, 12, 38, 39].includes(cid)) return 3;
+  if ([0, 3, 7, 12, 38, 39, 56, 57, 66, 69, 70, 71, 73, 74, 75].includes(cid)) return 3;
   return 2;
 }
 
-// FILE: js/data-heroes.js (PART 2 OF 3)
-// DETAIL: All 56 Bespoke Canon Movie/Show Outfit Palettes (Head, Torso, Legs, Back, Blade) and All 56 Bespoke 2-Button Utility Kits.
-
-/* === 2. ALL 56 BESPOKE CANON CHARACTER OUTFIT PALETTES === */
+/* === 2. ALL 76 BESPOKE CANON CHARACTER OUTFIT PALETTES === */
 const BLADE_COLORS = [
-  ["Skywalker Cyan", "#00f0ff"], ["Consular Emerald", "#00e676"], ["Sith Crimson", "#ff1744"],
-  ["Windu Amethyst", "#d500f9"], ["Temple Gold", "#ffd166"], ["Darksaber Obsidian", "#212121"], ["Ahsoka White", "#ffffff"]
+  ["Skywalker Cyan", "#00f0ff"], ["Avada Emerald", "#00e676"], ["Expelliarmus Crimson", "#ff1744"],
+  ["Eldritch Amethyst", "#d500f9"], ["Lumos Gold", "#ffd166"], ["Darksaber Obsidian", "#212121"], ["Patronus Silver-White", "#ffffff"]
 ];
 
 const CANON_56 = [
@@ -141,7 +158,27 @@ const CANON_56 = [
   [["Brown Slouch Hat","#4e342e"],["Sun-Bleached Hat","#795548"],["Hatless Squint","#a1887f"],["Olive Drifter Poncho","#6d6546"],["Pale Rider Duster","#3e2723"],["Blue Vest (No Poncho)","#455a64"],["Dusty Denim Jeans","#37474f"],["Faded Frontier Chaps","#5d4037"],["Poncho Drape","#595238"],["No Cape (Vest Only)","none"]],
   [["Red Headband & Hair","#d50000"],["Jungle Camo Bandana","#2e4c2b"],["Night-Ops Black Band","#111111"],["Olive Drab Tank","#2e4c2b"],["Bare-Chested Scarred","#d7a98c"],["M65 Field Jacket","#4b6043"],["OD Green Cargo","#334d2b"],["Night-Ops Black","#181a1b"],["No Cape (Default)","none"],["Quiver & Bow Pack","#5d4037"]],
   [["ESB Weathered T-Visor","#3e6b48"],["ROTJ Fresh Paint","#2e5736"],["Prototype White Helm","#eceff1"],["ESB Durasteel Green","#3e6b48"],["ROTJ Red Gauntlet","#7f1d1d"],["Prototype White Armor","#cfd8dc"],["Flightsuit Gray","#78909c"],["Desert Tan Pouches","#a1887f"],["ESB Cape & Z-6 Jetpack","#5d5346"],["No Cape (Jetpack Only)","none"]],
-  [["Kaleesh Bone Mask","#eceff1"],["Crimson Warlord Helm","#b71c1c"],["Battle-Scarred Alloy","#90a4ae"],["Cyborg Rib-Plating","#cfd8dc"],["General Crimson Trim","#b71c1c"],["Obsidian Alloy","#263238"],["Talon Cyborg Greaves","#90a4ae"],["Heavy Plated Armor","#455a64"],["General's Flowing Cape","#8e1b1b"],["No Cape (Unbound 4-Arms)","none"]]
+  [["Kaleesh Bone Mask","#eceff1"],["Crimson Warlord Helm","#b71c1c"],["Battle-Scarred Alloy","#90a4ae"],["Cyborg Rib-Plating","#cfd8dc"],["General Crimson Trim","#b71c1c"],["Obsidian Alloy","#263238"],["Talon Cyborg Greaves","#90a4ae"],["Heavy Plated Armor","#455a64"],["General's Flowing Cape","#8e1b1b"],["No Cape (Unbound 4-Arms)","none"]],
+  [["Round Glasses & Scar","#141418"],["Quidditch Goggles","#b71c1c"],["Auror Messy Hair","#1b1e23"],["Gryffindor Robe & Tie","#7f1d1d"],["Scarlet Quidditch Jersey","#d32f2f"],["Invisibility Shimmer","#455a64"],["Charcoal School Trousers","#1c2024"],["Dragon-Hide Boots","#3e2723"],["Gryffindor Cloak","#181a1f"],["Firebolt Back-Mount","#6d4c41"]],
+  [["Bushy Brown Curls","#5d4037"],["Yule Ball Updo","#4e342e"],["Prefect Badge Hair","#3e2723"],["Gryffindor Sweater & Tie","#37474f"],["Pink Hoodie & Jacket","#ad1457"],["Ministry Coat","#263238"],["Pleated Skirt & Socks","#212121"],["Denim Jeans","#1565c0"],["Gryffindor Cloak","#181a1f"],["Beaded Handbag","#8e24aa"]],
+  [["Ginger Shag Hair","#e65100"],["Keeper Helmet","#b71c1c"],["Chudley Cap","#ff6d00"],["Maroon Knit Sweater","#6a1b1b"],["Weasley Twin Suit","#4a148c"],["Keeper Chestpad","#b71c1c"],["School Trousers","#263238"],["Pinstripe Pants","#311b92"],["Gryffindor Cloak","#181a1f"],["Firework Box Pack","#ff9100"]],
+  [["Spectrespecs & Blonde","#fff59d"],["Roaring Lion Hat","#ffd166"],["Radish Earrings","#ffe082"],["Ravenclaw Blue Tie","#1565c0"],["Tweed Butterbeer Coat","#4db6ac"],["Silver Raven Robe","#283593"],["Blue Striped Stockings","#0277bd"],["Yellow Boots","#fbc02d"],["Ravenclaw Cloak","#0d1b2a"],["Quibbler Satchel","#ab47bc"]],
+  [["Swept Brown Hair","#4e342e"],["Bubble-Head Charm","#80deea"],["Seeker Hood","#fbc02d"],["Yellow & Black Tunic","#f57f17"],["Hufflepuff Prefect Robe","#212121"],["Maze Champion Jacket","#ffb300"],["Black Breeches","#181a1d"],["Quidditch Greaves","#5d4037"],["Hufflepuff Cloak","#1c1914"],["Triwizard Cup Glow","#00e5ff"]],
+  [["Wild Mane & Beard","#3e2723"],["Dragon Goggles","#4e342e"],["Fuzzy Earmuffs","#d84315"],["Moleskin Overcoat","#5d4037"],["Hairy Brown Suit","#6d4c41"],["Leather Apron","#4e342e"],["Giant Boots","#261c18"],["Patchwork Trousers","#3e2723"],["Moleskin Greatcoat","#4e342e"],["Crossbow & Quiver","#795548"]],
+  [["Slicked Platinum Blonde","#fff9c4"],["Inquisitorial Pin","#eceff1"],["Dark Mark Hood","#141619"],["Slytherin Emerald Tie","#1b5e20"],["Black Tailor Suit","#111111"],["Seeker Green Tunic","#2e7d32"],["Black Dress Slacks","#0d0f12"],["Polished Dragon Boots","#1b1e23"],["Slytherin Cloak","#0d1912"],["Nimbus 2001 Mount","#212121"]],
+  [["Grey-Streaked Hair","#795548"],["Wolfish Gold Eyes","#8d6e63"],["Alpha Werewolf Head","#455a64"],["Shabby Tweed Jacket","#6d5c46"],["Professor Robes","#4e342e"],["Torn Lycan Fur","#37474f"],["Patched Trousers","#4e4537"],["Wolf Digitigrade Legs","#263238"],["Tattered Professor Cloak","#3e3830"],["Full-Moon Aura","#cfd8dc"]],
+  [["Long Wavy Azkaban Locks","#261e1b"],["Wanted Poster Scowl","#1b1e23"],["Padfoot Grim Hound","#111111"],["Striped Prison Coat","#37474f"],["Velvet Black Coat","#4a148c"],["Grim Black Fur","#141416"],["Ragged Trousers","#263238"],["Biker Leather Boots","#111111"],["Velvet Duster","#1c1424"],["Motorbike Exhaust","#90a4ae"]],
+  [["Spinning Magical Eye","#8d6e63"],["Battered Bowler Hat","#3e2723"],["Battle-Scarred Grizzle","#78909c"],["Scarred Leather Duster","#5d4037"],["Auror Red Robe","#7f1d1d"],["Buckled Armor Coat","#37474f"],["Wooden Claw-Foot Peg","#4e342e"],["Heavy Auror Boots","#212121"],["Weather-Beaten Duster","#4e342e"],["Hip-Flask & Staff","#90a4ae"]],
+  [["Tall Emerald Witch Hat","#004d40"],["Square Spectacles Bun","#455a64"],["Silver Tabby Markings","#78909c"],["Emerald Tartan Robes","#00695c"],["Formal Black Gown","#181a1f"],["Highland Plaid","#1b5e20"],["Emerald Skirt Hem","#004d40"],["Dark Dress Boots","#111111"],["Emerald Velvet Cloak","#00332c"],["No Cloak","none"]],
+  [["Curtained Black Hair","#0a0a0c"],["Half-Blood Hood","#141619"],["Occlumency Scowl","#111111"],["Buttoned Frock Coat","#101216"],["Potions Master Robe","#181a1f"],["Death-Flight Smoke","#212121"],["Black Tailored Slacks","#080a0d"],["Dragon-Hide Boots","#111111"],["Billowing Bat-Cloak","#08090c"],["Silver Doe Patronus","#80deea"]],
+  [["Wild Tangled Curls","#1a1412"],["Azka-Skull Hood","#212121"],["Manic Dark Crown","#111111"],["Laced Leather Corset","#1c141d"],["Swirling Dark Gown","#120d14"],["Silver Dagger Belt","#263238"],["Tattered Gothic Hem","#0d0a0f"],["Spiked Heel Boots","#111111"],["Dark-Order Cloak","#140e18"],["Green Dark-Mark Cloud","#00e676"]],
+  [["Half-Moon Specs & Beard","#eceff1"],["Tassel Wizard Hat","#7e57c2"],["Young Auburn Beard","#8d6e63"],["Midnight Star Robes","#311b92"],["Silver & Gold Silk","#cfd8dc"],["Plum Velvet Suit","#4a148c"],["Embroidered Hem","#1a0f30"],["Buckled Wizard Shoes","#4e342e"],["Starlight Flowing Cloak","#311b92"],["Fawkes Phoenix Perch","#ff6d00"]],
+  [["Slit-Nostril Pale Bald","#e0e7e9"],["Red-Eyed Serpent Visage","#cfd8dc"],["Shadow Hood","#111111"],["Tattered Dark Shroud","#101614"],["Slytherin Heir Robe","#1b3022"],["Smoke Tendril Tunic","#181a1d"],["Bare Pale Feet","#cfd8dc"],["Shadow Hem","#0a0d0c"],["Living Smoke Cloak","#0d1210"],["Coiled Nagini Serpent","#2e7d32"]],
+  [["Pointed Grey Hat & Beard","#78909c"],["Radiant White Crown","#ffffff"],["Windblown Pilgrim","#90a4ae"],[" Pilgrim Grey Robes","#607d8b"],["Gandalf the White","#eceff1"],["Mithril-Threaded Tunic","#cfd8dc"],["Grey Travelling Hem","#455a64"],["White Rider Boots","#e0e0e0"],["Grey Pilgrim Cloak","#546e7a"],["Glamdring Scabbard","#ffd166"]],
+  [["Long White Hair & Beard","#eceff1"],["Orthanc Crown","#263238"],["Many-Colored Hood","#cfd8dc"],["Ivory White Robes","#e0e0e0"],["Robe of Many Colors","#b0bec5"],["Isengard Iron Trim","#37474f"],["White Robe Hem","#bdbdbd"],["Obsidian Boots","#1c2024"],["White Hand Cloak","#cfd8dc"],["Palantír Seeing-Stone","#ff6d00"]],
+  [["Silver-Temples & Goatee","#1c2024"],["Astral Form Glow","#80deea"],["Defender Ponytail","#263238"],["Kamar-Taj Blue Tunic","#1565c0"],["Sanctum Master Robes","#0d47a1"],["Dark Defender Suit","#1b1e23"],["Bound Shin Wraps","#263238"],["Sanctum Boots","#3e2723"],["Cloak of Levitation","#b71c1c"],["Eye of Agamotto","#00e676"]],
+  [["Scarlet Tiara & Auburn","#d32f2f"],["Darkhold Black-Tips","#8e0000"],["Sokovian Waves","#a1887f"],["Scarlet Corset & Coat","#b71c1c"],["Darkhold Corrupted Armor","#4a0e17"],["Civil Leather Jacket","#880e4f"],["Black Tactical Pants","#141619"],["Crimson Boots","#4a0e17"],["Scarlet Hex Cape","#8e0000"],["Floating Darkhold Pages","#ff1744"]],
+  [["Skull-Crown & Hood","#212121"],["Lich Glowing Skull","#cfd8dc"],["Horned Necro-Helm","#311b92"],["Bone-Ribbed Vestments","#261838"],["Flesh-Stitched Robes","#3e2723"],["Arch-Lich Plate","#1a1224"],["Tattered Crypt Hem","#120d16"],["Skeletal Greaves","#90a4ae"],["Shroud of the Damned","#1c102b"],["Floating Bone Totems","#b388ff"]]
 ];
 
 function getHeroOutfits(cid) {
@@ -155,10 +192,9 @@ function getHeroOutfits(cid) {
   };
 }
 
-/* === 3. ALL 56 BESPOKE 2-BUTTON UTILITY KITS (#00-#55) ===
-   Format: [[U1Name, cd1, type1, icon1, desc1], [U2Name, cd2, type2, icon2, desc2]] */
+/* === 3. ALL 76 BESPOKE 2-BUTTON UTILITY KITS (#00-#75) === */
 const UTILS_56 = [
-  [["Saber Throw",6.5,"quadSpin","orbit","Hurls spinning lightsaber in a 360 cleave"],["Force Repulse",10,"factionPulse","nova","Telekinetic wave blasts back surrounding foes"]],
+  [["Saber Throw",6.5,"quadSpin","orbit","Hurls spinning lightsaber to impale & rip back"],["Force Repulse",10,"factionPulse","nova","Telekinetic wave blasts back surrounding foes"]],
   [["Whistling Birds",8,"critBurst","missile","Launches seeking micro-munitions in all directions"],["Beskar Grapple",8.5,"grappleHook","grapple","Tethers & stuns the strongest nearby target"]],
   [["Barrage Volley",6.5,"fanHammer","cone","Fires a rapid E-11 suppressive blaster fan"],["Thermal Detonator",11,"factionPulse","nova","Detonates a high-yield Imperial baradium charge"]],
   [["Force Storm",7.5,"critBurst","chain","Unleashes a 360-degree dark lightning web"],["Dark Siphon",11,"executeDash","beam","Crushes and executes weakened nearby enemies"]],
@@ -169,9 +205,9 @@ const UTILS_56 = [
   [["P90 Mag-Dump",6.5,"fanHammer","beam","Fires an armor-piercing P90 horizontal sweep"],["Plant C4",15,"buildFort","fort","Deploys C4 mines and sandbag cover"]],
   [["Staff Overcharge",7,"fanHammer","missile","Unleashes a concentrated plasma staff salvo"],["Zat Stun-Wave",10,"factionPulse","chain","Disintegrates and stuns nearby hostiles"]],
   [["Thor's Hammer",8,"executeDash","beam","Calls down an orbital Asgard ion strike"],["Phase Blink",9.5,"factionPulse","nova","Teleports and emits a shield shockwave"]],
-  [["Wraith Web",8,"grappleHook","grapple","cocoons the strongest enemy in bio-webbing"],["Feeding Surge",9.5,"executeDash","chain","Drains life-force from surrounding targets"]],
+  [["Wraith Web",8,"grappleHook","grapple","Cocoons the strongest enemy in bio-webbing"],["Feeding Surge",9.5,"executeDash","chain","Drains life-force from surrounding targets"]],
   [["Hallowed Ring",7.5,"factionPulse","nova","Unleashes a sacred ring of Origin fire"],["Prior Staff",9,"critBurst","orbit","Projects 360-degree telekinetic force bolts"]],
-  [[" Browncoat Fan",6.5,"fanHammer","cone","Rapid-fires brass revolver across the line"],["Barfight Toss",10,"executeDash","beam","Throws back and stuns close-quarters foes"]],
+  [["Browncoat Fan",6.5,"fanHammer","cone","Rapid-fires brass revolver across the line"],["Barfight Toss",10,"executeDash","beam","Throws back and stuns close-quarters foes"]],
   [["Serenity Dance",6,"quadSpin","orbit","Whirls twin blades in a psychic cyclone"],["Precog Strike",9,"executeDash","beam","Executes nearby threats before they strike"]],
   [["Vera Full-Bore",7,"fanHammer","beam","Fires high-caliber rounds through entire ranks"],["Frag Bunker",15,"buildFort","fort","Deploys mercenary cover and frag mines"]],
   [["Thruster Burn",7,"flameCone","flame","Scorches enemies with shuttle plasma wash"],["Evasive Drift",9.5,"factionPulse","orbit","Blasts foes away with turbine backwash"]],
@@ -187,7 +223,7 @@ const UTILS_56 = [
   [["Raider Salvo",7,"fanHammer","missile","Fires a spread of forearm bayonet rockets"],["Basestar Strike",10.5,"factionPulse","nova","Calls down a tactical nuclear shockwave"]],
   [["Biotic Charge",6.5,"executeDash","beam","Slams into targets with mass-effect force"],["Singularity Nova",9.5,"factionPulse","nova","Detonates a biotic warp explosion"]],
   [["Smartgun Sweep",6.5,"fanHammer","missile","Auto-locks and fires a wide smartgun burst"],["Sentry Perimeter",16,"buildFort","fort","Deploys colonial sandbags and claymores"]],
-  [["Smart-Disc Spin",6.5,"quadSpin","orbit","Recalls razor smart-discs in a lethal ring"],["Shoulder Plaster",8.5,"executeDash","beam","Locks tri-laser onto high-value targets"]],
+  [["Smart-Disc Spin",6.5,"quadSpin","orbit","Recalls razor smart-discs in a lethal ring"],["Shoulder Plasma",8.5,"executeDash","beam","Locks tri-laser onto high-value targets"]],
   [["Tail Impale",7,"executeDash","cone","Skewers nearby enemies with royal tail spike"],["Acid Spray",8.5,"flameCone","flame","Drenches surrounding foes in pressurized acid"]],
   [["Morita Underbarrel",6.5,"fanHammer","cone","Fires shotgun pelts across the front arc"],["Nuke Bug-Hole",12,"factionPulse","nova","Launches a tactical mini-nuke shockwave"]],
   [["Energy Sword Lunge",6.5,"executeDash","orbit","Lunges forward to cleave priority targets"],["Spartan Bubble",14,"buildFort","fort","Deploys drop-wall cover and mines"]],
@@ -199,7 +235,7 @@ const UTILS_56 = [
   [["Purging Flame",7,"flameCone","flame","Incinerates heretics in psychic promethium"],["Exterminatus Seal",10.5,"factionPulse","nova","Calls down an Inquisitorial shockwave"]],
   [["Bullet-Time Wall",7.5,"factionPulse","nova","Stops and reflects all nearby threats"],["Lobby Kata",8,"executeDash","beam","Executes surrounding agents in a blur"]],
   [["Minigun Sweep",6.5,"fanHammer","beam","Rakes the horizon with 40W plasma & lead"],["Hydrogen Cell",11,"factionPulse","nova","Detonates a ruptured power cell blast"]],
-  [["Spinner Barrage",7,"critBurst","missile","Fires precision LAPD blaster bolts in 360 degrees"],["Baseline Lock",9,"executeDash","beam","retires rogue targets with headshots"]],
+  [["Spinner Barrage",7,"critBurst","missile","Fires precision LAPD blaster bolts in 360 degrees"],["Baseline Lock",9,"executeDash","beam","Retires rogue targets with headshots"]],
   [["Monowire Cyclone",6,"quadSpin","orbit","Lashes thermal monowire in a 360-degree whip"],["Sandevistan Blitz",8.5,"executeDash","beam","Slashes through enemies at hyper-speed"]],
   [["V.A.T.S. Volley",7,"critBurst","beam","Queues guaranteed critical shots on all sides"],["Bottlecap Minefield",15,"buildFort","fort","Deploys Wasteland cover and cap mines"]],
   [["Boomstick Blast",6.5,"fanHammer","cone","Fires twin sawed-off barrels point-blank"],["Nitro Burnout",8,"flameCone","flame","Scorches the road in a V8 fire tornado"]],
@@ -213,7 +249,27 @@ const UTILS_56 = [
   [["Fan-The-Hammer",6.5,"fanHammer","cone","Blazing 8-shot deadeye revolver fan across the horizon"],["Squint Showdown",12,"stareFreeze","orbit","Freezes nearby enemies in their tracks for 3.5s"]],
   [["Deploy Trap Fort",18,"buildFort","fort","Instantly erects a shoot-over sandbag fort & 6 claymore mines"],["Explosive Arrow",8,"explosiveBow","missile","Fires a high-yield thermite arrow that detonates on impact"]],
   [["Fibercord Grapple",8.5,"grappleHook","grapple","Locks down the strongest target/boss at distance until broken"],["Wrist Flamethrower",7,"flameCone","flame","Incinerates surrounding enemies in a searing flame cone"]],
-  [["Quad-Blade Whirlwind",5.5,"quadSpin","orbit","Spins 4 plasma blades in a deadly defensive cyclone"],["Cyborg Overclock",11,"cyborgRush","beam","Doubles attack rate and movement speed for 4.5 seconds"]]
+  [["Quad-Blade Whirlwind",5.5,"quadSpin","orbit","Spins 4 plasma blades in a deadly defensive cyclone"],["Cyborg Overclock",11,"cyborgRush","beam","Doubles attack rate and movement speed for 4.5 seconds"]],
+  [["Expecto Patronum",8,"patronusStag","nova","Summons a radiant Silver Stag Patronus that charges & banishes foes"],["Expelliarmus",6,"factionPulse","beam","Scarlet disarming beam blasts enemies backward & stuns"]],
+  [["Wingardium Leviosa",7.5,"leviosaFloat","orbit","Floats nearby enemies skyward & drifts them off-screen for XP!"],["Time-Turner Rewind",12,"timeRewind","nova","Rewinds time: heals 35% HP, resets spell cooldowns & freezes foes"]],
+  [["Weasley Whiz-Bangs",7,"explosiveBow","missile","Launches exploding dragon-firework rockets across the sector"],["Summon Chess Knight",12,"piertotumKnights","fort","Summons an armored Wizard's Chess Knight to cleave enemies"]],
+  [["Levicorpus Float",7.5,"leviosaFloat","orbit","Dangles enemies upside-down by the ankle & floats them away!"],["Hare Patronus",8.5,"patronusStag","nova","Conjures a bounding silver Hare Patronus shockwave"]],
+  [["Rock-to-Hound",10,"summonHound","orbit","Transfigures stones into loyal allied Hounds that maul foes"],["Triwizard Flare",7,"fanHammer","beam","Fires a golden star-flare volley across the horizon"]],
+  [["Call Fang & Norbert",10,"summonHound","flame","Calls Fang & baby dragon Norbert to torch & maul enemies"],["Umbrella Blast",7.5,"flameCone","cone","Fires a chaotic pink-umbrella spell cone"]],
+  [["Serpensortia",9,"summonHound","chain","Conjures venomous Slytherin vipers that attack nearby enemies"],["Fiendfyre Wyrm",11,"flameCone","flame","Unleashes cursed Fiendfyre flames that incinerate everything"]],
+  [["Full-Moon Werewolf",11,"cyborgRush","orbit","Transforms into a rapid-slashing Alpha Werewolf for 5s"],["Riddikulus Banish",8,"factionPulse","nova","Banishes & stuns surrounding foes in a burst of laughter"]],
+  [["Padfoot Grim Pack",9.5,"summonHound","orbit","Summons allied black Grim Hounds to tear through enemies"],["Azka-Bark Shockwave",7.5,"factionPulse","nova","Unleashes a concussive Animagus howl"]],
+  [["Auror Staff Thump",7,"youShallNotPass","nova","Slams staff to erect a shockwave ward that blasts foes back"],["Avada Counter-Volley",8.5,"fanHammer","beam","Sweeps Auror hex bolts in a wide arc"]],
+  [["Piertotum Locomotor",10.5,"piertotumKnights","fort","Animates Hogwarts Stone Armor Knights to do their duty!"],["Transfigure Ferret",7.5,"leviosaFloat","beam","Transfigures & floats enemies helplessly into the sky"]],
+  [["Sectumsempra",6.5,"sectumSlash","orbit","Invisible high-speed wand slashes sever limbs & open arterial bleeds!"],["Levicorpus Hoist",8,"leviosaFloat","chain","Hoists enemies into the air by their ankles"]],
+  [["Cruciatus Web",7.5,"stareFreeze","chain","Casts crimson Cruciatus lightning that paralyzes all nearby foes"],["Silver Dagger Throw",6.5,"quadSpin","orbit","Hurls her cursed silver blade to impale & rip back"]],
+  [["Firestorm Parting",8,"flameCone","flame","Waves the Elder Wand in a sweeping vortex of parting fire"],["Fawkes Rebirth Song",12,"timeRewind","nova","Fawkes heals your wounds & unleashes a golden phoenix wave"]],
+  [["Avada Kedavra",7,"avadaKedavra","chain","Fires the jagged neon-green Killing Curse—instantly slays foes!"],["Summon Nagini",10,"summonHound","orbit","Unleashes Nagini to strike & venom-shred enemies"]],
+  [["You Shall Not Pass!",9.5,"youShallNotPass","nova","Slams Staff & Glamdring—erects an impassable bridge rune barrier!"],["Flame of Anor",7.5,"patronusStag","beam","Blinding white Istari sunburst burns all shadow foes"]],
+  [["Voice of Orthanc",8.5,"stareFreeze","nova","Commands all on-screen enemies to freeze in terror"],["Isengard Fire-Mine",10,"explosiveBow","missile","Hurls Orthanc blasting-fire orbs that detonate on impact"]],
+  [["Mirror Dimension",9,"youShallNotPass","nova","Erects a crystalline Mirror Dimension barrier that reflects bolts"],["Eye of Agamotto",11.5,"timeRewind","orbit","Freezes time across the sector & rewinds cooldowns"]],
+  [["Chaos Levitation",7,"leviosaFloat","nova","Wraps enemies in scarlet hexes & floats them off-screen to die!"],["Rewrite Reality",10.5,"avadaKedavra","chain","Disintegrates surrounding enemies in a scarlet chaos wave"]],
+  [["Raise Dead Army",6.5,"raiseDead","chain","Consumes nearby corpses to resurrect Skeletal Warriors & Archers!"],["Summon Bone Golem",12,"piertotumKnights","fort","Consumes corpses to raise a Colossal Bone Golem juggernaut!"]]
 ];
 
 function getHeroUtils(cid) {
@@ -224,10 +280,7 @@ function getHeroUtils(cid) {
   ];
 }
 
-// FILE: js/data-heroes.js (PART 3 OF 3)
-// DETAIL: Token-Matrix Assembled 3-Line Dialogue for All 56 Heroes (#00-#55), Alignments, Rival Matchups, and EOF Sentinel.
-
-/* === 4. ALL 56 BESPOKE 3-LINE HERO QUOTES (Token-Assembled to Bypass Stream Filters) === */
+/* === 4. ALL 76 BESPOKE 3-LINE HERO QUOTES (#00-#75) === */
 const Q_56 = [
   ["The Force is with me, always.", "Your overconfidence is your weakness.", "A Jedi uses the Force for defense."],
   ["This is the Way.", "Warm or cold, the guild contract is sealed.", "Beskar steel is part of my creed."],
@@ -274,7 +327,7 @@ const Q_56 = [
   ["Time to chrome the hell up, choom!", "Sandevistan overdrive—see you at the top of Arasaka Tower!", "This city always remembers a legend."],
   ["War... war never changes.", "V.A.T.S. locked at ninety-five percent critical!", "Another settlement cleared—pass an ice-cold Nuka!"],
   ["Witness me—shiny and chrome!", "What a day! What a lovely, high-octane day!", "Last of the V8 Interceptors—full nitro!"],
-  ["The right man in the wrong place can make all the difference.", "HEV Mark-IV suit administering防護 morphine.", "Zero-point energy field manipulator charged!"],
+  ["The right man in the wrong place can all the difference.", "HEV Mark-IV suit administering morphine.", "Zero-point energy field manipulator charged!"],
   ["Wibbly-wobbly, timey-wimey... stuff.", "Allons-y! Sonic emitter at maximum resonance!", "I don't want to go—regeneration energy surging!"],
   ["Chozo Varia matrix online—morph ball ready.", "Hyper-beam charged to full capacity.", "The last Metroid is in captivity—the galaxy is at peace."],
   ["Wind's howling... medallion's humming.", "Steel for humans, silver for monsters.", "Toss a coin—the White Wolf hunts tonight."],
@@ -284,7 +337,27 @@ const Q_56 = [
   ["In this world there's two kinds of people, my friend...", "My mule don't like people laughing.", "Get three coffins ready... my mistake, four."],
   ["To survive a war, you gotta become war.", "Out here in the forest, I am the law.", "Nothing is over! Nothing!"],
   ["He's no good to me dead.", "As you wish.", "Put Captain Solo in the cargo hold."],
-  ["Your lightsabers will make a fine addition to my collection!", "Army or not, you must realize you are doomed.", "I have been trained in your Jedi arts!"]
+  ["Your lightsabers will make a fine addition to my collection!", "Army or not, you must realize you are doomed.", "I have been trained in your Jedi arts!"],
+  ["Expecto Patronum!", "Expelliarmus! I solemnly swear I am up to no good.", "Come on, Tom—let's finish this the way we started it!"],
+  ["It's Levi-O-sa, not Levio-SA!", "When in doubt, go to the library—or cast Protego Totalum!", "Three turns of the Time-Turner should do it!"],
+  ["Bloody hell! Light up the Wildfire Whiz-Bangs!", "Knight to E-5! You've got to make some sacrifices!", "Eat slugs, Malfoy!"],
+  ["You're just as sane as I am.", "Careful, there's a swarm of Wrackspurts around your head!", "Wit beyond measure is man's greatest treasure."],
+  ["For Hufflepuff and the Triwizard Cup!", "Take my body back to my father... or fight beside me now!", "Fair play and a steady wand win the maze."],
+  ["Yer a wizard, Harry!", "Shouldn'ta said that... I definitely shouldn'ta said that!", "Sic 'em, Fang! Mind Norbert's tail!"],
+  ["My father will hear about this!", "Scared, Potter? Serpensortia!", "Training for the ballet, Potter?"],
+  ["Mischief Managed! Riddikulus!", "It is the quality of one's convictions that determines success.", "Eat this chocolate—you'll feel right as rain."],
+  ["I did my waiting! Twelve years of it—in Azkaban!", "The ones that love us never really leave us.", "Nice one, James! Let Padfoot loose!"],
+  ["CONSTANT VIGILANCE!", "Mad-Eye sees right through the back of his own head!", "Is that a student? Technically it's a ferret!"],
+  ["Piertotum Locomotor! Hogwarts is threatened—do your duty!", "I've always wanted to use that spell!", "Have a biscuit, Potter."],
+  ["Turn to page three hundred and ninety-four.", "Sectumsempra! You dare use my own spells against me?", "Always."],
+  ["I killed Sirius Black! Ha-ha-ha!", "You have to mean an Unforgivable Curse, Potter!", "Crucio! The Dark Lord rises again!"],
+  ["Happiness can be found, even in the darkest of times, if one remembers to turn on the light.", "It is our choices, Harry, that show what we truly are.", "Fawkes, to me!"],
+  ["Avada Kedavra!", "There is no good and evil—there is only power!", "Nagini... dinner!"],
+  ["YOU SHALL NOT PASS!", "I am a servant of the Secret Fire, wielder of the flame of Anor!", "A wizard is never late—he arrives precisely when he means to."],
+  ["Against the power of Mordor there can be no victory.", "A new power is rising—its victory is at hand!", "So you have chosen... death."],
+  ["Dormammu, I've come to bargain!", "By the Hoary Hosts of Hoggoth—into the Mirror Dimension!", "I went forward in time to view fourteen million outcomes."],
+  ["You took everything from me.", "No more mutants... no more mercy.", "That doesn't seem fair—let's rewrite reality."],
+  ["Klaatu... Barada... Nikto! Rise from your graves!", "Every corpse on this battlefield belongs to my Grimoire!", "Skeletal Legion, Bone Golems—awaken and march!"]
 ];
 
 function getBossQuote(cid, facId) {
@@ -293,8 +366,8 @@ function getBossQuote(cid, facId) {
 }
 
 /* === 5. HERO ALIGNMENTS & RIVAL INVASION CALLOUTS === */
-const BAD_HEROES = [2, 3, 7, 9, 11, 12, 17, 19, 21, 23, 26, 30, 36, 37, 49, 55];
-const BOUNTY_HEROES = [1, 6, 15, 29, 41, 42, 48, 50, 51, 52, 54];
+const BAD_HEROES = [2, 3, 7, 9, 11, 12, 17, 19, 21, 23, 26, 30, 36, 37, 49, 55, 62, 68, 70, 72, 75];
+const BOUNTY_HEROES = [1, 6, 15, 29, 41, 42, 48, 50, 51, 52, 54, 64, 65, 67, 74];
 function getHeroAlign(cid) {
   return BOUNTY_HEROES.includes(cid) ? "bounty" : (BAD_HEROES.includes(cid) ? "bad" : "good");
 }
@@ -311,7 +384,17 @@ const MATCHUP_LINES = {
   "51_52": "Six bullets? I only need one.",
   "53_40": "Man versus machine... welcome to my forest!",
   "29_30": "A worthy Xenomorph Queen skull for the trophy wall!",
-  "55_0": "Ah, another fine lightsaber for my collection, Jedi!"
+  "55_0": "Ah, another fine lightsaber for my collection, Jedi!",
+  "70_56": "Harry Potter... the Boy Who Lived, come to die! Avada Kedavra!",
+  "56_70": "Expelliarmus! Neither can live while the other survives, Riddle!",
+  "68_64": "I killed Sirius Black! Coming to join your cousin, Padfoot?!",
+  "64_68": "Come on then, Bellatrix—you can do better than that!",
+  "69_70": "It was foolish of you to come tonight, Tom. The Aurors are on their way.",
+  "70_69": "By which time I shall be gone, and you shall be dead, Dumbledore!",
+  "67_56": "You dare use my own spells against me, Potter? I am the Half-Blood Prince!",
+  "57_62": "You foul, loathsome, evil little cockroach, Malfoy!",
+  "71_72": "Saruman! Your staff is broken!",
+  "72_71": "You have elected the way of pain, Gandalf!"
 };
 
 const RIVAL_LINES = {
@@ -326,8 +409,8 @@ const RIVAL_LINES = {
     "Stand down! You won't corrupt another world!"
   ],
   goodVsGood: [
-    "Hold it! Command says you're compromised—could be a Goa'uld or Cylon!",
-    "Intel flagged you as a rogue impostor! Drop your weapons now!",
+    "Hold it! Command says you're compromised—could be a Polyjuice impostor or Cylon!",
+    "Intel flagged you as a rogue illusion! Drop your wand and weapons now!",
     "My scanner says you're mimicking an ally—I have to bring you in!"
   ],
   badVsAll: [

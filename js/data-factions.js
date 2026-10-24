@@ -1,128 +1,152 @@
 // FILE: js/data-factions.js
 // PART: 6 of 14
-// DETAIL: 5 Difficulty Tiers, 4 Distance Sub-Biomes, 10 Faction Palettes, 20 Passive Matrix Upgrades, 10 Meta-Upgrades, and 50 Procedural Stages.
+// DETAIL: v7.0 Arcane Sanctum Overhaul — 11 Factions (0-10), House/Order Crest Registry, 1 Free Starter Hero Per Genre, 50 Stages, and 20 Passives.
 
 "use strict";
 
-/* === 1. 5 DIFFICULTY TIERS === */
-const DIFFICULTIES = [
-  { id: 0, name: "Cadet (Easy)", hpMul: 0.65, dmgMul: 0.65, plrHp: 1.35, xpMul: 0.75, dropMul: 0.75, spdMul: 0.85, desc: "Relaxed pacing: -35% Monster HP/Dmg, +35% Player HP, 0.75x XP & Drops" },
-  { id: 1, name: "Operative (Normal)", hpMul: 1.00, dmgMul: 1.00, plrHp: 1.00, xpMul: 1.00, dropMul: 1.00, spdMul: 1.00, desc: "Standard Nexus baseline: 1.0x stats, XP, and Dark Matter drops" },
-  { id: 2, name: "Veteran (Hard)", hpMul: 1.50, dmgMul: 1.45, plrHp: 0.85, xpMul: 1.50, dropMul: 1.50, spdMul: 1.12, desc: "+50% Monster HP, -15% Player HP, +12% Foe Speed, 1.5x XP & Drops" },
-  { id: 3, name: "Nightmare", hpMul: 2.20, dmgMul: 2.00, plrHp: 0.75, xpMul: 2.30, dropMul: 2.30, spdMul: 1.25, desc: "+120% Monster HP, -25% Player HP, +25% Foe Speed, 2.3x XP & Drops" },
-  { id: 4, name: "Omega Nexus", hpMul: 3.50, dmgMul: 3.00, plrHp: 0.65, xpMul: 3.80, dropMul: 3.80, spdMul: 1.40, desc: "Extreme lethality: 3.5x Monster HP, -35% Player HP, 3.8x XP & Drops" }
-];
-
-/* === 2. DISTANCE-BASED SUB-BIOMES (Measured from Start 256, 256) === */
-const BIOME_RINGS = [
-  { id: 0, name: "Outpost Perimeter", minDist: 0, maxDist: 800, tint: "rgba(0,0,0,0)", desc: "Standard Faction Perimeter Props & Crates" },
-  { id: 1, name: "Settlement Huts Sector", minDist: 800, maxDist: 1800, tint: "rgba(255,190,80,0.05)", desc: "Colonial Huts, Barricades & Relic Chests" },
-  { id: 2, name: "Vehicle Yard Sector", minDist: 1800, maxDist: 3000, tint: "rgba(0,229,255,0.06)", desc: "Abandoned Hovercraft Skimmers & Heavy Cover" },
-  { id: 3, name: "Deep Vault Badlands", minDist: 3000, maxDist: 999999, tint: "rgba(224,64,251,0.08)", desc: "Ancient Vault Relic Caches & High-Mutation Waves" }
-];
-
-/* === 3. 10 FACTIONS & 5-WORLD STAGE PREFIX PALETTES === */
+/* === 1. 11 MULTIVERSE FACTIONS & BIOME MORPH PALETTES (0-10) === */
 const FACTIONS = [
-  { id: 0, name: "Laser-Opera", worlds: ["Tatooine", "Hoth", "Mustafar", "Coruscant", "Death-Moon"],
-    bg: "#26190c", grid: "#3a2612", tall: "Moisture Vaporator Spire", low: "Kyber Cargo Crate",
-    decor: "Holo-Beacon Scrub", haz: "Twin-Sun Thermal Vent", loot: "Imperial Supply Pod", c1: "#00e5ff", c2: "#ff1744" },
-  { id: 1, name: "Astral-Gate", worlds: ["Abydos", "Chulak", "Dakara", "Atlantis", "Celestis"],
-    bg: "#241c0e", grid: "#382c16", tall: "Naquadah Obelisk", low: "Chevron Dial Pedestal",
-    decor: "Scarab Crystal Cluster", haz: "Unstable Kawoosh Ring", loot: "Ancient Sarcophagus Cache", c1: "#ffd166", c2: "#00b0ff" },
-  { id: 2, name: "Rim-Outlaw", worlds: ["Whitefall", "Jiangyin", "Beaumonde", "Persephone", "Miranda"],
-    bg: "#22140d", grid: "#362015", tall: "Brittle Rim Windmill Scrub", low: "Stamped Alliance Barrel",
-    decor: "Dry Alkali Sagebrush", haz: "Reaver Core Leak Zone", loot: "Smuggler Contraband Safe", c1: "#ff9100", c2: "#cfd8dc" },
-  { id: 3, name: "Spice-Empire", worlds: ["Arrakeen", "Sietch Tabr", "Hagga Basin", "Giedi Prime", "Kaitain"],
-    bg: "#2c1808", grid: "#44250d", tall: "Windtrap Collector Spire", low: "Basalt Sietch Outcrop",
-    decor: "Cinnamon Spice Vent", haz: "Thumper Worm-Tremor Ring", loot: "Water-of-Life Cistern", c1: "#ff6d00", c2: "#40c4ff" },
-  { id: 4, name: "Star-Citadel", worlds: ["Wolf-359", "Bajor Sector", "Caprica Orbit", "Omega Relay", "Citadel Core"],
-    bg: "#0a1422", grid: "#142640", tall: "Warp Plasma Conduit", low: "Trinium Deflector Node",
-    decor: "Subspace Sensor Dish", haz: "Antimatter Containment Leak", loot: "Starfleet Replicator Chest", c1: "#ffab00", c2: "#00e5ff" },
-  { id: 5, name: "Xeno-Drop", worlds: ["Hadley's Hope", "LV-426", "Klendathu", "Reach Spire", "Argent D'Nur"],
-    bg: "#091710", grid: "#122d20", tall: "Biomechanical Hive Spire", low: "Ovomorph Egg Pod",
-    decor: "Steaming Acid Grate", haz: "Pressurized Acid Pool", loot: "Weyland-Yutani Drop-Crate", c1: "#00e676", c2: "#cddc39" },
-  { id: 6, name: "Grimdark-40K", worlds: ["Cadia Gate", "Armageddon", "Mars Forge", "Necron Tomb", "Eye of Terror"],
-    bg: "#180b10", grid: "#2c141d", tall: "Gothic Cathedral Buttress", low: "Promethium Fuel Drum",
-    decor: "Purity Seal Shrine", haz: "Warp-Fire Corruption Rift", loot: "Reliquary Munitorum Chest", c1: "#ff1744", c2: "#ffd700" },
-  { id: 7, name: "Cyber-Waste", worlds: ["Mega-City", "Skynet Core", "Night-City", "Glowing Sea", "Fury Road"],
-    bg: "#07101c", grid: "#0f2238", tall: "Holo-Billboard Pylon", low: "Crushed Chrome Chassis",
-    decor: "Sparking Fiber Conduit", haz: "EMP Blackwall Glitch Zone", loot: "Vault-Tec Supply Locker", c1: "#00ff66", c2: "#ff00aa" },
-  { id: 8, name: "Lab-Vortex", worlds: ["Sector-C", "Xen Border", "Skaro Trench", "Zebes Depth", "Gallifrey"],
-    bg: "#120c22", grid: "#22183e", tall: "Xen Resonance Prism", low: "Weighted Companion Crate",
-    decor: "Temporal Crack Conduit", haz: "Resonance Cascade Anomaly", loot: "Aperture Testing Receptacle", c1: "#ff9100", c2: "#aa00ff" },
-  { id: 9, name: "Eldritch-Ronin", worlds: ["Kaer Morhen", "Innsmouth Reef", "Bonefields", "Venge Crater", "R'lyeh"],
-    bg: "#101619", grid: "#1d282d", tall: "Leviathan Bone Rib", low: "Runic Place-of-Power",
-    decor: "Bioluminescent Void Frond", haz: "Orbital Venge Laser Scorch", loot: "Ancient Meitou Relic Box", c1: "#b388ff", c2: "#80cbc4" }
+  { id: 0, name: "Star-Sector", c1: "#00f0ff", c2: "#ff2a54", bg: "#070b14",
+    worlds: ["Tatooine", "Mustafar", "Hoth", "Endor", "Coruscant"],
+    tall: "Imperial Turbolaser Tower", low: "Durasteel Cargo Pod",
+    decor: "Kyber Crystal Cluster", haz: "Mustafar Magma Vent", loot: "Imperial Supply Pod" },
+  { id: 1, name: "Chevron-Gate", c1: "#00e5ff", c2: "#ffd166", bg: "#09101d",
+    worlds: ["Abydos", "Chulak", "Dakara", "Pegasus", "Atlantis"],
+    tall: "Naquadah Obelisk", low: "Goa'uld Sarcophagus",
+    decor: "DHD Control Pedestal", haz: "Unstable Vortex Pool", loot: "Ancient ZPM Cache" },
+  { id: 2, name: "Verse-Rim", c1: "#ff9e00", c2: "#d84315", bg: "#140d08",
+    worlds: ["Persephone", "Miranda", "beaumonde", "Haven", "Whitefall"],
+    tall: "Cortex Relay Spire", low: "Alliance Stamp Crate",
+    decor: "Terraformed Dry-Brush", haz: "Reaver Engine Wash", loot: "Smuggler Stash" },
+  { id: 3, name: "Spice-Dune", c1: "#ffb703", c2: "#fb8500", bg: "#181006",
+    worlds: ["Arrakis", "Caladan", "Giedi Prime", "Kaitain", "Salusa"],
+    tall: "Windtrap Moisture Silo", low: "Spice Harvester Track",
+    decor: "Thumper Seismic Rod", haz: "Drum-Sand Sinkhole", loot: "Smuggler Spice Cask" },
+  { id: 4, name: "Star-Citadel", c1: "#3a86ff", c2: "#8338ec", bg: "#080b18",
+    worlds: ["Vulcan", "Qo'noS", "Caprica", "Citadel", "Omega"],
+    tall: "Subspace Warp Pylon", low: "Torpedo Casing",
+    decor: "Mass Relay Beacon", haz: "Plasma Coolant Leak", loot: "Starfleet Replicator" },
+  { id: 5, name: "Xeno-Hive", c1: "#00f5d4", c2: "#9b5de5", bg: "#061214",
+    worlds: ["LV-426", "Fiorina", "Klendathu", "Reach", "Argent D'Nur"],
+    tall: "Biomass Resin Spire", low: "Weyland Stasis Tube",
+    decor: "Ovomorph Egg Clutch", haz: "Molecular Acid Pool", loot: "Colonial Marine Drop" },
+  { id: 6, name: "Grim-Imperium", c1: "#ff0055", c2: "#ffcc00", bg: "#14060b",
+    worlds: ["Cadia", "Armageddon", "Macragge", "Mars", "Necromunda"],
+    tall: "Gothic Aquila Pillar", low: "Munitorum Ammo Crate",
+    decor: "Skull Reliquary Shrine", haz: "Promethium Fire-Pit", loot: "Astartes Drop-Pod" },
+  { id: 7, name: "Cyber-Noir", c1: "#f72585", c2: "#4cc9f0", bg: "#0d0618",
+    worlds: ["Night City", "Mega-City", "Neo-LA", "Zion", "New Vegas"],
+    tall: "Arasaka Holo-Monolith", low: "Kevlar Continental Trunk",
+    decor: "Neon Noodle Kiosk", haz: "High-Voltage Grid Leak", loot: "Militech Supply Case" },
+  { id: 8, name: "Anomaly-Lab", c1: "#ff6d00", c2: "#00e676", bg: "#08140d",
+    worlds: ["Black Mesa", "City 17", "Gallifrey", "Zebes", "Aperture"],
+    tall: "Resonance Tesla Coil", low: "Weighted Companion Cube",
+    decor: "Xen Crystal Sample", haz: "Radioactive Sludge", loot: "HEV Supply Locker" },
+  { id: 9, name: "Eldritch-Ash", c1: "#b5179e", c2: "#4ea8de", bg: "#0c0814",
+    worlds: ["Kaer Morhen", "R'lyeh", "Kenshi-Moon", "Yharnam", "Caelid"],
+    tall: "Non-Euclidean Monolith", low: "Iron Shackles Cage",
+    decor: "Place of Power Stone", haz: "Eldritch Madness Fog", loot: "Witcher Alchemy Chest" },
+  { id: 10, name: "Arcane-Sanctum", c1: "#ffd166", c2: "#7c4dff", bg: "#0b0718",
+    worlds: ["Hogwarts", "Forbidden Forest", "Ministry Atrium", "Khazad-dûm", "Necropolis"],
+    tall: "Moving Grand-Staircase Tower", low: "Runed Cauldron & Trunk",
+    decor: "Floating Candle Brazier", haz: "Fiendfyre Cursed Pool", loot: "Room of Requirement Chest" }
 ];
 
-/* === 4. ALL 20 PASSIVE MATRIX UPGRADES (Levels 1-5) === */
+/* === 2. SPELLCASTER HOUSE & ORDER CREST REGISTRY (#56-#75) === */
+const HOUSE_CRESTS = {
+  56: ["🦁", "Gryffindor House", "#ff5252"],
+  57: ["🦁", "Gryffindor House", "#ff5252"],
+  58: ["🦁", "Gryffindor House", "#ff5252"],
+  59: ["🦅", "Ravenclaw House", "#40c4ff"],
+  60: ["🦡", "Hufflepuff House", "#ffd166"],
+  61: ["🦁", "Gryffindor Keeper", "#ff5252"],
+  62: ["🐍", "Slytherin House", "#00e676"],
+  63: ["🦁", "Gryffindor Marauder", "#ff5252"],
+  64: ["🦁", "Gryffindor Marauder", "#ff5252"],
+  65: ["👁️", "Order of the Phoenix", "#00e5ff"],
+  66: ["🦁", "Gryffindor Head", "#ff5252"],
+  67: ["🐍", "Slytherin Head", "#00e676"],
+  68: ["🐍", "Slytherin Dark-Order", "#00e676"],
+  69: ["🦁", "Order of the Phoenix", "#ffd166"],
+  70: ["🐍", "Slytherin Heir", "#00e676"],
+  71: ["🧙", "Order of Istari", "#ffffff"],
+  72: ["🧙", "White Hand Orthanc", "#cfd8dc"],
+  73: ["🔯", "Kamar-Taj Sanctum", "#ff9100"],
+  74: ["🔮", "Darkhold Chaos", "#ff1744"],
+  75: ["💀", "Necropolis Grimoire", "#b388ff"]
+};
+
+function getHeroHouseBadge(cid) {
+  if (HOUSE_CRESTS[cid]) return HOUSE_CRESTS[cid];
+  return null;
+}
+
+/* === 3. DEFAULT UNLOCKED STARTER HERO PER FACTION/GENRE (0 DM COST) ===
+   Ensures players start with 1 playable hero unlocked in EVERY single genre/faction! */
+const STARTER_HEROES_BY_FACTION = [0, 8, 13, 19, 22, 31, 34, 41, 45, 48, 56];
+
+/* === 4. DISTANCE SUB-BIOME RINGS === */
+const BIOME_RINGS = [
+  { id: 0, name: "Outpost Perimeter", minDist: 0, maxDist: 450, tint: "rgba(0, 0, 0, 0)" },
+  { id: 1, name: "Contested Badlands", minDist: 450, maxDist: 950, tint: "rgba(255, 145, 0, 0.04)" },
+  { id: 2, name: "Shattered Ruins", minDist: 950, maxDist: 1600, tint: "rgba(124, 77, 255, 0.06)" },
+  { id: 3, name: "Abyssal Core", minDist: 1600, maxDist: 999999, tint: "rgba(255, 23, 68, 0.08)" }
+];
+
+/* === 5. 50 PROCEDURAL STAGES === */
+const STAGES = Array.from({ length: 50 }, (_, i) => {
+  const id = i + 1, tier = Math.floor(i / 10);
+  const suffixes = ["Outpost", "Trench", "Citadel", "Crucible", "Nexus", "Badlands", "Vault", "Spire", "Abyss", "Omega"];
+  const hazards = ["Low Gravity", "Ion Storms", "Acid Fog", "Thermal Vents", "Warp Rifts"];
+  return {
+    id, tier, suffix: suffixes[i % 10], hazard: hazards[i % 5],
+    hpMul: +(1 + i * 0.14).toFixed(2), dmDrop: 1 + Math.floor(i / 4)
+  };
+});
+
+/* === 6. 5 DIFFICULTY TIERS === */
+const DIFFICULTIES = [
+  { id: 0, name: "Cadet (Story)", hpMul: 0.70, spdMul: 0.88, spawnMul: 0.80, plrHp: 1.35, xpMul: 1.20 },
+  { id: 1, name: "Operative (Standard)", hpMul: 1.00, spdMul: 1.00, spawnMul: 1.00, plrHp: 1.00, xpMul: 1.00 },
+  { id: 2, name: "Veteran (Hard)", hpMul: 1.35, spdMul: 1.08, spawnMul: 1.20, plrHp: 0.95, xpMul: 1.25 },
+  { id: 3, name: "Elite (Nightmare)", hpMul: 1.75, spdMul: 1.15, spawnMul: 1.40, plrHp: 0.90, xpMul: 1.50 },
+  { id: 4, name: "Omega (Multiverse Hell)", hpMul: 2.30, spdMul: 1.24, spawnMul: 1.65, plrHp: 0.85, xpMul: 2.00 }
+];
+
+/* === 7. 20 PASSIVE MATRIX UPGRADES & 10 PERMANENT META UPGRADES === */
 const PASSIVES = [
-  ["Kyber Power Cell", "+15% All Damage", "dmg", 0.15],
-  ["Naquadah Capacitor", "-10% Weapon Cooldown", "cdr", 0.10],
-  ["Holtzman Amplifier", "+18% Weapon Area", "area", 0.18],
-  ["Beskar Alloy Weave", "+2 Flat Armor", "arm", 2],
-  ["Bacta Nanite Injector", "+1.2 HP/s Regeneration", "reg", 1.2],
-  ["Subspace Grav-Magnet", "+35% Orb Pickup Radius", "mag", 0.35],
-  ["Spice Melange Vial", "+12% Move Speed", "spd", 0.12],
-  ["Omnissiah Multi-Loader", "+1 Extra Projectile", "cnt", 1],
-  ["Chrono-Stasis Coil", "+22% Effect Duration", "dur", 0.22],
-  ["Tachyon Accelerator", "+25% Projectile Speed", "pspd", 0.25],
-  ["Targeting Visor", "+10% Crit Chance", "crit", 0.10],
-  ["Focused Plasma Lens", "+30% Crit Damage", "cdmg", 0.30],
-  ["Tungsten Sabot Core", "+1 Projectile Pierce", "prc", 1],
-  ["Symbiote Vitae Sac", "+25% Max Health", "hp", 0.25],
-  ["Neural XP Synthesizer", "+20% Experience Gain", "xp", 0.20],
-  ["Dark Matter Extractor", "+25% Boss DM Yield", "dm", 0.25],
-  ["Repulsor Field Coil", "+30% Knockback Force", "kb", 0.30],
-  ["Cryo-Coolant Vent", "Attacks Slow Enemies 15%", "slow", 0.15],
-  ["Corrosive Acid Coat", "Shreds +15% Enemy Armor", "shred", 0.15],
-  ["Resurrection Beacon", "+1 Extra Revival (50% HP)", "rev", 1]
+  ["Kyber Power Cell", "+20% All Weapon & Spell Damage", "dmg", 0.20],
+  ["Chrono Accelerator", "-10% Weapon & Spell Cooldown", "cdr", 0.10],
+  ["Subspace Amplifier", "+18% Attack & Spell Area", "area", 0.18],
+  ["Beskar Weave", "+2 Flat Armor", "arm", 2],
+  ["Bacta Nanites", "+1.2 HP/s Regeneration", "reg", 1.2],
+  ["Tractor Siphon", "+30% Orb Magnet Range", "mag", 0.30],
+  ["Ion Thrusters", "+12% Move Speed", "spd", 0.12],
+  ["Binary Duplicator", "+1 Extra Projectile / Minion Cap", "cnt", 1],
+  ["Zero-Point Capacitor", "+20% Effect & Summon Duration", "dur", 0.20],
+  ["Hypervelocity Coils", "+20% Projectile Speed", "pspd", 0.20],
+  ["Targeting Computer", "+10% Critical Chance", "crit", 0.10],
+  ["Assassin Core", "+25% Critical Damage", "cdmg", 0.25],
+  ["Depleted Uranium", "+1 Projectile Pierce", "prc", 1],
+  ["Juggernaut Plating", "+20% Max Health", "hp", 0.20],
+  ["Spice Extractor", "+20% XP Gain", "xp", 0.20],
+  ["Dark Matter Collector", "+1 Bonus Dark Matter per Run", "dm", 1],
+  ["Repulsor Pistons", "+25% Knockback Impulse", "kb", 0.25],
+  ["Cryo Payload", "+15% Enemy Slow on Hit", "slow", 0.15],
+  ["Corrosive Nanites", "+15% Enemy Armor Shred", "shred", 0.15],
+  ["Phoenix Protocol", "+1 Extra Revival", "rev", 1]
 ];
 
-/* === 5. 10 DARK MATTER PERMANENT UPGRADES === */
 const META_UPG = [
-  ["Might", "+10% Base Damage", 2], ["Armor", "+1 Flat Armor", 2],
-  ["Vitality", "+15% Base Max HP", 1], ["Recovery", "+0.6 HP/s Regen", 2],
-  ["Haste", "-6% Weapon Cooldown", 3], ["Area", "+12% Base Area", 2],
-  ["Swiftness", "+8% Move Speed", 1], ["Magnet", "+25% Pickup Radius", 1],
-  ["Critical", "+5% Crit Chance", 2], ["Greed", "+20% XP & DM Gain", 3]
+  ["Might Core", "+10% Base Damage", 2],
+  ["Plating Matrix", "+1 Starting Armor", 2],
+  ["Vitality Vats", "+15% Max Health", 2],
+  ["Regen Nodules", "+0.6 HP/s Regen", 2],
+  ["Haste Relays", "-6% Cooldowns", 3],
+  ["Expansion Lens", "+12% Weapon Area", 2],
+  ["Thruster Boots", "+8% Move Speed", 2],
+  ["Magnet Array", "+25% Pickup Range", 2],
+  ["Lethality Optics", "+5% Crit Chance", 3],
+  ["Dark Matter Greed", "+20% XP & DM Gain", 3]
 ];
-
-/* === 6. 50 PROCEDURAL STAGES === */
-const STAGE_DATA = [
-  ["Sun-Baked Dune Sea", "Dust Gusts"], ["Rust-Canyon Scrapyard", "Falling Debris"],
-  ["Moisture Spire Outpost", "Shock Pylons"], ["Smuggler Cantina Basin", "Crossfire Turrets"],
-  ["Twin-Sun Salt Flats", "Heat Mirage"], ["Sub-Surface Sand Tunnels", "Cave-In Rings"],
-  ["Abandoned Mining Rig", "Plasma Vents"], ["Bandit Badlands Ridge", "Sniper Lasers"],
-  ["Ancient Obelisk Ruins", "Gravity Wells"], ["Frontier Command Citadel", "Orbital Strikes"],
-  ["Cryo-Glacier Trench", "Slippery Ice"], ["Blizzard Relay Station", "Frostbite Fog"],
-  ["Frozen Hangar Bay", "Cryo Barrels"], ["Ice-Crystalline Cavern", "Shatter Spikes"],
-  ["Sub-Zero Thermal Core", "Freeze Waves"], ["Bioluminescent Swamp", "Acid Bog Pools"],
-  ["Spore-Choked Jungle", "Toxic Spores"], ["Sunken Temple Marsh", "Quicksand Vortex"],
-  ["Xeno-Resin Hive Nest", "Brood Egg Pods"], ["Hive-Mother Chamber", "Acid Geysers"],
-  ["Neon Slum Undercity", "Arc Conduits"], ["Mag-Lev Transit Grid", "Speeding Trains"],
-  ["Cyber-Foundry Smelter", "Molten Slag"], ["Drone Assembly Matrix", "Laser Grids"],
-  ["AI Mainframe Spire", "EMP Pulses"], ["Sulfur Lava River", "Magma Eruptions"],
-  ["Obsidian Tek-Fortress", "Fire Tornadoes"], ["Tectonic Refinery Bridge", "Thermal Venting"],
-  ["Ash-Storm Caldera", "Meteor Showers"], ["High-Ground Lava Throne", "Dual Magma Waves"],
-  ["Derelict Frigate Hull", "Low-G Drift"], ["Breached Reactor Deck", "Radiation Pulses"],
-  ["Hydroponics Bio-Dome", "Mutant Tendrils"], ["Warp-Core Engine Room", "Plasma Arcs"],
-  ["Flagship Command Bridge", "Broadside Lasers"], ["Asteroid Trench Run", "Drifting Boulders"],
-  ["Orbital Defense Ring", "Ion Cannon Sweep"], ["Dyson Swarm Collector", "Solar Flares"],
-  ["Ghost Armada Graveyard", "Proximity Mines"], ["Superweapon Trench Core", "Mega-Beam Sweep"],
-  ["Temporal Rift Horizon", "Time-Dilation"], ["Non-Euclidean Labyrinth", "Warp Portals"],
-  ["Black-Hole Accretion Disk", "Singularities"], ["Quantum Foam Anomaly", "Phase Hazards"],
-  ["Ascended Astral Sanctuary", "Solar Rings"], ["Entropy Cascade Sector", "Void Lightning"],
-  ["Multiverse Convergence Hub", "Boss Rifts"], ["Omega Singularity Gate", "Gravity Crush"],
-  ["Throne of the Architects", "Laser Matrix"], ["The 51st Echo (Final Nexus)", "All-Biome Shift"]
-];
-
-const STAGES = STAGE_DATA.map((d, i) => ({
-  id: i + 1,
-  suffix: d[0],
-  hazard: d[1],
-  tier: Math.floor(i / 10),
-  hpMul: +(1 + i * 0.38).toFixed(2),
-  dmDrop: i === 49 ? 50 : Math.max(1, Math.floor((i + 1) / 3) + 1)
-}));
 // EOF:js/data-factions.js

@@ -1,6 +1,6 @@
 // FILE: js/data-relics.js
 // PART: 8 of 14
-// DETAIL: 50 Unique Relics DB and 100% Bespoke Side-Profile Weapon Silhouette SVGs for All 56 Heroes (#00-#55, Zero Generic Fallbacks).
+// DETAIL: v7.0 Arcane Sanctum Overhaul — 50 Relics DB and 100% Bespoke Side-Profile Weapon Silhouette SVGs for All 76 Heroes (#00-#75).
 
 "use strict";
 
@@ -58,7 +58,7 @@ const RELICS_DB = [
   [49, "Nexus Singularity Core", "+15% All Damage, +15% Area & -10% Cooldown", "omni", 0.15]
 ];
 
-/* === 2. ALL 56 BESPOKE SIDE-PROFILE WEAPON SILHOUETTE SVGS (#00-#55) === */
+/* === 2. ALL 76 BESPOKE SIDE-PROFILE WEAPON SILHOUETTE SVGs (#00-#75) === */
 const WPN_SVG_56 = {
   0: (c1, c2) => `<line x1="7" y1="17" x2="21" y2="3" stroke="${c1}" stroke-width="4.2" stroke-linecap="round"/><line x1="7" y1="17" x2="21" y2="3" stroke="#fff" stroke-width="1.6"/><line x1="2.5" y1="21.5" x2="7.5" y2="16.5" stroke="#cfd8dc" stroke-width="3.4"/><circle cx="6.5" cy="17.5" r="1.5" fill="#ff1744"/>`,
   1: (c1, c2) => `<rect x="3" y="11" width="11" height="5" rx="1" fill="#607d8b" stroke="${c2}" stroke-width="1"/><polygon points="14,10 22,7 17,12" fill="${c1}"/><polygon points="14,13 23,13 17,15" fill="${c1}"/><polygon points="14,16 22,19 17,14" fill="${c1}"/>`,
@@ -115,12 +115,33 @@ const WPN_SVG_56 = {
   52: (c1, c2) => `<path d="M3,19 L5,13 L8,11 L13,11 L13,14.5 L8,14.5 L6,19 Z" fill="#8d6e63" stroke="${c2}" stroke-width="0.8"/><rect x="8" y="9.5" width="5" height="4.2" rx="1" fill="#cfd8dc"/><rect x="13" y="10" width="9.5" height="2.2" fill="#cfd8dc"/>`,
   53: (c1, c2) => `<rect x="3" y="10" width="12" height="4.5" fill="#2e4c2b" stroke="#fff" stroke-width="0.8"/><rect x="15" y="11" width="7.5" height="2.2" fill="#cfd8dc"/><rect x="8.5" y="14.5" width="5" height="4.5" fill="${c2}"/><line x1="18" y1="13" x2="20" y2="19" stroke="${c2}" stroke-width="1.4"/>`,
   54: (c1, c2) => `<path d="M2,17 C4,14 6,14 7,13 L18,13 L21,10 L22,10 L22,16 L21,16 L18,14 L10,14 L9,18 L7,18 L7,15 L4,18 Z" fill="#3e6b48" stroke="${c2}" stroke-width="0.9"/><rect x="8" y="9" width="7" height="2.2" fill="#eceff1"/>`,
-  55: (c1, c2) => `<line x1="4" y1="20" x2="20" y2="4" stroke="#00f0ff" stroke-width="3.4"/><line x1="4" y1="4" x2="20" y2="20" stroke="#00e676" stroke-width="3.4"/><circle cx="12" cy="12" r="2.5" fill="${c2}"/>`
+  55: (c1, c2) => `<line x1="4" y1="20" x2="20" y2="4" stroke="#00f0ff" stroke-width="3.4"/><line x1="4" y1="4" x2="20" y2="20" stroke="#00e676" stroke-width="3.4"/><circle cx="12" cy="12" r="2.5" fill="${c2}"/>`,
+  56: (c1, c2) => `<line x1="4" y1="20" x2="20" y2="4" stroke="#8d6e63" stroke-width="3.5"/><circle cx="20" cy="4" r="2.5" fill="#ffd166"/><path d="M12,12 Q15,8 19,10" fill="none" stroke="#00e676" stroke-width="1.5"/>`,
+  57: (c1, c2) => `<path d="M3,19 Q12,14 20,4" fill="none" stroke="#5d4037" stroke-width="3.2"/><path d="M16,6 C18,3 21,3 22,6 C22,9 18,11 16,6 Z" fill="#ab47bc"/><circle cx="7" cy="15" r="2" fill="#00e5ff"/>`,
+  58: (c1, c2) => `<line x1="4" y1="20" x2="19" y2="5" stroke="#795548" stroke-width="3.2"/><circle cx="19" cy="5" r="3" fill="#ff1744"/><polygon points="12,10 16,6 14,14" fill="#ffd166"/>`,
+  59: (c1, c2) => `<line x1="5" y1="19" x2="19" y2="5" stroke="#ba68c8" stroke-width="3.0"/><circle cx="19" cy="5" r="3.5" fill="#ffeb3b"/><ellipse cx="11" cy="12" rx="4" ry="2" fill="none" stroke="#00e5ff" stroke-width="1.2"/>`,
+  60: (c1, c2) => `<line x1="4" y1="20" x2="20" y2="4" stroke="#a1887f" stroke-width="3.5"/><polygon points="20,4 23,8 17,8" fill="#ffd166"/><circle cx="12" cy="12" r="2.5" fill="#00e5ff"/>`,
+  61: (c1, c2) => `<line x1="4" y1="20" x2="18" y2="6" stroke="#f06292" stroke-width="3.8"/><path d="M15,9 L22,3 M18,6 L21,9" stroke="#f06292" stroke-width="2"/><path d="M3,19 L7,15" stroke="#4e342e" stroke-width="3.5"/>`,
+  62: (c1, c2) => `<line x1="4" y1="20" x2="20" y2="4" stroke="#d7ccc8" stroke-width="3.2"/><circle cx="20" cy="4" r="2.5" fill="#00e676"/><path d="M10,14 L14,10" stroke="#2e7d32" stroke-width="2"/>`,
+  63: (c1, c2) => `<line x1="4" y1="20" x2="19" y2="5" stroke="#5d4037" stroke-width="3.5"/><circle cx="19" cy="5" r="3" fill="#cfd8dc"/><path d="M10,12 L14,8" stroke="#ffd166" stroke-width="1.8"/>`,
+  64: (c1, c2) => `<line x1="4" y1="20" x2="20" y2="4" stroke="#37474f" stroke-width="3.6"/><circle cx="20" cy="4" r="3" fill="#b0bec5"/><path d="M11,11 Q14,8 17,11" fill="none" stroke="#e040fb" stroke-width="1.8"/>`,
+  65: (c1, c2) => `<rect x="4" y="9" width="16" height="4" fill="#5d4037"/><circle cx="12" cy="11" r="3.5" fill="#00e5ff"/><line x1="12" y1="4" x2="12" y2="20" stroke="#8d6e63" stroke-width="3"/>`,
+  66: (c1, c2) => `<line x1="4" y1="20" x2="19" y2="5" stroke="#5d4037" stroke-width="3.5"/><circle cx="19" cy="5" r="3" fill="#00e676"/><polygon points="11,10 15,6 13,13" fill="#ffd166"/>`,
+  67: (c1, c2) => `<line x1="4" y1="20" x2="20" y2="4" stroke="#111111" stroke-width="3.6"/><circle cx="20" cy="4" r="3" fill="#00ff88"/><path d="M10,14 L15,9" stroke="#ff1744" stroke-width="2"/>`,
+  68: (c1, c2) => `<line x1="4" y1="20" x2="19" y2="5" stroke="#4e342e" stroke-width="3.5"/><polygon points="19,5 22,9 16,9" fill="#ff1744"/><path d="M2,18 L8,12" stroke="#cfd8dc" stroke-width="2.5"/>`,
+  69: (c1, c2) => `<line x1="3" y1="21" x2="21" y2="3" stroke="#bcaaa4" stroke-width="4.2"/><circle cx="21" cy="3" r="3.5" fill="#ffd166"/><circle cx="7" cy="17" r="2" fill="#ff6d00"/>`,
+  70: (c1, c2) => `<path d="M4,19 Q12,10 20,4" fill="none" stroke="#212121" stroke-width="3.5"/><circle cx="20" cy="4" r="3.2" fill="#00ff88"/><path d="M12,13 L17,8" stroke="#2e7d32" stroke-width="2.2"/>`,
+  71: (c1, c2) => `<line x1="3" y1="21" x2="21" y2="3" stroke="#eceff1" stroke-width="4"/><circle cx="21" cy="3" r="4" fill="#fff"/><line x1="2" y1="20" x2="16" y2="6" stroke="#b0bec5" stroke-width="3.2"/>`,
+  72: (c1, c2) => `<line x1="4" y1="20" x2="20" y2="4" stroke="#111111" stroke-width="4"/><circle cx="20" cy="4" r="3.5" fill="#ff9100"/><rect x="9" y="10" width="6" height="4" fill="#37474f"/>`,
+  73: (c1, c2) => `<ellipse cx="12" cy="12" rx="8" ry="4" fill="none" stroke="#ff9100" stroke-width="2.4" transform="rotate(-30 12 12)"/><circle cx="12" cy="12" r="3" fill="#00e5ff"/>`,
+  74: (c1, c2) => `<circle cx="12" cy="12" r="7" fill="none" stroke="#ff1744" stroke-width="2.2"/><circle cx="12" cy="12" r="3" fill="#e040fb"/><path d="M4,4 L9,9 M20,4 L15,9" stroke="#ff1744" stroke-width="2"/>`,
+  75: (c1, c2) => `<rect x="3" y="7" width="18" height="14" rx="2" fill="#311b92" stroke="#b388ff" stroke-width="1.6"/><circle cx="12" cy="14" r="3.5" fill="#00ff88"/><line x1="7" y1="10" x2="17" y2="10" stroke="#b388ff" stroke-width="1.5"/>`
 };
 
 function makeSVG(type, c1 = "#00e5ff", c2 = "#ffd166", wpnId = -1) {
+  const sOpen = `<svg class="ico" viewBox="0 0 24 24" width="28" height="28" style="width:28px;height:28px;flex-shrink:0">`;
   let p = "";
-  if (wpnId >= 0 && WPN_SVG_56[wpnId]) {
+  if (typeof WPN_SVG_56 !== "undefined" && wpnId >= 0 && WPN_SVG_56[wpnId]) {
     p = WPN_SVG_56[wpnId](c1, c2);
   } else if (type === "orbit") {
     p = `<line x1="8" y1="16" x2="21" y2="3" stroke="${c1}" stroke-width="4" stroke-linecap="round"/><line x1="3" y1="21" x2="8" y2="16" stroke="#90a4ae" stroke-width="3"/>`;
@@ -145,6 +166,6 @@ function makeSVG(type, c1 = "#00e5ff", c2 = "#ffd166", wpnId = -1) {
   } else {
     p = `<rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="${c1}" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="${c2}"/>`;
   }
-  return `<svg class="ico" viewBox="0 0 24 24">${p}</svg>`;
+  return `${sOpen}${p}</svg>`;
 }
 // EOF:js/data-relics.js
