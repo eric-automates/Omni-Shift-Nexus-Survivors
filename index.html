@@ -1,6 +1,6 @@
-<!-- FILE: index.html -->
-<!-- PART: 3 of 14 -->
-<!-- DETAIL: DOM shell, HUD (#bodyHud), Outfit Customizer (#custBox), Firing Range (#rangeBox), and Superb Live Debug Console & Crash/DOM Sentinel. -->
+// FILE: index.html
+// PART: 3 of 14
+// DETAIL: DOM shell, HUD (#bodyHud), Spell Bar (#spellBar), Outfit Customizer (#custBox), Firing Range (#rangeBox), and Live Debug Console & Crash/DOM Sentinel.
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,7 +8,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>OMNI-SHIFT: NEXUS SURVIVORS</title>
 <link rel="stylesheet" href="css/style.css">
-<!-- PRE-BOOT LIVE DEBUGGER & ERROR SENTINEL (Captures Parse & Runtime Errors Before DOM Mounts) -->
+<!-- PRE-BOOT LIVE DEBUGGER & ERROR SENTINEL -->
 <script>
 (function() {
   window._bootErrors = [];
@@ -133,24 +133,6 @@
       window.trackProgress("Copied debug log to clipboard.");
     };
 
-    // Smart UI Creation Sentinel (Ignores 60-FPS HUD redraws, logs caller function for buttons/modals)
-    const origCreate = document.createElement;
-    document.createElement = function(tagName) {
-      const el = origCreate.apply(document, arguments);
-      if (domSpyEnabled && !window._inHudUpdate) {
-        const t = String(tagName).toLowerCase();
-        if (t === "button" || t === "div" || t === "canvas") {
-          let caller = "UI";
-          try {
-            const st = (new Error().stack || "").split("\n");
-            if (st[2]) caller = st[2].trim().replace(/^at\s+/, "").split(" ")[0];
-          } catch (err) {}
-          window.trackProgress(`DOM <${t.toUpperCase()}> via ${caller}`);
-        }
-      }
-      return el;
-    };
-
     window.trackProgress("Advanced Debugger Ready. Listening for UI & Combat events...");
     renderLogBox();
   });
@@ -177,6 +159,7 @@
     </div>
     <div class="hud-row">
       <div id="bodyHud" class="slot-bar" style="align-items:center"></div>
+      <div id="spellBar" class="slot-bar" style="align-items:center"></div>
       <div class="stat-pill" id="saberHud" style="font-size:0.62rem;padding:2px 6px;color:#ffd166;display:none">Saber: 0%</div>
     </div>
     <div class="hud-row">
@@ -207,7 +190,7 @@
     <div style="display:flex;flex-direction:column;gap:7px;max-width:290px;margin:auto;width:100%">
       <button class="btn gold" id="goPlay" style="font-size:0.95rem;padding:12px">DEPLOY INTO NEXUS</button>
       <button class="btn" id="goDiff">CYCLE DIFFICULTY TIER</button>
-      <button class="btn" id="goChars">CHARACTER ROSTER (56)</button>
+      <button class="btn" id="goChars">CHARACTER ROSTER (76)</button>
       <button class="btn" id="goStages">STAGE SECTOR MAP (50)</button>
       <button class="btn" id="goMeta">DARK MATTER SHOP & RESPEC</button>
       <button class="btn" id="goCodex">WORLD MORPH CODEX & LEGEND</button>
@@ -219,7 +202,7 @@
 
   <!-- CHARACTER SELECT -->
   <div id="scrChars" class="screen">
-    <h2>56 MULTIVERSE HEROES (Hold 350ms to Inspect & Customize Outfit)</h2>
+    <h2>76 MULTIVERSE HEROES & SPELLCASTERS (Hold 350ms to Inspect & Customize Outfit)</h2>
     <div class="bar">
       <div class="stat-pill" id="charDM">Available DM: 0</div>
       <button class="btn warn" id="btnRespecChars">RESPEC (REFUND & LOCK ALL)</button>
@@ -277,6 +260,7 @@
       <div class="health-row"><b>2. Kenshi Limb Status & Guard HUD:</b> Taking damage grants Toughness XP. Tap/Hold any limb icon (HD, TR, LL, RL) on the HUD to raise your arm and guard that zone!</div>
       <div class="health-row"><b>3. 350ms Long-Press & Outfit Customizer:</b> Hold any Hero card in the Roster 350ms to customize their canon Head/Hair, Torso, Legs, Back & Saber color.</div>
       <div class="health-row"><b>4. Lv.5 Primary & Lv.10 Supercharge:</b> Every weapon evolves into its Primary Arsenal at Lv.5 and guarantees its ★ Supercharge card at Lv.10.</div>
+      <div class="health-row"><b>5. Arcane Spellcasters (#56-#75):</b> Unlock House Crests & cast iconic spells (Leviosa, Patronus, Avada Kedavra, Raise Dead minions) from the top-bar Spell Bar!</div>
     </div>
     <div class="bar"><button class="btn" data-back="scrMain">BACK</button></div>
   </div>
@@ -332,3 +316,4 @@
 <script src="js/ui.js" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
 </body>
 </html>
+// EOF:index.html
