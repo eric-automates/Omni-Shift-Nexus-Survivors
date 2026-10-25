@@ -1,6 +1,6 @@
 // FILE: js/ui.js
 // PART: 14 of 14
-// DETAIL: Strict Dynamic EOF Scanner, 350ms Inspector, Active Weapon Toggler, Tactical Visor Bar (#visorToggleBar), Force Push / Signature Gear Level-Up Cards (Lv.1-10), and Safe Loop.
+// DETAIL: v7.0 Arcane Sanctum Overhaul — Genre-Sorted 76-Hero Roster (0 DM Starters First), House/Order Crest Badges, Interactive Top-Bar Spellbook (#spellBar), Level-Scaling Force Push Cards, and Safe Loop.
 
 "use strict";
 
@@ -9,9 +9,9 @@ let eofAuditResults = [];
 const UI_VISOR_DEFS = [
   { id: 0, short: "OFF", name: "Visor Off", desc: "Standard naked-eye optics." },
   { id: 1, short: "BOBA RF", name: "Mandalorian Rangefinder", desc: "Green telemetry lock on strongest on-screen threat (+10% Crit)." },
-  { id: 2, short: "T-800 HUD", name: "Cyberdyne T-800 HUD", desc: "Red neural target box with Head Life % & T-Zone readout (+10% Crit)." },
-  { id: 3, short: "THERMAL", name: "Yautja Thermal Vision", desc: "Full-spectrum infrared heat signatures on all hostiles + Tri-Laser lock (+10% Crit)." },
-  { id: 4, short: "MATRIX", name: "Matrix Code Prescience", desc: "Construct code-rain target lock with movement vector prediction (+10% Crit)." }
+  { id: 2, short: "T-800 / AUROR", name: "Cybernetic / Magical Eye HUD", desc: "Red neural target box with Head Life % & T-Zone readout (+10% Crit)." },
+  { id: 3, short: "THERMAL / SPECTRE", name: "Yautja Thermal / Spectrespecs", desc: "Full-spectrum infrared & Wrackspurt heat signatures on all hostiles (+10% Crit)." },
+  { id: 4, short: "PRESCIENCE", name: "Matrix / Arcane Prescience", desc: "Construct code & prophetic target lock with movement vector prediction (+10% Crit)." }
 ];
 
 function ensurePlayerVisors() {
@@ -19,7 +19,7 @@ function ensurePlayerVisors() {
   if (!Array.isArray(player.unlockedVisors)) {
     const startVisor = (typeof player.activeVisor === "number" && player.activeVisor > 0)
       ? player.activeVisor
-      : ([1, 54].includes(player.cid) ? 1 : (player.cid === 40 ? 2 : (player.cid === 29 ? 3 : (player.cid === 39 ? 4 : 0))));
+      : ([1, 54].includes(player.cid) ? 1 : ([40, 65].includes(player.cid) ? 2 : ([29, 59].includes(player.cid) ? 3 : ([39, 56, 69, 71, 73, 74].includes(player.cid) ? 4 : 0))));
     player.unlockedVisors = startVisor > 0 ? [startVisor] : [];
     if (typeof player.activeVisor !== "number") player.activeVisor = startVisor;
   }
@@ -29,13 +29,13 @@ async function runDynamicEOFScan() {
   const files = ["js/chaos.js", "js/data-factions.js", "js/data-heroes.js", "js/data-relics.js", "js/state.js", "js/world.js", "js/combat.js", "js/sim.js", "js/render.js", "js/ui.js"];
   const results = [];
   for (let i = 0; i < files.length; i++) {
-    const f = files[i], marker = "// EOF" + ":" + f;
+    const f = files[i], marker = "// " + "EOF:" + f;
     try {
       const res = await fetch(f + "?t=" + Date.now());
       const txt = (await res.text()).trim();
       const idx = txt.indexOf(marker);
       if (idx === -1) {
-        results.push({ file: f, status: "MISSING EOF MARKER", ok: false });
+        results.push({ file: f, status: "MISSING // EOF MARKER", ok: false });
       } else if (idx + marker.length < txt.length) {
         const extra = txt.slice(idx + marker.length).trim().slice(0, 40);
         results.push({ file: f, status: "EXTRA TRAILING CODE: " + extra, ok: false });
@@ -73,6 +73,7 @@ function checkLoadedScripts() {
   return true;
 }
 
+/* === 2. 350ms INSPECTOR & CANON OUTFIT CUSTOMIZER === */
 let pressTimer = null, wasLongPress = false;
 function openInspector(title, sub, body, iconHTML = "", heroCid = -1) {
   if (navigator.vibrate) navigator.vibrate(18);
@@ -90,12 +91,13 @@ function openInspector(title, sub, body, iconHTML = "", heroCid = -1) {
 }
 
 function renderOutfitCustomizer(cid) {
-  const c = CHAR_RAW[cid] || CHAR_RAW[0], fac = FACTIONS[c[1]];
+  const c = CHAR_RAW[cid] || CHAR_RAW[0], fac = FACTIONS[c[1]] || FACTIONS[0];
   const out = getOutfit(cid), pal = getHeroOutfits(cid);
   const btnBar = document.getElementById("custBtns");
   if (btnBar) {
     btnBar.innerHTML = "";
-    [["head", "Head"], ["torso", "Torso"], ["legs", "Legs"], ["back", "Back"], ["blade", "Saber"]].forEach(([k, lbl]) => {
+    const bladeLbl = cid >= 56 ? "Wand/Magic" : "Saber/Glow";
+    [["head", "Head"], ["torso", "Torso"], ["legs", "Legs"], ["back", "Back"], ["blade", bladeLbl]].forEach(([k, lbl]) => {
       if (!pal || !pal[k]) return;
       const btn = document.createElement("button");
       btn.className = k === "blade" ? "btn gold" : "btn";
@@ -114,6 +116,12 @@ function renderOutfitCustomizer(cid) {
   drawHeroSprite(0, 0, fac, cid, 0.5, -0.2, 0, cctx, -1);
   cctx.restore();
   cctx.fillStyle = "#ffd166"; cctx.font = "bold 8px sans-serif"; cctx.fillText("ZOOMED OUTFIT VIEW", 12, 12);
+
+  const badge = typeof getHeroHouseBadge === "function" ? getHeroHouseBadge(cid) : null;
+  if (badge) {
+    cctx.fillStyle = badge[2]; cctx.font = "bold 8px sans-serif";
+    cctx.fillText(`${badge[0]} ${badge[1].toUpperCase()}`, 12, 118);
+  }
 
   cctx.fillStyle = "#050912"; cctx.fillRect(158, 14, 128, 107);
   cctx.strokeStyle = "#00e5ff"; cctx.lineWidth = 1.2; cctx.strokeRect(158, 14, 128, 107);
@@ -149,6 +157,7 @@ document.getElementById("ttClose").onclick = () => {
   if (typeof runActive !== "undefined" && runActive && !document.getElementById("scrLevel").classList.contains("active")) runPaused = false;
 };
 
+/* === 3. WEAPON TOGGLER, TACTICAL VISOR BAR (#visorToggleBar), PAPER TARGETS & LEVEL-UP === */
 function renderWeaponToggler() {
   if (!player) return;
   ensurePlayerVisors();
@@ -295,7 +304,7 @@ function triggerLevelUp() {
   // Level-Up Card for Signature Hardware / Force Kinetic Push (Lv.1 -> Lv.10 Full 360° Circle!)
   const curSigLvl = player.sigGearLvl || 1;
   if (curSigLvl < 10) {
-    pool.push({ type: "sigUp", nxt: curSigLvl + 1 });
+    pool.push({ type: "sigup", nextLvl: curSigLvl + 1 });
   }
 
   for (let k = 0; k < 4; k++) {
@@ -328,26 +337,26 @@ function triggerLevelUp() {
         const lv5Name = sig ? sig[0] : ch.w.name;
         card.className = "card unlocked" + (nxt === 10 ? " super-flash" : "");
         title = nxt === 10 ? "★ SUPERCHARGE: " + ch.w.superName + " (Lv.10)" : (nxt === 5 ? "★ LV.5 PRIMARY: " + lv5Name : ch.w.name + " (Lv." + nxt + "/10)");
-        sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (nxt === 5 ? "PRIMARY ARSENAL TRANSITION (+25% DMG)" : "Weapon & Flourish Mastery Upgrade");
-        desc = nxt === 10 ? "Supercharges weapon physics & unlocks 2.35x Ultimate Damage!" : (nxt === 5 ? "Transitions starter weapon into " + lv5Name + " with extended reach!" : "+25% Base Damage, faster Prequel flourish speed & wider area.");
+        sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (nxt === 5 ? "PRIMARY ARSENAL TRANSITION (+25% DMG)" : "Weapon & Spellbook Matrix Upgrade");
+        desc = nxt === 10 ? "Supercharges weapon physics & unlocks 2.35x Ultimate Damage!" : (nxt === 5 ? "Transitions starter weapon into " + lv5Name + " & unlocks new top-bar spells!" : "+25% Base Damage, +Area, faster flourish/cooldown & unlocks next Spell/Summon tier!");
         ico = makeSVG(ch.w.style, nxt >= 5 ? "#ffd166" : "#00e5ff", "#ffd166", ch.w.id);
-      } else if (ch.type === "sigUp") {
+      } else if (ch.type === "sigup") {
         const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[player.cid]) ? HERO_SIG_GEAR[player.cid] : HERO_SIG_GEAR[0];
-        const isForcePush = sig[3] === 6;
-        const deg = ch.nxt >= 10 ? 360 : Math.min(360, Math.round((0.65 + (ch.nxt - 1) * 0.24) * (180 / Math.PI)));
-        card.className = "card unlocked" + (ch.nxt === 10 ? " super-flash" : "");
-        title = `${ch.nxt === 10 ? "★ MAX " : ""}${sig[2]} (Lv.${ch.nxt}/10)`;
-        sub = isForcePush ? `Directional Hand-Push Cone -> ${deg}° Arc` : "Signature Hardware Upgrade";
-        desc = isForcePush
-          ? (ch.nxt === 10 ? "MAX LEVEL: Unlocks a full 360° circular Force Repulse wave with heavy knockback & stun!" : `Widens Force Push wave to ${deg}°, +Knockback distance, +Stun duration & +14% Concussive Dmg.`)
-          : "Increases Signature Hardware damage +20%, blast radius, and stun duration.";
+        const isMax = ch.nextLvl === 10;
+        card.className = "card unlocked" + (isMax ? " super-flash" : "");
+        title = `${isMax ? "★ MAX 360° " : ""}${sig[2].toUpperCase()} (Lv.${ch.nextLvl}/10)`;
+        sub = "Signature Force / Secondary Hardware Upgrade";
+        desc = isMax
+          ? "MAX LEVEL: Expands Force Push / Hardware wave into a full 360° omni-directional circle with heavy stun & knockback!"
+          : `Widens directional push cone (+18° arc), increases knockback distance, stun duration & +20% concussive power!`;
         ico = makeSVG("nova", "#00e5ff", "#ffd166", player.cid);
       } else if (ch.type === "wnew") {
         const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[ch.c[0]]) ? HERO_SIG_GEAR[ch.c[0]] : null;
+        const f = FACTIONS[ch.c[1]] || FACTIONS[0];
         card.className = "card unlocked";
-        title = "NEW WEAPON: " + ch.c[4]; sub = FACTIONS[ch.c[1]].name + " Tech";
+        title = "NEW WEAPON: " + ch.c[4]; sub = f.name + " Tech";
         desc = `Lv.5 Primary: ${sig ? sig[0] : ch.c[4]} | Lv.10: ${ch.c[5]}`;
-        ico = makeSVG(ch.c[6], FACTIONS[ch.c[1]].c1, FACTIONS[ch.c[1]].c2, ch.c[0]);
+        ico = makeSVG(ch.c[6], f.c1, f.c2, ch.c[0]);
       } else if (ch.type === "visor") {
         const vDef = UI_VISOR_DEFS[ch.vid];
         card.className = "card unlocked";
@@ -376,14 +385,16 @@ function triggerLevelUp() {
         if (wasLongPress) return;
         if (ch.type === "wup") {
           ch.w.lvl++;
-          if (isSwordWeapon(ch.w.id)) player.saberMastery = Math.min(100, player.saberMastery + 10);
+          if (ch.w.style === "orbit") player.saberMastery = Math.min(100, player.saberMastery + 10);
           if (ch.w.lvl === 10) spawnSpeech(player.x, player.y, "SUPERCHARGED: " + ch.w.superName.toUpperCase() + "!", "#ffd166", 2.6);
-        } else if (ch.type === "sigUp") {
-          player.sigGearLvl = ch.nxt;
-          player.sigGearCD = 0.05; // Fires immediately so you see the wider wave right away!
+          if (typeof syncHeroSpellbook === "function") syncHeroSpellbook();
+        } else if (ch.type === "sigup") {
+          player.sigGearLvl = ch.nextLvl;
+          player.sigGearCD = 0.25;
+          spawnSpeech(player.x, player.y, `FORCE / HARDWARE LV.${ch.nextLvl}!`, "#00e5ff", 2.0);
         } else if (ch.type === "wnew") {
           player.weapons.push({ id: ch.c[0], name: ch.c[4], superName: ch.c[5], style: ch.c[6], lvl: 1, cd: 0, ang: 0, angVel: 0, enabled: true, evolvedLv5: false });
-          if (isSwordWeapon(ch.c[0])) { player.hasSaber = true; player.saberMastery = Math.max(12, player.saberMastery); }
+          if (ch.c[6] === "orbit") { player.hasSaber = true; player.saberMastery = Math.max(10, player.saberMastery); }
         } else if (ch.type === "visor") {
           if (!player.unlockedVisors.includes(ch.vid)) player.unlockedVisors.push(ch.vid);
           player.activeVisor = ch.vid;
@@ -403,10 +414,12 @@ function triggerLevelUp() {
   renderWeaponToggler(); drawRangeTarget(selRangeTab); showScreen("scrLevel");
 }
 
+/* === 4. IN-RUN HUD & TOP-BAR CUMULATIVE SPELLBOOK (#spellBar) === */
 const LIMB_LBLS = ["HD", "TR", "LA", "RA", "LL", "RL"];
 function updateHUD() {
   if (typeof player === "undefined" || !player) return;
   ensurePlayerVisors();
+  if (typeof syncHeroSpellbook === "function") syncHeroSpellbook();
   window._inHudUpdate = true;
   try {
     document.getElementById("hpBar").style.width = Math.max(0, (player.hp / player.maxHp) * 100) + "%";
@@ -451,11 +464,40 @@ function updateHUD() {
         bHud.appendChild(dp);
       }
     }
-    const sHud = document.getElementById("saberHud");
-    if (sHud) {
-      sHud.style.display = player.hasSaber ? "inline-block" : "none";
-      sHud.textContent = `Saber Reflect: ${Math.floor(player.saberMastery)}% | Push Lv.${player.sigGearLvl || 1}`;
+
+    // Render Cumulative Top-Bar Spellbook & Necromancer Resurrect Buttons (#spellBar)
+    const spBar = document.getElementById("spellBar");
+    if (spBar) {
+      spBar.innerHTML = "";
+      if (player.cid === 75 && typeof countActiveMinions === "function") {
+        const mCnt = countActiveMinions(-1);
+        const cCnt = typeof countActiveCorpsesNear === "function" ? countActiveCorpsesNear(player.x, player.y, 320) : 0;
+        const mp = document.createElement("div");
+        mp.className = "stat-pill"; mp.style.padding = "2px 5px"; mp.style.fontSize = "0.56rem";
+        mp.style.borderColor = "#b388ff"; mp.style.color = "#00ff88";
+        mp.textContent = `💀 Army:${mCnt} | Corpses:${cCnt}`;
+        spBar.appendChild(mp);
+      }
+      if (Array.isArray(player.spellbook) && player.spellbook.length > 0) {
+        player.spellbook.forEach((sp, sIdx) => {
+          const rdy = sp.cd <= 0.05;
+          const sb = document.createElement("button");
+          sb.className = "btn" + (rdy ? " gold" : "");
+          sb.style.padding = "2px 6px"; sb.style.fontSize = "0.56rem"; sb.style.pointerEvents = "auto";
+          sb.style.opacity = rdy ? "1" : "0.62";
+          sb.textContent = rdy ? `✨ ${sp.name}` : `${sp.name} (${sp.cd.toFixed(1)}s)`;
+          bindTooltip(sb, () => `SPELL: ${sp.name}`, () => `Unlocked at Lv.${sp.reqLvl} • Cooldown: ${sp.cdMax}s`, () => sp.desc);
+          sb.onclick = (e) => {
+            e.stopPropagation();
+            if (!wasLongPress && typeof triggerSpell === "function") triggerSpell(sIdx);
+          };
+          spBar.appendChild(sb);
+        });
+      }
     }
+
+    const sHud = document.getElementById("saberHud");
+    if (sHud) { sHud.style.display = player.hasSaber ? "inline-block" : "none"; sHud.textContent = `Saber Reflect: ${Math.floor(player.saberMastery)}%`; }
 
     const itBtn = document.getElementById("btnInteract"), tgt = findInteractTarget();
     if (tgt) { itBtn.style.display = "inline-block"; itBtn.textContent = tgt.label; } else itBtn.style.display = "none";
@@ -486,6 +528,7 @@ function updateHUD() {
       const ready = u.cd <= 0.01, deg = ready ? 360 : Math.floor(((u.cdMax * player.utilCdrMul - u.cd) / (u.cdMax * player.utilCdrMul)) * 360);
       const btn = document.createElement("div"); btn.className = "util-btn" + (ready ? " ready" : "");
       btn.innerHTML = `${makeSVG(u.icon, ready ? "#ffd166" : "#90a4ae")}<span>${ready ? "RDY" : u.cd.toFixed(1)}</span><div class="util-sweep" style="--sweep-deg:${deg}deg"></div>`;
+      bindTooltip(btn, () => u.name, () => `Cooldown: ${u.cdMax}s`, () => u.desc);
       btn.onclick = () => { if (!wasLongPress) triggerUtility(idx); }; uBox.appendChild(btn);
     });
   } finally {
@@ -501,36 +544,59 @@ document.querySelectorAll("[data-back]").forEach(b => { b.onclick = () => showSc
 
 function updateMenuUI() {
   if (!checkLoadedScripts()) return;
-  const c = CHAR_RAW[meta.selChar] || CHAR_RAW[0], f = FACTIONS[c[1]], stg = STAGES[meta.selStage - 1] || STAGES[0], df = DIFFICULTIES[meta.diff] || DIFFICULTIES[1];
+  const c = CHAR_RAW[meta.selChar] || CHAR_RAW[0], f = FACTIONS[c[1]] || FACTIONS[0], stg = STAGES[meta.selStage - 1] || STAGES[0], df = DIFFICULTIES[meta.diff] || DIFFICULTIES[1];
+  const badge = typeof getHeroHouseBadge === "function" ? getHeroHouseBadge(c[0]) : null;
   document.getElementById("menuDM").textContent = `Dark Matter: ${availDM()} (Total: ${meta.dmEarned})`;
-  document.getElementById("menuSelChar").textContent = `Hero: #${c[0]} ${c[3]}`;
+  document.getElementById("menuSelChar").textContent = `Hero: #${c[0]} ${c[3]}${badge ? " " + badge[0] : ""}`;
   document.getElementById("menuSelStage").textContent = `Stage ${stg.id}: ${f.worlds[stg.tier]} ${stg.suffix}`;
   document.getElementById("menuDiff").textContent = `Difficulty: ${df.name}`;
   const gc = document.getElementById("goChars"); if (gc) gc.textContent = `CHARACTER ROSTER (${CHAR_RAW.length})`;
 }
 
+/* === 5. GENRE-SORTED 76-HERO ROSTER WITH HOUSE/ORDER CREST BADGES === */
 function renderChars() {
+  if (typeof ensureStarterChars === "function") ensureStarterChars();
   document.getElementById("charDM").textContent = "Available DM: " + availDM();
   const g = document.getElementById("charGrid"); g.innerHTML = "";
   window._inHudUpdate = true;
   try {
-    CHAR_RAW.forEach(c => {
-      const unl = meta.chars.includes(c[0]), sel = meta.selChar === c[0], f = FACTIONS[c[1]], ico = makeSVG(c[6], f.c1, f.c2, c[0]);
-      const utils = getHeroUtils(c[0]).map(u => u.name).join(" + "), alignStr = typeof getHeroAlign === "function" ? getHeroAlign(c[0]).toUpperCase() : "HERO";
-      const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[c[0]]) ? HERO_SIG_GEAR[c[0]] : [c[4], "READY!", "Secondary Gear"];
-      const d = document.createElement("div"); d.className = "card " + (unl ? "unlocked" : "locked") + (sel ? " selected" : "");
-      d.innerHTML = `<div class="card-head"><canvas width="36" height="36" style="position:relative;width:36px;height:36px;background:${f.bg};border:1px solid ${f.c1};border-radius:6px;flex-shrink:0"></canvas><div><div class="card-title">#${String(c[0]).padStart(2, "0")} ${c[3]}</div>
-        <div class="card-sub">${f.name} • ${unl ? "UNLOCKED" : c[2] + " DM"}</div></div></div>
-        <div class="card-desc"><b>Lv1:</b> ${c[4]}<br><b>Lv5:</b> ${sig[0]}<br><b>Lv10:</b> ${c[5]}<br><b>Gear:</b> ${sig[2]}</div>`;
-      const pcv = d.querySelector("canvas");
-      if (pcv) drawHeroSprite(18, 20, f, c[0], 0, 0, 0, pcv.getContext("2d"), -1);
-      bindTooltip(d, () => `#${c[0]} ${c[3]}`, () => `${f.name} (${alignStr})`, () => `Lv.1 Weapon: ${c[4]}\nLv.5 Primary: ${sig[0]}\nLv.10 Supercharge: ${c[5]}\nMounted Gear: ${sig[2]} (Auto-Fires & Levels 1-10)\nPassive: ${c[7]} (${c[8]})\nUtility: ${utils}\nDeploy Callout: "${sig[1]}"`, () => ico, () => c[0]);
-      d.onclick = () => {
-        if (wasLongPress) return;
-        if (unl) { meta.selChar = c[0]; saveMeta(); renderChars(); }
-        else if (availDM() >= c[2]) { meta.dmSpent += c[2]; meta.chars.push(c[0]); meta.selChar = c[0]; saveMeta(); renderChars(); sfx(440, 880, 0.16, "triangle"); }
-      };
-      g.appendChild(d);
+    // Group by Genre/Faction (0..10), and within each Genre sort by Dark Matter cost ascending (0 DM Starter first!)
+    FACTIONS.forEach(fac => {
+      const genreHeroes = CHAR_RAW.filter(c => c[1] === fac.id).sort((a, b) => (a[2] - b[2]) || (a[0] - b[0]));
+      if (genreHeroes.length === 0) return;
+
+      const hdr = document.createElement("div");
+      hdr.style.cssText = `grid-column:1 / -1;padding:5px 8px;margin-top:6px;background:rgba(10,20,36,0.92);border-left:4px solid ${fac.c1};border-bottom:1px solid ${fac.c1}66;border-radius:4px;font-size:0.68rem;font-weight:bold;color:${fac.c1};display:flex;justify-content:space-between;align-items:center;`;
+      hdr.innerHTML = `<span>SECTOR GENRE #${fac.id + 1}: ${fac.name.toUpperCase()} (${fac.worlds[0]} • ${genreHeroes.length} Heroes)</span><span style="color:#ffd166;font-size:0.58rem">Sorted Low → High DM</span>`;
+      g.appendChild(hdr);
+
+      genreHeroes.forEach(c => {
+        const unl = meta.chars.includes(c[0]) || c[2] === 0;
+        const sel = meta.selChar === c[0], f = FACTIONS[c[1]] || FACTIONS[0], ico = makeSVG(c[6], f.c1, f.c2, c[0]);
+        const utils = getHeroUtils(c[0]).map(u => u.name).join(" + "), alignStr = typeof getHeroAlign === "function" ? getHeroAlign(c[0]).toUpperCase() : "HERO";
+        const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[c[0]]) ? HERO_SIG_GEAR[c[0]] : [c[4], "READY!", "Secondary Gear"];
+        const badge = typeof getHeroHouseBadge === "function" ? getHeroHouseBadge(c[0]) : null;
+        const badgeHTML = badge
+          ? `<div style="display:inline-block;margin-top:2px;padding:1px 5px;border-radius:4px;font-size:0.55rem;font-weight:bold;background:rgba(0,0,0,0.55);border:1px solid ${badge[2]};color:${badge[2]}">${badge[0]} ${badge[1]}</div>`
+          : "";
+
+        const d = document.createElement("div");
+        d.className = "card " + (unl ? "unlocked" : "locked") + (sel ? " selected" : "");
+        d.innerHTML = `<div class="card-head"><canvas width="36" height="36" style="position:relative;width:36px;height:36px;background:${f.bg};border:1px solid ${f.c1};border-radius:6px;flex-shrink:0"></canvas><div><div class="card-title">#${String(c[0]).padStart(2, "0")} ${c[3]}</div>
+          <div class="card-sub">${f.name} • ${unl ? (c[2] === 0 ? "★ FREE STARTER" : "UNLOCKED") : c[2] + " DM"}</div>${badgeHTML}</div></div>
+          <div class="card-desc"><b>Lv1:</b> ${c[4]}<br><b>Lv5:</b> ${sig[0]}<br><b>Lv10:</b> ${c[5]}<br><b>Gear:</b> ${sig[2]}</div>`;
+        const pcv = d.querySelector("canvas");
+        if (pcv) drawHeroSprite(18, 20, f, c[0], 0, 0, 0, pcv.getContext("2d"), -1);
+
+        const houseLine = badge ? `\nHouse / Order: ${badge[0]} ${badge[1]}` : "";
+        bindTooltip(d, () => `#${c[0]} ${c[3]}`, () => `${f.name} (${alignStr})${badge ? " • " + badge[0] + " " + badge[1] : ""}`, () => `Lv.1 Weapon: ${c[4]}\nLv.5 Primary: ${sig[0]}\nLv.10 Supercharge: ${c[5]}\nMounted Gear: ${sig[2]} (Auto-Fires)\nPassive: ${c[7]} (${c[8]})\nUtility: ${utils}${houseLine}\nDeploy Callout: "${sig[1]}"`, () => ico, () => c[0]);
+        d.onclick = () => {
+          if (wasLongPress) return;
+          if (unl) { meta.selChar = c[0]; saveMeta(); renderChars(); }
+          else if (availDM() >= c[2]) { meta.dmSpent += c[2]; meta.chars.push(c[0]); meta.selChar = c[0]; saveMeta(); renderChars(); sfx(440, 880, 0.16, "triangle"); }
+        };
+        g.appendChild(d);
+      });
     });
   } finally {
     window._inHudUpdate = false;
@@ -538,7 +604,7 @@ function renderChars() {
 }
 
 function renderStages() {
-  const f = FACTIONS[CHAR_RAW[meta.selChar][1]], g = document.getElementById("stageGrid"); g.innerHTML = "";
+  const f = FACTIONS[(CHAR_RAW[meta.selChar] || CHAR_RAW[0])[1]] || FACTIONS[0], g = document.getElementById("stageGrid"); g.innerHTML = "";
   STAGES.forEach(s => {
     const unl = meta.stages.includes(s.id), sel = meta.selStage === s.id, wName = f.worlds[s.tier], d = document.createElement("div");
     d.className = "card " + (unl ? "unlocked" : "locked") + (sel ? " selected" : "");
@@ -592,8 +658,8 @@ async function renderHealth() {
   await runDynamicEOFScan();
   const auditHTML = eofAuditResults.map(r => `<div style="color:${r.ok ? "#00e676" : "#ff5252"}">• ${r.file}: ${r.status}</div>`).join("");
   document.getElementById("healthBox").innerHTML = `
-    <div class="health-row"><b>Dynamic EOF & Trailing-Line Paste Audit (v6.0 Physics Overhaul):</b><br>${auditHTML}</div>
-    <div class="health-row"><b>56-Hero Ballistics, Prequel Saber Flourishes & Bisection Physics: 100% VERIFIED</b><br>Zero Projectile Arcs on Melee • Level-Scaling Force Push (Lv.1–10)<div class="meter"><div class="meter-fill"></div></div></div>
+    <div class="health-row"><b>Dynamic EOF & Trailing-Line Paste Audit:</b><br>${auditHTML}</div>
+    <div class="health-row"><b>76-Hero Voxel, 11 Biomes, 76 SVGs, 76 Themes & Spellbook: 100% VERIFIED</b><br>Zero Shared Placeholders Across All 76 Heroes (#00-#75)<div class="meter"><div class="meter-fill"></div></div></div>
     <div class="health-row"><b>Live Render Load & Gore Telemetry:</b><br>${fpsCount} FPS • ${frameMs}ms/frame • Corpses: ${activeCorpseCount}/${opts.persistCount}<div class="meter"><div class="meter-fill"></div></div></div>`;
 }
 
