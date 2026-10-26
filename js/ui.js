@@ -1,6 +1,6 @@
 // FILE: js/ui.js
 // PART: 14 of 14
-// DETAIL: v7.0 Arcane Sanctum Overhaul — Genre-Sorted 76-Hero Roster (0 DM Starters First), House/Order Crest Badges, Interactive Top-Bar Spellbook (#spellBar), Level-Scaling Force Push Cards, and Safe Loop.
+// DETAIL: v8.2 Overhaul — Guaranteed Card Touch-Drag Scroll Controller (enableScreenCardScroll), Stationary 350ms Inspector, In-Place Non-Destructive HUD (#spellBar, #utilBar, #dashSlot), Canonical Level-Up Weapon Colors (bladeCol), and 80-Hero Roster.
 
 "use strict";
 
@@ -9,9 +9,9 @@ let eofAuditResults = [];
 const UI_VISOR_DEFS = [
   { id: 0, short: "OFF", name: "Visor Off", desc: "Standard naked-eye optics." },
   { id: 1, short: "BOBA RF", name: "Mandalorian Rangefinder", desc: "Green telemetry lock on strongest on-screen threat (+10% Crit)." },
-  { id: 2, short: "T-800 / AUROR", name: "Cybernetic / Magical Eye HUD", desc: "Red neural target box with Head Life % & T-Zone readout (+10% Crit)." },
+  { id: 2, short: "T-800 / SITH", name: "Cybernetic / Sith Neural HUD", desc: "Red neural target box with Head Life % & T-Zone readout (+10% Crit)." },
   { id: 3, short: "THERMAL / SPECTRE", name: "Yautja Thermal / Spectrespecs", desc: "Full-spectrum infrared & Wrackspurt heat signatures on all hostiles (+10% Crit)." },
-  { id: 4, short: "PRESCIENCE", name: "Matrix / Arcane Prescience", desc: "Construct code & prophetic target lock with movement vector prediction (+10% Crit)." }
+  { id: 4, short: "PRESCIENCE", name: "Force / Matrix Prescience", desc: "Prophetic Force & construct target lock with vector prediction (+10% Crit)." }
 ];
 
 function ensurePlayerVisors() {
@@ -19,7 +19,7 @@ function ensurePlayerVisors() {
   if (!Array.isArray(player.unlockedVisors)) {
     const startVisor = (typeof player.activeVisor === "number" && player.activeVisor > 0)
       ? player.activeVisor
-      : ([1, 54].includes(player.cid) ? 1 : ([40, 65].includes(player.cid) ? 2 : ([29, 59].includes(player.cid) ? 3 : ([39, 56, 69, 71, 73, 74].includes(player.cid) ? 4 : 0))));
+      : ([1, 54].includes(player.cid) ? 1 : ([40, 65, 76].includes(player.cid) ? 2 : ([29, 59, 77].includes(player.cid) ? 3 : ([39, 56, 69, 71, 73, 74, 78, 79].includes(player.cid) ? 4 : 0))));
     player.unlockedVisors = startVisor > 0 ? [startVisor] : [];
     if (typeof player.activeVisor !== "number") player.activeVisor = startVisor;
   }
@@ -73,8 +73,72 @@ function checkLoadedScripts() {
   return true;
 }
 
-/* === 2. 350ms INSPECTOR & CANON OUTFIT CUSTOMIZER === */
-let pressTimer = null, wasLongPress = false;
+/* === 2. DIRECT CARD TOUCH-DRAG SCROLL CONTROLLER & 350ms HOLD INSPECTOR ===
+   Guarantees swiping directly on top of Character/Stage/Shop cards always scrolls smoothly! */
+let pressTimer = null, wasLongPress = false, wasScrolled = false;
+
+function enableScreenCardScroll() {
+  document.querySelectorAll(".screen").forEach(scr => {
+    if (scr._cardScrollBound) return;
+    scr._cardScrollBound = true;
+
+    let dragging = false, startY = 0, lastY = 0, startScroll = 0;
+
+    scr.addEventListener("touchstart", e => {
+      if (!e.touches || e.touches.length !== 1) return;
+      dragging = true;
+      wasScrolled = false;
+      startY = lastY = e.touches[0].clientY;
+      startScroll = scr.scrollTop;
+    }, { passive: true });
+
+    scr.addEventListener("touchmove", e => {
+      if (!dragging || !e.touches || e.touches.length !== 1) return;
+      const curY = e.touches[0].clientY;
+      const totalDY = Math.abs(curY - startY);
+      const stepDY = lastY - curY;
+      lastY = curY;
+
+      if (totalDY > 9) {
+        wasScrolled = true;
+        clearTimeout(pressTimer);
+        if (Math.abs(scr.scrollTop - startScroll) < 2) {
+          scr.scrollTop += stepDY;
+          startScroll = scr.scrollTop;
+        }
+      }
+    }, { passive: true });
+
+    scr.addEventListener("touchend", () => { dragging = false; }, { passive: true });
+    scr.addEventListener("touchcancel", () => { dragging = false; }, { passive: true });
+
+    scr.addEventListener("pointerdown", e => {
+      if (e.pointerType === "touch") return;
+      dragging = true;
+      wasScrolled = false;
+      startY = lastY = e.clientY || 0;
+      startScroll = scr.scrollTop;
+    }, { passive: true });
+
+    scr.addEventListener("pointermove", e => {
+      if (!dragging || e.pointerType === "touch") return;
+      const curY = e.clientY || 0;
+      const totalDY = Math.abs(curY - startY);
+      const stepDY = lastY - curY;
+      lastY = curY;
+
+      if (totalDY > 9) {
+        wasScrolled = true;
+        clearTimeout(pressTimer);
+        scr.scrollTop += stepDY;
+      }
+    }, { passive: true });
+
+    scr.addEventListener("pointerup", () => { dragging = false; }, { passive: true });
+    scr.addEventListener("pointercancel", () => { dragging = false; }, { passive: true });
+  });
+}
+
 function openInspector(title, sub, body, iconHTML = "", heroCid = -1) {
   if (navigator.vibrate) navigator.vibrate(18);
   if (typeof runActive !== "undefined" && runActive) runPaused = true;
@@ -96,7 +160,7 @@ function renderOutfitCustomizer(cid) {
   const btnBar = document.getElementById("custBtns");
   if (btnBar) {
     btnBar.innerHTML = "";
-    const bladeLbl = cid >= 56 ? "Wand/Magic" : "Saber/Glow";
+    const bladeLbl = (cid >= 56 && cid <= 75) ? "Wand/Magic" : "Saber/Glow";
     [["head", "Head"], ["torso", "Torso"], ["legs", "Legs"], ["back", "Back"], ["blade", bladeLbl]].forEach(([k, lbl]) => {
       if (!pal || !pal[k]) return;
       const btn = document.createElement("button");
@@ -136,20 +200,37 @@ function renderOutfitCustomizer(cid) {
 }
 
 function bindTooltip(el, getTitle, getSub, getBody, getIcon = () => "", getHeroCid = () => -1) {
-  let sx = 0, sy = 0;
+  let sx = 0, sy = 0, startScrollTop = 0, scrollContainer = null;
+
+  el.addEventListener("contextmenu", e => {
+    e.preventDefault();
+  });
+
   el.addEventListener("pointerdown", e => {
-    wasLongPress = false; sx = e.clientX || 0; sy = e.clientY || 0;
+    wasLongPress = false;
+    wasScrolled = false;
+    sx = e.clientX || 0;
+    sy = e.clientY || 0;
+    scrollContainer = el.closest(".screen");
+    startScrollTop = scrollContainer ? scrollContainer.scrollTop : 0;
     clearTimeout(pressTimer);
     pressTimer = setTimeout(() => {
+      if (wasScrolled) return;
+      if (scrollContainer && Math.abs(scrollContainer.scrollTop - startScrollTop) > 6) return;
       wasLongPress = true;
       openInspector(getTitle(), getSub(), getBody(), getIcon(), getHeroCid());
     }, (typeof opts !== "undefined" ? opts.ttDelay : 350));
-  });
+  }, { passive: true });
+
   el.addEventListener("pointermove", e => {
-    if (Math.hypot((e.clientX || 0) - sx, (e.clientY || 0) - sy) > 14) clearTimeout(pressTimer);
-  });
-  el.addEventListener("pointerup", () => clearTimeout(pressTimer));
-  el.addEventListener("pointercancel", () => clearTimeout(pressTimer));
+    const curScroll = scrollContainer ? scrollContainer.scrollTop : 0;
+    if (Math.hypot((e.clientX || 0) - sx, (e.clientY || 0) - sy) > 10 || Math.abs(curScroll - startScrollTop) > 6) {
+      clearTimeout(pressTimer);
+    }
+  }, { passive: true });
+
+  el.addEventListener("pointerup", () => clearTimeout(pressTimer), { passive: true });
+  el.addEventListener("pointercancel", () => clearTimeout(pressTimer), { passive: true });
 }
 
 document.getElementById("ttClose").onclick = () => {
@@ -301,7 +382,6 @@ function triggerLevelUp() {
     else if (w.lvl < 9) pool.push({ type: "wup", w, isSuper: false });
   });
 
-  // Level-Up Card for Signature Hardware / Force Kinetic Push (Lv.1 -> Lv.10 Full 360° Circle!)
   const curSigLvl = player.sigGearLvl || 1;
   if (curSigLvl < 10) {
     pool.push({ type: "sigup", nextLvl: curSigLvl + 1 });
@@ -335,10 +415,11 @@ function triggerLevelUp() {
         const nxt = ch.w.lvl + 1;
         const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[ch.w.id]) ? HERO_SIG_GEAR[ch.w.id] : null;
         const lv5Name = sig ? sig[0] : ch.w.name;
+        const nxtStance = typeof getHeroStanceSpec === "function" ? getHeroStanceSpec(ch.w.id, nxt, false).stageName : "Combat Form";
         card.className = "card unlocked" + (nxt === 10 ? " super-flash" : "");
         title = nxt === 10 ? "★ SUPERCHARGE: " + ch.w.superName + " (Lv.10)" : (nxt === 5 ? "★ LV.5 PRIMARY: " + lv5Name : ch.w.name + " (Lv." + nxt + "/10)");
-        sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (nxt === 5 ? "PRIMARY ARSENAL TRANSITION (+25% DMG)" : "Weapon & Spellbook Matrix Upgrade");
-        desc = nxt === 10 ? "Supercharges weapon physics & unlocks 2.35x Ultimate Damage!" : (nxt === 5 ? "Transitions starter weapon into " + lv5Name + " & unlocks new top-bar spells!" : "+25% Base Damage, +Area, faster flourish/cooldown & unlocks next Spell/Summon tier!");
+        sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (nxt === 4 || nxt === 7 ? `STANCE EVOLUTION: ${nxtStance.toUpperCase()}` : "Weapon, Stance & Spellbook Upgrade");
+        desc = nxt === 10 ? `Supercharges ${nxtStance} & unlocks 2.35x Ultimate Damage!` : `+25% Base Damage, Stance: ${nxtStance}, & unlocks next Spellbook tier!`;
         ico = makeSVG(ch.w.style, nxt >= 5 ? "#ffd166" : "#00e5ff", "#ffd166", ch.w.id);
       } else if (ch.type === "sigup") {
         const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[player.cid]) ? HERO_SIG_GEAR[player.cid] : HERO_SIG_GEAR[0];
@@ -382,18 +463,30 @@ function triggerLevelUp() {
       card.innerHTML = `<div class="card-head">${ico}<div><div class="card-title">${title}</div><div class="card-sub">${sub}</div></div></div><div class="card-desc">${desc}</div>`;
       bindTooltip(card, () => title, () => sub, () => desc, () => ico);
       card.onclick = () => {
-        if (wasLongPress) return;
+        if (wasLongPress || wasScrolled) return;
         if (ch.type === "wup") {
           ch.w.lvl++;
           if (ch.w.style === "orbit") player.saberMastery = Math.min(100, player.saberMastery + 10);
           if (ch.w.lvl === 10) spawnSpeech(player.x, player.y, "SUPERCHARGED: " + ch.w.superName.toUpperCase() + "!", "#ffd166", 2.6);
-          if (typeof syncHeroSpellbook === "function") syncHeroSpellbook();
         } else if (ch.type === "sigup") {
           player.sigGearLvl = ch.nextLvl;
           player.sigGearCD = 0.25;
           spawnSpeech(player.x, player.y, `FORCE / HARDWARE LV.${ch.nextLvl}!`, "#00e5ff", 2.0);
         } else if (ch.type === "wnew") {
-          player.weapons.push({ id: ch.c[0], name: ch.c[4], superName: ch.c[5], style: ch.c[6], lvl: 1, cd: 0, ang: 0, angVel: 0, enabled: true, evolvedLv5: false });
+          const wCol = typeof getWeaponColor === "function" ? getWeaponColor(ch.c[0]) : "#00f0ff";
+          player.weapons.push({
+            id: ch.c[0],
+            name: ch.c[4],
+            superName: ch.c[5],
+            style: ch.c[6],
+            lvl: 1,
+            cd: 0,
+            ang: 0,
+            angVel: 0,
+            enabled: true,
+            evolvedLv5: false,
+            bladeCol: wCol
+          });
           if (ch.c[6] === "orbit") { player.hasSaber = true; player.saberMastery = Math.max(10, player.saberMastery); }
         } else if (ch.type === "visor") {
           if (!player.unlockedVisors.includes(ch.vid)) player.unlockedVisors.push(ch.vid);
@@ -404,7 +497,9 @@ function triggerLevelUp() {
         } else if (ch.type === "vac100") {
           player.orbVacuumRate = 1.0; vacuumDistantOrbs(1.0);
         } else applyPassive(ch.idx);
-        runPaused = false; showScreen(null); updateHUD();
+        runPaused = false; showScreen(null);
+        if (typeof syncHeroSpellbook === "function") syncHeroSpellbook();
+        updateHUD();
       };
       grid.appendChild(card);
     });
@@ -414,14 +509,16 @@ function triggerLevelUp() {
   renderWeaponToggler(); drawRangeTarget(selRangeTab); showScreen("scrLevel");
 }
 
-/* === 4. IN-RUN HUD & TOP-BAR CUMULATIVE SPELLBOOK (#spellBar) === */
+/* === 4. IN-PLACE NON-DESTRUCTIVE HUD (#bodyHud, #spellBar, #utilBar, #dashSlot) === */
 const LIMB_LBLS = ["HD", "TR", "LA", "RA", "LL", "RL"];
+
 function updateHUD() {
   if (typeof player === "undefined" || !player) return;
   ensurePlayerVisors();
-  if (typeof syncHeroSpellbook === "function") syncHeroSpellbook();
   window._inHudUpdate = true;
   try {
+    if (typeof syncHeroSpellbook === "function") syncHeroSpellbook();
+
     document.getElementById("hpBar").style.width = Math.max(0, (player.hp / player.maxHp) * 100) + "%";
     document.getElementById("hpTxt").textContent = `${Math.ceil(player.hp)}/${Math.ceil(player.maxHp)}${player.inVehicle ? " [VEH]" : ""}`;
     document.getElementById("xpBar").style.width = Math.min(100, (player.xp / player.nextXp) * 100) + "%";
@@ -432,105 +529,242 @@ function updateHUD() {
 
     const bHud = document.getElementById("bodyHud");
     if (bHud && player.limbs) {
-      bHud.innerHTML = "";
-      LIMB_LBLS.forEach((lbl, idx) => {
+      for (let idx = 0; idx < 6; idx++) {
+        let p = bHud.querySelector(`[data-limb="${idx}"]`);
+        if (!p) {
+          p = document.createElement("div");
+          p.setAttribute("data-limb", String(idx));
+          p.className = "stat-pill";
+          p.style.cssText = "padding:2px 4px;font-size:0.58rem;cursor:pointer;";
+          p.onpointerdown = (e) => {
+            e.stopPropagation();
+            player.guardZone = player.guardZone === idx ? -1 : idx;
+            updateHUD();
+          };
+          bHud.appendChild(p);
+        }
         const pct = Math.round(player.limbs[idx]), g = player.guardZone === idx;
-        const p = document.createElement("div");
-        p.className = "stat-pill"; p.style.padding = "2px 4px"; p.style.fontSize = "0.58rem"; p.style.cursor = "pointer";
         p.style.borderColor = g ? "#ffd166" : (pct < 55 ? "#ff5252" : (pct < 85 ? "#ffd166" : "#00e676"));
-        p.textContent = `${g ? "🛡" : ""}${lbl}:${pct}%`;
-        p.onpointerdown = () => { player.guardZone = player.guardZone === idx ? -1 : idx; updateHUD(); };
-        bHud.appendChild(p);
-      });
-      if (player.activeVisor > 0) {
-        const vp = document.createElement("div");
-        vp.className = "stat-pill"; vp.style.padding = "2px 5px"; vp.style.fontSize = "0.56rem"; vp.style.borderColor = "#00e5ff"; vp.style.color = "#00e5ff"; vp.style.cursor = "pointer";
-        vp.textContent = `👁 ${UI_VISOR_DEFS[player.activeVisor].short} (+10% CRIT)`;
-        vp.onpointerdown = () => {
-          const list = [0, ...(player.unlockedVisors || [])];
-          const nextIdx = (list.indexOf(player.activeVisor) + 1) % list.length;
-          player.activeVisor = list[nextIdx];
-          updateHUD();
-        };
-        bHud.appendChild(vp);
+        p.textContent = `${g ? "🛡" : ""}${LIMB_LBLS[idx]}:${pct}%`;
       }
-      const spdLoss = Math.round((1 - (player.limbs[4] + player.limbs[5]) / 200) * 100);
-      const drift = Math.round(player.limbs[4] - player.limbs[5]);
-      const aimLoss = Math.round(100 - player.limbs[0]);
-      if (spdLoss > 4 || Math.abs(drift) > 8 || aimLoss > 6) {
-        const dp = document.createElement("div");
-        dp.className = "stat-pill"; dp.style.padding = "2px 5px"; dp.style.fontSize = "0.56rem"; dp.style.borderColor = "#ff5252"; dp.style.color = "#ff8a80";
-        dp.textContent = `${spdLoss > 4 ? "SPD-" + spdLoss + "% " : ""}${Math.abs(drift) > 8 ? (drift > 0 ? "DRIFT:R " : "DRIFT:L ") : ""}${aimLoss > 6 ? "AIM-" + aimLoss + "%" : ""}`.trim();
-        bHud.appendChild(dp);
+
+      let vp = bHud.querySelector(`[data-visor-pill="1"]`);
+      if (player.activeVisor > 0) {
+        if (!vp) {
+          vp = document.createElement("div");
+          vp.setAttribute("data-visor-pill", "1");
+          vp.className = "stat-pill";
+          vp.style.cssText = "padding:2px 5px;font-size:0.56rem;border-color:#00e5ff;color:#00e5ff;cursor:pointer;";
+          vp.onpointerdown = (e) => {
+            e.stopPropagation();
+            const list = [0, ...(player.unlockedVisors || [])];
+            const nextIdx = (list.indexOf(player.activeVisor) + 1) % list.length;
+            player.activeVisor = list[nextIdx];
+            updateHUD();
+          };
+          bHud.appendChild(vp);
+        }
+        vp.textContent = `👁 ${UI_VISOR_DEFS[player.activeVisor].short} (+10% CRIT)`;
+      } else if (vp) {
+        vp.remove();
       }
     }
 
-    // Render Cumulative Top-Bar Spellbook & Necromancer Resurrect Buttons (#spellBar)
     const spBar = document.getElementById("spellBar");
     if (spBar) {
-      spBar.innerHTML = "";
+      let necroPill = spBar.querySelector(`[data-necro-pill="1"]`);
       if (player.cid === 75 && typeof countActiveMinions === "function") {
+        if (!necroPill) {
+          necroPill = document.createElement("div");
+          necroPill.setAttribute("data-necro-pill", "1");
+          necroPill.className = "stat-pill";
+          necroPill.style.cssText = "padding:2px 5px;font-size:0.56rem;border-color:#b388ff;color:#00ff88;";
+          spBar.appendChild(necroPill);
+        }
         const mCnt = countActiveMinions(-1);
         const cCnt = typeof countActiveCorpsesNear === "function" ? countActiveCorpsesNear(player.x, player.y, 320) : 0;
-        const mp = document.createElement("div");
-        mp.className = "stat-pill"; mp.style.padding = "2px 5px"; mp.style.fontSize = "0.56rem";
-        mp.style.borderColor = "#b388ff"; mp.style.color = "#00ff88";
-        mp.textContent = `💀 Army:${mCnt} | Corpses:${cCnt}`;
-        spBar.appendChild(mp);
+        necroPill.textContent = `💀 Army:${mCnt} | Corpses:${cCnt}`;
+      } else if (necroPill) {
+        necroPill.remove();
       }
-      if (Array.isArray(player.spellbook) && player.spellbook.length > 0) {
-        player.spellbook.forEach((sp, sIdx) => {
-          const rdy = sp.cd <= 0.05;
-          const sb = document.createElement("button");
-          sb.className = "btn" + (rdy ? " gold" : "");
-          sb.style.padding = "2px 6px"; sb.style.fontSize = "0.56rem"; sb.style.pointerEvents = "auto";
-          sb.style.opacity = rdy ? "1" : "0.62";
-          sb.textContent = rdy ? `✨ ${sp.name}` : `${sp.name} (${sp.cd.toFixed(1)}s)`;
+
+      const spells = Array.isArray(player.spellbook) ? player.spellbook : [];
+      spBar.querySelectorAll("[data-spell-idx]").forEach(el => {
+        const idx = parseInt(el.getAttribute("data-spell-idx"), 10);
+        if (!spells[idx] || el.getAttribute("data-spell-name") !== spells[idx].name) el.remove();
+      });
+
+      spells.forEach((sp, sIdx) => {
+        let sb = spBar.querySelector(`[data-spell-idx="${sIdx}"]`);
+        if (!sb) {
+          sb = document.createElement("button");
+          sb.setAttribute("data-spell-idx", String(sIdx));
+          sb.setAttribute("data-spell-name", sp.name);
+          sb.style.cssText = "padding:3px 7px;font-size:0.58rem;pointer-events:auto;";
           bindTooltip(sb, () => `SPELL: ${sp.name}`, () => `Unlocked at Lv.${sp.reqLvl} • Cooldown: ${sp.cdMax}s`, () => sp.desc);
           sb.onclick = (e) => {
             e.stopPropagation();
             if (!wasLongPress && typeof triggerSpell === "function") triggerSpell(sIdx);
           };
           spBar.appendChild(sb);
-        });
-      }
+        }
+        const rdy = sp.cd <= 0.05;
+        sb.className = "btn" + (rdy ? " gold" : "");
+        sb.style.opacity = rdy ? "1" : "0.65";
+        sb.textContent = rdy ? `✨ ${sp.name}` : `${sp.name} (${sp.cd.toFixed(1)}s)`;
+      });
     }
 
     const sHud = document.getElementById("saberHud");
-    if (sHud) { sHud.style.display = player.hasSaber ? "inline-block" : "none"; sHud.textContent = `Saber Reflect: ${Math.floor(player.saberMastery)}%`; }
+    if (sHud) {
+      const stanceTxt = player.activeStanceName ? player.activeStanceName.split(" (")[0] : "";
+      if (player.hasSaber) {
+        sHud.style.display = "inline-block";
+        sHud.textContent = `${stanceTxt ? stanceTxt + " • " : ""}Reflect: ${Math.floor(player.saberMastery)}%`;
+      } else if (stanceTxt) {
+        sHud.style.display = "inline-block";
+        sHud.textContent = `Stance: ${stanceTxt}`;
+      } else {
+        sHud.style.display = "none";
+      }
+    }
 
     const itBtn = document.getElementById("btnInteract"), tgt = findInteractTarget();
     if (tgt) { itBtn.style.display = "inline-block"; itBtn.textContent = tgt.label; } else itBtn.style.display = "none";
 
-    const wBox = document.getElementById("wpnSlots"); wBox.innerHTML = "";
-    player.weapons.forEach(w => {
-      const d = document.createElement("div"); d.className = "slot" + (w.lvl >= 10 ? " super" : "");
-      d.style.opacity = w.enabled === false ? "0.35" : "1";
-      d.innerHTML = `${makeSVG(w.style, w.lvl >= 10 ? "#ffd166" : "#00e5ff", "#ffd166", w.id)}<span>L${w.lvl}</span>`;
-      d.onclick = () => {
-        if (w.enabled !== false && player.weapons.filter(x => x.enabled !== false).length <= 1) return;
-        w.enabled = w.enabled === false ? true : false; updateHUD();
-      };
-      wBox.appendChild(d);
-    });
-    const pBox = document.getElementById("pasSlots"); pBox.innerHTML = "";
-    player.passives.forEach(p => {
-      const d = document.createElement("div"); d.className = "slot pas"; d.innerHTML = `<span>P${p.id + 1}</span><span>L${p.lvl}</span>`;
-      pBox.appendChild(d);
-    });
-    const rBox = document.getElementById("relicSlots"); rBox.innerHTML = "";
-    player.relics.forEach(r => {
-      const d = document.createElement("div"); d.className = "slot relic"; d.innerHTML = `${makeSVG("relic")}<span>R${r.id}</span>`;
-      rBox.appendChild(d);
-    });
-    const uBox = document.getElementById("utilBar"); uBox.innerHTML = "";
-    player.utils.forEach((u, idx) => {
-      const ready = u.cd <= 0.01, deg = ready ? 360 : Math.floor(((u.cdMax * player.utilCdrMul - u.cd) / (u.cdMax * player.utilCdrMul)) * 360);
-      const btn = document.createElement("div"); btn.className = "util-btn" + (ready ? " ready" : "");
-      btn.innerHTML = `${makeSVG(u.icon, ready ? "#ffd166" : "#90a4ae")}<span>${ready ? "RDY" : u.cd.toFixed(1)}</span><div class="util-sweep" style="--sweep-deg:${deg}deg"></div>`;
-      bindTooltip(btn, () => u.name, () => `Cooldown: ${u.cdMax}s`, () => u.desc);
-      btn.onclick = () => { if (!wasLongPress) triggerUtility(idx); }; uBox.appendChild(btn);
-    });
+    const wBox = document.getElementById("wpnSlots");
+    if (wBox) {
+      if (wBox.children.length !== player.weapons.length) wBox.innerHTML = "";
+      player.weapons.forEach((w, wIdx) => {
+        let d = wBox.children[wIdx];
+        if (!d) {
+          d = document.createElement("div");
+          bindTooltip(d, () => `${w.name} (Lv.${w.lvl}/10)`, () => "Tap to Toggle ON/OFF • Hold 350ms to Inspect", () => `Supercharge: ${w.superName}\nStyle: ${w.style.toUpperCase()}`, () => makeSVG(w.style, "#00e5ff", "#ffd166", w.id));
+          d.onclick = (e) => {
+            e.stopPropagation();
+            if (wasLongPress) return;
+            if (w.enabled !== false && player.weapons.filter(x => x.enabled !== false).length <= 1) return;
+            w.enabled = w.enabled === false ? true : false;
+            updateHUD();
+          };
+          wBox.appendChild(d);
+        }
+        d.className = "slot" + (w.lvl >= 10 ? " super" : "");
+        d.style.opacity = w.enabled === false ? "0.35" : "1";
+        const wKey = `${w.id}_${w.lvl}_${w.enabled}`;
+        if (d.getAttribute("data-wkey") !== wKey) {
+          d.setAttribute("data-wkey", wKey);
+          d.innerHTML = `${makeSVG(w.style, w.lvl >= 10 ? "#ffd166" : "#00e5ff", "#ffd166", w.id)}<span>L${w.lvl}</span>`;
+        }
+      });
+    }
+
+    const pBox = document.getElementById("pasSlots");
+    if (pBox && pBox.children.length !== player.passives.length) {
+      pBox.innerHTML = "";
+      player.passives.forEach(p => {
+        const d = document.createElement("div"); d.className = "slot pas";
+        d.innerHTML = `<span>P${p.id + 1}</span><span>L${p.lvl}</span>`;
+        bindTooltip(d, () => `${p.name} (Lv.${p.lvl}/5)`, () => "Passive Matrix Slot", () => p.desc);
+        pBox.appendChild(d);
+      });
+    } else if (pBox) {
+      player.passives.forEach((p, idx) => {
+        if (pBox.children[idx]) pBox.children[idx].innerHTML = `<span>P${p.id + 1}</span><span>L${p.lvl}</span>`;
+      });
+    }
+
+    const rBox = document.getElementById("relicSlots");
+    if (rBox && rBox.children.length !== player.relics.length) {
+      rBox.innerHTML = "";
+      player.relics.forEach(r => {
+        const d = document.createElement("div"); d.className = "slot relic";
+        d.innerHTML = `${makeSVG("relic")}<span>R${r.id}</span>`;
+        bindTooltip(d, () => `RELIC: ${r.name}`, () => "Boss Relic Matrix", () => r.desc, () => makeSVG("relic"));
+        rBox.appendChild(d);
+      });
+    }
+
+    const uBox = document.getElementById("utilBar");
+    if (uBox) {
+      if (uBox.children.length !== player.utils.length || uBox.getAttribute("data-cid") !== String(player.cid)) {
+        uBox.innerHTML = "";
+        uBox.setAttribute("data-cid", String(player.cid));
+        player.utils.forEach((u, idx) => {
+          const btn = document.createElement("div");
+          btn.className = "util-btn ready";
+          btn.innerHTML = `<div class="u-ico"></div><span class="u-lbl">RDY</span><div class="util-sweep"></div>`;
+          bindTooltip(btn, () => u.name, () => `Fast Tap to Activate • Cooldown: ${u.cdMax}s`, () => u.desc, () => makeSVG(u.icon, "#ffd166"));
+          btn.onclick = (e) => {
+            e.stopPropagation();
+            if (!wasLongPress) triggerUtility(idx);
+          };
+          uBox.appendChild(btn);
+        });
+      }
+      player.utils.forEach((u, idx) => {
+        const btn = uBox.children[idx];
+        if (!btn) return;
+        const ready = u.cd <= 0.01;
+        const maxCD = Math.max(0.1, u.cdMax * player.utilCdrMul);
+        const deg = ready ? 360 : Math.floor(((maxCD - u.cd) / maxCD) * 360);
+        btn.className = "util-btn" + (ready ? " ready" : "");
+        const icoEl = btn.querySelector(".u-ico");
+        if (icoEl && icoEl.getAttribute("data-rdy") !== String(ready)) {
+          icoEl.setAttribute("data-rdy", String(ready));
+          icoEl.innerHTML = makeSVG(u.icon, ready ? "#ffd166" : "#90a4ae");
+        }
+        const lblEl = btn.querySelector(".u-lbl");
+        if (lblEl) lblEl.textContent = ready ? "RDY" : u.cd.toFixed(1);
+        const swEl = btn.querySelector(".util-sweep");
+        if (swEl) swEl.style.setProperty("--sweep-deg", deg + "deg");
+      });
+    }
+
+    const dBox = document.getElementById("dashSlot");
+    if (dBox && typeof getHeroDashSpec === "function") {
+      const dSpec = getHeroDashSpec(player.cid);
+      if (dBox.children.length === 0 || dBox.getAttribute("data-cid") !== String(player.cid)) {
+        dBox.innerHTML = "";
+        dBox.setAttribute("data-cid", String(player.cid));
+        const dBtn = document.createElement("div");
+        dBtn.className = "util-btn dash-ready";
+        dBtn.innerHTML = `<div class="d-ico"></div><span class="d-lbl">DASH</span><div class="util-sweep"></div>`;
+        bindTooltip(
+          dBtn,
+          () => `💨 DASH: ${dSpec.name}`,
+          () => `Tap Here or Double-Tap Distant Ground • CD: ${dSpec.cd}s`,
+          () => `${dSpec.desc}\nCallout: "${dSpec.callout}"`,
+          () => makeSVG("dash", "#00e676", "#ffd166")
+        );
+        dBtn.onclick = (e) => {
+          e.stopPropagation();
+          if (!wasLongPress && typeof executeHeroDash === "function") {
+            const aimX = player.x + Math.cos(player.aim || 0) * dSpec.dist;
+            const aimY = player.y + Math.sin(player.aim || 0) * dSpec.dist;
+            executeHeroDash(aimX, aimY);
+          }
+        };
+        dBox.appendChild(dBtn);
+      }
+      const dBtn = dBox.children[0];
+      if (dBtn) {
+        const cd = player.dashCD || 0;
+        const maxCD = Math.max(0.1, player.dashMaxCD || dSpec.cd);
+        const ready = cd <= 0.05;
+        const deg = ready ? 360 : Math.floor(((maxCD - cd) / maxCD) * 360);
+        dBtn.className = "util-btn" + (ready ? " dash-ready" : "");
+        const icoEl = dBtn.querySelector(".d-ico");
+        if (icoEl && icoEl.getAttribute("data-rdy") !== String(ready)) {
+          icoEl.setAttribute("data-rdy", String(ready));
+          icoEl.innerHTML = makeSVG("dash", ready ? "#00e676" : "#90a4ae", "#ffd166");
+        }
+        const lblEl = dBtn.querySelector(".d-lbl");
+        if (lblEl) lblEl.textContent = ready ? "DASH" : cd.toFixed(1);
+        const swEl = dBtn.querySelector(".util-sweep");
+        if (swEl) swEl.style.setProperty("--sweep-deg", deg + "deg");
+      }
+    }
   } finally {
     window._inHudUpdate = false;
   }
@@ -553,47 +787,59 @@ function updateMenuUI() {
   const gc = document.getElementById("goChars"); if (gc) gc.textContent = `CHARACTER ROSTER (${CHAR_RAW.length})`;
 }
 
-/* === 5. GENRE-SORTED 76-HERO ROSTER WITH HOUSE/ORDER CREST BADGES === */
+/* === 5. GENRE-SORTED 80-HERO ROSTER WITH BIOGRAPHICAL STANCES, DASH SPECS & HOUSE CRESTS === */
 function renderChars() {
   if (typeof ensureStarterChars === "function") ensureStarterChars();
   document.getElementById("charDM").textContent = "Available DM: " + availDM();
   const g = document.getElementById("charGrid"); g.innerHTML = "";
   window._inHudUpdate = true;
   try {
-    // Group by Genre/Faction (0..10), and within each Genre sort by Dark Matter cost ascending (0 DM Starter first!)
     FACTIONS.forEach(fac => {
       const genreHeroes = CHAR_RAW.filter(c => c[1] === fac.id).sort((a, b) => (a[2] - b[2]) || (a[0] - b[0]));
       if (genreHeroes.length === 0) return;
 
       const hdr = document.createElement("div");
       hdr.style.cssText = `grid-column:1 / -1;padding:5px 8px;margin-top:6px;background:rgba(10,20,36,0.92);border-left:4px solid ${fac.c1};border-bottom:1px solid ${fac.c1}66;border-radius:4px;font-size:0.68rem;font-weight:bold;color:${fac.c1};display:flex;justify-content:space-between;align-items:center;`;
-      hdr.innerHTML = `<span>SECTOR GENRE #${fac.id + 1}: ${fac.name.toUpperCase()} (${fac.worlds[0]} • ${genreHeroes.length} Heroes)</span><span style="color:#ffd166;font-size:0.58rem">Sorted Low → High DM</span>`;
+      hdr.innerHTML = `<span>SECTOR GENRE #${fac.id + 1}: ${fac.name.toUpperCase()} (${fac.worlds[0]} • ${genreHeroes.length} Heroes)</span><span style="color:#ffd166;font-size:0.58rem">Swipe Cards to Scroll</span>`;
       g.appendChild(hdr);
 
       genreHeroes.forEach(c => {
-        const unl = meta.chars.includes(c[0]) || c[2] === 0;
-        const sel = meta.selChar === c[0], f = FACTIONS[c[1]] || FACTIONS[0], ico = makeSVG(c[6], f.c1, f.c2, c[0]);
-        const utils = getHeroUtils(c[0]).map(u => u.name).join(" + "), alignStr = typeof getHeroAlign === "function" ? getHeroAlign(c[0]).toUpperCase() : "HERO";
-        const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[c[0]]) ? HERO_SIG_GEAR[c[0]] : [c[4], "READY!", "Secondary Gear"];
-        const badge = typeof getHeroHouseBadge === "function" ? getHeroHouseBadge(c[0]) : null;
+        const cid = c[0];
+        const unl = meta.chars.includes(cid) || c[2] === 0;
+        const sel = meta.selChar === cid, f = FACTIONS[c[1]] || FACTIONS[0], ico = makeSVG(c[6], f.c1, f.c2, cid);
+        const utils = getHeroUtils(cid).map(u => u.name).join(" + "), alignStr = typeof getHeroAlign === "function" ? getHeroAlign(cid).toUpperCase() : "HERO";
+        const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[cid]) ? HERO_SIG_GEAR[cid] : [c[4], "READY!", "Secondary Gear"];
+        const badge = typeof getHeroHouseBadge === "function" ? getHeroHouseBadge(cid) : null;
+        const stEarly = typeof getHeroStanceSpec === "function" ? getHeroStanceSpec(cid, 1, false).stageName : "Standard";
+        const stMid   = typeof getHeroStanceSpec === "function" ? getHeroStanceSpec(cid, 4, false).stageName : "Veteran";
+        const stPrime = typeof getHeroStanceSpec === "function" ? getHeroStanceSpec(cid, 7, false) : { stageName: "Prime", deflectName: "Deflect" };
+        const dashSpec = typeof getHeroDashSpec === "function" ? getHeroDashSpec(cid) : { name: "Tactical Dash", desc: "Dashes forward" };
+
         const badgeHTML = badge
           ? `<div style="display:inline-block;margin-top:2px;padding:1px 5px;border-radius:4px;font-size:0.55rem;font-weight:bold;background:rgba(0,0,0,0.55);border:1px solid ${badge[2]};color:${badge[2]}">${badge[0]} ${badge[1]}</div>`
           : "";
 
         const d = document.createElement("div");
         d.className = "card " + (unl ? "unlocked" : "locked") + (sel ? " selected" : "");
-        d.innerHTML = `<div class="card-head"><canvas width="36" height="36" style="position:relative;width:36px;height:36px;background:${f.bg};border:1px solid ${f.c1};border-radius:6px;flex-shrink:0"></canvas><div><div class="card-title">#${String(c[0]).padStart(2, "0")} ${c[3]}</div>
+        d.innerHTML = `<div class="card-head"><canvas width="36" height="36" style="position:relative;width:36px;height:36px;background:${f.bg};border:1px solid ${f.c1};border-radius:6px;flex-shrink:0"></canvas><div><div class="card-title">#${String(cid).padStart(2, "0")} ${c[3]}</div>
           <div class="card-sub">${f.name} • ${unl ? (c[2] === 0 ? "★ FREE STARTER" : "UNLOCKED") : c[2] + " DM"}</div>${badgeHTML}</div></div>
-          <div class="card-desc"><b>Lv1:</b> ${c[4]}<br><b>Lv5:</b> ${sig[0]}<br><b>Lv10:</b> ${c[5]}<br><b>Gear:</b> ${sig[2]}</div>`;
+          <div class="card-desc"><b>Lv1:</b> ${c[4]}<br><b>Prime Form:</b> ${stPrime.stageName}<br><b>Dash:</b> ${dashSpec.name}<br><b>Gear:</b> ${sig[2]}</div>`;
         const pcv = d.querySelector("canvas");
-        if (pcv) drawHeroSprite(18, 20, f, c[0], 0, 0, 0, pcv.getContext("2d"), -1);
+        if (pcv) drawHeroSprite(18, 20, f, cid, 0, 0, 0, pcv.getContext("2d"), -1);
 
         const houseLine = badge ? `\nHouse / Order: ${badge[0]} ${badge[1]}` : "";
-        bindTooltip(d, () => `#${c[0]} ${c[3]}`, () => `${f.name} (${alignStr})${badge ? " • " + badge[0] + " " + badge[1] : ""}`, () => `Lv.1 Weapon: ${c[4]}\nLv.5 Primary: ${sig[0]}\nLv.10 Supercharge: ${c[5]}\nMounted Gear: ${sig[2]} (Auto-Fires)\nPassive: ${c[7]} (${c[8]})\nUtility: ${utils}${houseLine}\nDeploy Callout: "${sig[1]}"`, () => ico, () => c[0]);
+        bindTooltip(
+          d,
+          () => `#${cid} ${c[3]}`,
+          () => `${f.name} (${alignStr})${badge ? " • " + badge[0] + " " + badge[1] : ""}`,
+          () => `Lv.1 Weapon: ${c[4]}\nLv.5 Primary: ${sig[0]}\nLv.10 Supercharge: ${c[5]}\nStance Progression:\n • Early (Lv.1-3): ${stEarly}\n • Seasoned (Lv.4-6): ${stMid}\n • Prime (Lv.7-10): ${stPrime.stageName}\n • Deflect Form: ${stPrime.deflectName}\nSignature Dash: ${dashSpec.name} (${dashSpec.desc})\nMounted Gear: ${sig[2]}\nPassive: ${c[7]} (${c[8]})\nUtilities: ${utils}${houseLine}`,
+          () => ico,
+          () => cid
+        );
         d.onclick = () => {
-          if (wasLongPress) return;
-          if (unl) { meta.selChar = c[0]; saveMeta(); renderChars(); }
-          else if (availDM() >= c[2]) { meta.dmSpent += c[2]; meta.chars.push(c[0]); meta.selChar = c[0]; saveMeta(); renderChars(); sfx(440, 880, 0.16, "triangle"); }
+          if (wasLongPress || wasScrolled) return;
+          if (unl) { meta.selChar = cid; saveMeta(); renderChars(); }
+          else if (availDM() >= c[2]) { meta.dmSpent += c[2]; meta.chars.push(cid); meta.selChar = cid; saveMeta(); renderChars(); sfx(440, 880, 0.16, "triangle"); }
         };
         g.appendChild(d);
       });
@@ -609,7 +855,7 @@ function renderStages() {
     const unl = meta.stages.includes(s.id), sel = meta.selStage === s.id, wName = f.worlds[s.tier], d = document.createElement("div");
     d.className = "card " + (unl ? "unlocked" : "locked") + (sel ? " selected" : "");
     d.innerHTML = `<div class="card-title">Stage ${s.id}: ${wName} ${s.suffix}</div><div class="card-sub">HP x${s.hpMul} • Drop: ${s.dmDrop} DM</div><div class="card-desc">Hazard: ${s.hazard}</div>`;
-    d.onclick = () => { if (!wasLongPress && unl) { meta.selStage = s.id; saveMeta(); renderStages(); } }; g.appendChild(d);
+    d.onclick = () => { if (!wasLongPress && !wasScrolled && unl) { meta.selStage = s.id; saveMeta(); renderStages(); } }; g.appendChild(d);
   });
 }
 
@@ -619,7 +865,7 @@ function renderMeta() {
   META_UPG.forEach((u, idx) => {
     const r = meta.ranks[idx], cost = u[2] * (r + 1), d = document.createElement("div"); d.className = "card unlocked";
     d.innerHTML = `<div class="card-title">${u[0]} (Rank ${r}/5)</div><div class="card-sub">${r >= 5 ? "MAXED" : "Cost: " + cost + " DM"}</div><div class="card-desc">${u[1]} per rank</div>`;
-    d.onclick = () => { if (!wasLongPress && r < 5 && availDM() >= cost) { meta.dmSpent += cost; meta.ranks[idx]++; saveMeta(); renderMeta(); sfx(380, 720, 0.1, "sine"); } }; g.appendChild(d);
+    d.onclick = () => { if (!wasLongPress && !wasScrolled && r < 5 && availDM() >= cost) { meta.dmSpent += cost; meta.ranks[idx]++; saveMeta(); renderMeta(); sfx(380, 720, 0.1, "sine"); } }; g.appendChild(d);
   });
 }
 
@@ -637,6 +883,7 @@ function renderOpts() {
   const df = DIFFICULTIES[meta.diff] || DIFFICULTIES[1];
   const rows = [
     ["Difficulty Tier", df.name, () => { meta.diff = (meta.diff + 1) % 5; saveMeta(); }],
+    ["Double-Tap Distant Dash", opts.doubleTapDash !== false ? "ON (DOUBLE-TAP GROUND)" : "OFF (BUTTON ONLY)", () => { opts.doubleTapDash = opts.doubleTapDash === false ? true : false; }],
     ["Limbs, Blood & Bodies Persist Count", String(opts.persistCount || 100), () => {
       const tiers = [50, 100, 250, 500, 1000, 9999];
       opts.persistCount = tiers[(tiers.indexOf(opts.persistCount) + 1) % tiers.length] || 100;
@@ -659,12 +906,37 @@ async function renderHealth() {
   const auditHTML = eofAuditResults.map(r => `<div style="color:${r.ok ? "#00e676" : "#ff5252"}">• ${r.file}: ${r.status}</div>`).join("");
   document.getElementById("healthBox").innerHTML = `
     <div class="health-row"><b>Dynamic EOF & Trailing-Line Paste Audit:</b><br>${auditHTML}</div>
-    <div class="health-row"><b>76-Hero Voxel, 11 Biomes, 76 SVGs, 76 Themes & Spellbook: 100% VERIFIED</b><br>Zero Shared Placeholders Across All 76 Heroes (#00-#75)<div class="meter"><div class="meter-fill"></div></div></div>
+    <div class="health-row"><b>80-Hero Stature Voxel, 11 Biomes, Biographical Stances & Dash Engine: 100% VERIFIED</b><br>Zero Shared Placeholders Across All 80 Heroes (#00-#79)<div class="meter"><div class="meter-fill"></div></div></div>
     <div class="health-row"><b>Live Render Load & Gore Telemetry:</b><br>${fpsCount} FPS • ${frameMs}ms/frame • Corpses: ${activeCorpseCount}/${opts.persistCount}<div class="meter"><div class="meter-fill"></div></div></div>`;
 }
 
+/* === 6. FLOATING JOYSTICK + DOUBLE-TAP DISTANT GROUND DASH DETECTOR === */
+let lastCanvasTapTime = 0, lastCanvasTapX = 0, lastCanvasTapY = 0;
+
 if (typeof cv !== "undefined") {
-  cv.addEventListener("pointerdown", e => { joy.act = true; joy.ox = e.clientX; joy.oy = e.clientY; joy.dx = 0; joy.dy = 0; });
+  cv.addEventListener("pointerdown", e => {
+    const now = performance.now();
+    const cx = e.clientX || 0, cy = e.clientY || 0;
+
+    if (runActive && !runPaused && player && opts.doubleTapDash !== false && typeof executeHeroDash === "function") {
+      const dtTap = now - lastCanvasTapTime;
+      const tapDrift = Math.hypot(cx - lastCanvasTapX, cy - lastCanvasTapY);
+      const distFromCenter = Math.hypot(cx - W * 0.5, cy - H * 0.5);
+      if (dtTap < 330 && tapDrift < 75 && distFromCenter >= 48) {
+        const worldX = player.x + (cx - W * 0.5) / (opts.zoom || 1);
+        const worldY = player.y + (cy - H * 0.5) / (opts.zoom || 1);
+        if (executeHeroDash(worldX, worldY)) {
+          lastCanvasTapTime = 0;
+          return;
+        }
+      }
+      lastCanvasTapTime = now;
+      lastCanvasTapX = cx;
+      lastCanvasTapY = cy;
+    }
+
+    joy.act = true; joy.ox = cx; joy.oy = cy; joy.dx = 0; joy.dy = 0;
+  });
   cv.addEventListener("pointermove", e => {
     if (!joy.act) return;
     const vx = e.clientX - joy.ox, vy = e.clientY - joy.oy, m = Math.hypot(vx, vy) || 1, c = Math.min(1, m / opts.joySize);
@@ -727,5 +999,7 @@ function loop(ts) {
     if (window.trackProgress) window.trackProgress("LOOP ERR: " + err.message, true);
   }
 }
+
+enableScreenCardScroll();
 if (checkLoadedScripts()) { loadMeta(); updateMenuUI(); runDynamicEOFScan(); requestAnimationFrame(loop); }
 // EOF:js/ui.js

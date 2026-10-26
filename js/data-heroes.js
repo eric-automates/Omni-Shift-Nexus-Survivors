@@ -1,15 +1,15 @@
 // FILE: js/data-heroes.js
 // PART: 7 of 14
-// DETAIL: v7.0 Arcane Sanctum Overhaul — All 76 Multiverse Heroes (#00-#75), 11 Genre Starters (0 DM), 76 Canon Outfit Palettes, 76 2-Button Utility Kits, and 76 3-Line Quotes.
+// DETAIL: v8.0 Overhaul — All 80 Multiverse Heroes (#00-#79: Vader, Maul, Windu, Yoda), Early-to-Prime Biographical Saber/Combat Stance Progressions, Blaster-Deflection Stances, and 80 Bespoke Dash Specs.
 
 "use strict";
 
-/* === 1. 76 MULTIVERSE HEROES (#00-#75) === */
+/* === 1. 80 MULTIVERSE HEROES (#00-#79) === */
 const CHAR_RAW = [
-  [0, 0, 0, "Aether-Blade Initiate", "Cyan Plasma Saber", "Twin-Sun Saber Mastery", "orbit", "Force Reflex", "+15% Speed, Saber Lunge/Reflect & 100% Force Vacuum"],
+  [0, 0, 0, "Aether-Blade Initiate", "Cyan Plasma Saber", "Twin-Sun Saber Mastery", "orbit", "Force Reflex", "+15% Speed, Form I->IV->V Saber Progression, Deflect & 100% Vacuum"],
   [1, 0, 3, "Beskar Creed Tracker", "Whistling Micro-Darts", "Darksaber Phoenix Salvo", "missile", "Beskar Plating", "+4 Flat Armor & -20% Damage Taken"],
   [2, 0, 2, "Imperial White-Trooper", "E-11 Scatter Blaster", "Garrison Overwatch", "cone", "Suppressive Scatter", "+35% Fire Rate & +1 Projectile"],
-  [3, 0, 8, "Crimson Sith Sovereign", "Crimson Sith Saber & Arc", "Unlimited Tempest Web", "chain", "Dark Hate Conduit", "100% Force Vacuum, Saber Lunge/Reflect & Kill Heal"],
+  [3, 0, 8, "Crimson Sith Sovereign", "Crimson Sith Saber & Arc", "Unlimited Tempest Web", "chain", "Dark Hate Conduit", "100% Force Vacuum, Form IV->VII Sith Mastery & Kill Heal"],
   [4, 0, 4, "R2-Chirp Astro-Droid", "Electro-Prod & Oil Slick", "Hacked Turret Grid", "nova", "Overclocked Servos", "-18% All Weapon Cooldowns"],
   [5, 0, 5, "Kashyyyk Bow-Roarer", "Quarrel Laser-Bowcaster", "Thermal Detonator Volley", "cone", "Wookiee Rage", "+30% Max HP & +20% Weapon Area"],
   [6, 0, 5, "Corellian Kessel Runner", "Heavy DL-44 Blaster", "Freighter Orbital Strafe", "beam", "Shoots First", "+30% Crit Chance & +25% XP/DM Greed"],
@@ -60,7 +60,7 @@ const CHAR_RAW = [
   [51, 7, 14, "Baba Yaga Suit-Assassin", "Baba Yaga Backup Kimber", "Continental Dragon's Breath", "beam", "Bulletproof Kevlar Suit & CQC", "Lv.5 transitions to Primary Benelli/2011; Guarding Head/Torso blocks 95%!"],
   [52, 2, 14, "The Man With No Name", "Colt 1851 Navy Six-Shooter", "Deadeye Eight-Shooter", "cone", "High-Noon Deadeye", "Poncho gunslinger: blazing 6-shot right-hand bursts with lethal crit & 0.55s quick-reload"],
   [53, 5, 14, "Green-Beret Last-Stand Vet", "Belt-Fed M60 & Comp-Bow", "First Blood Firestorm", "cone", "Last-Stand Fortifier", "Staying within 180px for 120s (or Utility) deploys shoot-over Fort & Claymore mines"],
-  [54, 0, 15, "Slav-1 Bounty Tracker", "Sawed-Stock EE-3 Carbine", "Disintegrations Authorized", "beam", "Mandalorian Arsenal", "ESB Jetpack Missile & Cape + Auto-Flamethrower (>=4 foes) + Grapple Hook"],
+  [54, 0, 15, "Slav-1 Bounty Tracker", "Sawed-Stock EE-3 Carbine", "Disintegrations Authorized", "beam", "Mandalorian Arsenal", "ESB Jetpack Missile & Cape + Knee Darts + Auto-Flamethrower + Disintegrator"],
   [55, 6, 16, "General Kaleesh Cyborg", "Quad-Saber Lunge & Blasters", "General's Grievous Wrath", "orbit", "Four-Armed General", "4-Armed Cyborg Warlord: fires 4 weapons simultaneously with built-in Saber Deflection!"],
   [56, 10, 0, "Scarred Boy-Wizard", "Holly Phoenix-Feather Wand", "Master of Death Hallows", "beam", "Chosen Boy-Who-Lived", "Unlocks cumulative spells on top bar (Stupefy, Leviosa, Expelliarmus, Stag Patronus) + 100% Vacuum!"],
   [57, 10, 2, "Time-Turner Arithmancer", "Vine Dragon-Heartstring Wand", "Chronos Arithmancy Storm", "beam", "Brightest Witch of Her Age", "-20% Spell Cooldowns, Cumulative Spellbook Bar & Time-Turner Rewind"],
@@ -81,25 +81,139 @@ const CHAR_RAW = [
   [72, 10, 10, "White-Hand Voice Wizard", "Orthanc Obsidian Staff", "Caradhras Tempest & Ruin", "missile", "Voice of Saruman", "100% Telekinetic Vacuum, +30% Area & Stuns/Blasts Foes"],
   [73, 10, 11, "Kamar-Taj Time Sorcerer", "Eldritch Mandala Whips", "Eye of Agamotto Time-Loop", "orbit", "Sorcerer Supreme", "100% Mystic Vacuum, Mirror Dimension Reflect & Time-Freeze"],
   [74, 10, 12, "Sokovian Chaos Hex-Witch", "Chaos Probability Hex-Orbs", "Darkhold Reality Rewrite", "nova", "Chaos Magic Levitation", "100% Chaos Vacuum, Levitates & Floats Enemies Off-Screen for Instant XP"],
-  [75, 10, 15, "Book of the Dead Arch-Lich", "Flesh-Bound Grimoire", "Army of the Dead Necropolis", "chain", "Corpse-Raiser Grimoire", "Lv.1 Soul-Drain creates corpses; Lv.2-10 raises Swordsmen, Critters, Bowmen, Knights & Bone Golem from corpses!"]
+  [75, 10, 15, "Book of the Dead Arch-Lich", "Flesh-Bound Grimoire", "Army of the Dead Necropolis", "chain", "Corpse-Raiser Grimoire", "Lv.1 Soul-Drain creates corpses; Lv.2-10 raises Swordsmen, Critters, Bowmen, Knights & Bone Golem from corpses!"],
+  // v8.0 NEW STAR WARS LEGENDS (#76-#79)
+  [76, 0, 14, "Darth Vader — Dark Lord", "Mustafar Crimson Lightsaber", "Dark Lord Djem So Supremacy", "orbit", "Cybernetic Sith Juggernaut", "Form V Shien->Djem So Progression, 1-Handed Backhand Blaster Deflect, Force Lunge Dash & +45% HP!"],
+  [77, 0, 12, "Darth Maul — Zabrak Assassin", "Double-Bladed Sith Saberstaff", "Duel of the Fates Juyo Cyclone", "orbit", "Dathomir Double-Blade", "Wields a Double-Bladed Saberstaff (slices front & back!), Form VII Juyo Spins & Butterfly-Twist Dash!"],
+  [78, 0, 13, "Mace Windu — Vaapad Master", "Electrum Amethyst Lightsaber", "Shatterpoint Vaapad Mastery", "orbit", "Form VII Vaapad Conduit", "Amethyst purple saber (+35% Crit, +30% Reflect), Form V->VII Vaapad Fury & Shatterpoint Blitz Dash!"],
+  [79, 0, 15, "Grandmaster Yoda — Ataru Sage", "Emerald Shoto Lightsaber", "Grandmaster Ataru Somersault", "orbit", "900-Year Acrobatic Ataru", "Compact Master (+35% Dodge, +30% Speed): leaps, flips & somersaults mid-air while slicing!"]
 ];
 
-const FORCE_VACUUM_HEROES = [0, 3, 7, 10, 12, 14, 18, 20, 27, 38, 39, 45, 49, 56, 57, 59, 66, 67, 69, 70, 71, 72, 73, 74, 75];
+const FORCE_VACUUM_HEROES = [0, 3, 7, 10, 12, 14, 18, 20, 27, 38, 39, 45, 49, 56, 57, 59, 66, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79];
 function hasInnateVacuum(cid) { return FORCE_VACUUM_HEROES.includes(cid); }
 
-const SWORD_HEROES = [0, 3, 14, 18, 19, 24, 32, 33, 34, 48, 50, 55, 67, 71];
+const SWORD_HEROES = [0, 3, 14, 18, 19, 24, 32, 33, 34, 48, 50, 55, 67, 71, 76, 77, 78, 79];
 function isSwordWeapon(wpnId) { return SWORD_HEROES.includes(wpnId); }
 
 function getHeroArmCap(cid) {
   if (cid === 55) return 4;
-  if ([0, 3, 7, 12, 38, 39, 56, 57, 66, 69, 70, 71, 73, 74, 75].includes(cid)) return 3;
+  if ([0, 3, 7, 12, 38, 39, 56, 57, 66, 69, 70, 71, 73, 74, 75, 76, 77, 78, 79].includes(cid)) return 3;
   return 2;
 }
 
-/* === 2. ALL 76 BESPOKE CANON CHARACTER OUTFIT PALETTES === */
+/* === 2. BIOGRAPHICAL EARLY-TO-PRIME SABER & COMBAT STANCE PROGRESSION ENGINE ===
+   Patterns:
+   0 = Form I Shii-Cho (Basic sweeping horizontal guard)
+   1 = Form II Makashi (Precise one-handed fencing thrusts & parries)
+   2 = Form III Soresu (Tight defensive figure-8 weave close to body)
+   3 = Form IV Ataru (Acrobatic wide overhead-to-low flips & spins)
+   4 = Form V Djem So / Shien (Heavy two-handed power diagonal cleaves)
+   5 = Form VI Niman (Balanced diplomatic weave + Force-hand channel)
+   6 = Form VII Juyo / Vaapad (Ferocious high-tempo multi-angle flurry)
+   7 = Double-Bladed Saberstaff Moulinet (360° dual-ended staff figure-8)
+   8 = CQC Center-Axis Relock (Tight two-handed tactical pistol/blade snap)
+   9 = Gunslinger Hip-Fan (Low holster-level single-hand quick-draw)
+   10 = Heavy Braced Suppression (Two-handed shoulder-braced recoil stance)
+   11 = Arcane Wand / Staff Conduct (Sweeping figure-8 spellcaster somatic weave) */
+const HERO_STANCE_TABLE = {
+  // #00 Luke Skywalker: Farmboy Shii-Cho -> Bespin Form IV/V -> ROTJ Master Djem So | Deflect: Soresu Tight Weave
+  0:  [[0, "Form I Shii-Cho (Tatooine Initiate)", 1.0, 0.75, 0.45], [3, "Form V Shien (Bespin Duelist)", 1.25, 1.10, 0.80], [4, "Form V Djem So (ROTJ Jedi Master)", 1.55, 1.35, 1.15], [2, "Form III Soresu Blaster Deflect"]],
+  // #03 Emperor Palpatine / Sidious: Hidden Niman -> Dual-Saber Ataru -> Form VII Juyo Sith Whirlwind | Deflect: Force Lightning Redirect
+  3:  [[5, "Form VI Niman (Chancellor)", 1.1, 0.85, 0.55], [3, "Form IV Ataru (Senate Duelist)", 1.40, 1.25, 1.05], [6, "Form VII Juyo (Sith Emperor)", 1.75, 1.50, 1.40], [6, "Sith Cortosis Deflection"]],
+  // #14 River Tam: Academy Conditioning -> Dual-Axe Precog -> Miranda Cyclone
+  14: [[1, "Academy Fencing", 1.15, 0.90, 0.65], [3, "Hands of Blue Dual-Dance", 1.45, 1.25, 1.05], [6, "Miranda Precog Whirlwind", 1.80, 1.55, 1.35], [2, "Precog Bullet-Parry"]],
+  // #18 Paul Muad'Dib: Caladan Atreides -> Fremen Weirding Way -> Kwisatz Haderach
+  18: [[1, "Caladan Rapier Drill", 1.10, 0.80, 0.50], [3, "Fremen Weirding Step", 1.40, 1.15, 0.95], [6, "Kwisatz Prescience Blur", 1.75, 1.40, 1.25], [1, "Holtzman Shield Slip-Parry"]],
+  // #19 Sardaukar: Salusa Drill -> Slow-Blade Penetrator -> Imperial Executioner
+  19: [[1, "Salusa Blade Drill", 1.05, 0.78, 0.50], [4, "Holtzman Slow-Blade", 1.30, 1.08, 0.82], [6, "Padishah Executioner", 1.55, 1.32, 1.10], [2, "Shield-Belt Deflect"]],
+  // #24 Worf / Klingon: Mok'bara Initiate -> Bat'leth Cleave -> Sword of Kahless
+  24: [[0, "Mok'bara Forms", 1.05, 0.90, 0.55], [4, "Qo'noS Bat'leth Cleave", 1.32, 1.22, 0.90], [6, "Sword of Kahless Bloodlust", 1.65, 1.48, 1.25], [4, "Bat'leth Cross-Guard Block"]],
+  // #32 Master Chief: UNSC CQC -> Type-1 Energy Lunge -> Spartan Mythic Duelist
+  32: [[8, "UNSC CQC Bayonet", 1.05, 0.80, 0.45], [4, "Sangheili Energy Lunge", 1.35, 1.15, 0.85], [6, "Mythic Energy Sword Cleave", 1.60, 1.38, 1.15], [2, "Mjolnir Counter-Slash"]],
+  // #33 Doom Slayer: Praetor Brawling -> Meathook Rip & Tear -> Crucible Arch-Slayer
+  33: [[4, "Praetor Brutal Cleave", 1.20, 1.05, 0.70], [6, "Rip & Tear Frenzy", 1.50, 1.32, 1.05], [6, "Crucible Titan-Slayer", 1.85, 1.60, 1.40], [4, "Argent Blade Smash"]],
+  // #34 Astartes: Neophyte Chainsword -> Tactical Brother -> Chapter Champion
+  34: [[0, "Astartes Neophyte Sweep", 1.05, 0.88, 0.55], [4, "Crux Terminatus Cleave", 1.32, 1.18, 0.88], [6, "Emperor's Champion", 1.60, 1.42, 1.20], [2, "Storm-Shield Parry"]],
+  // #48 Geralt: Kaer Morhen Fast Style -> Strong Ursine Cleave -> Grandmaster Whirl
+  48: [[1, "Wolf School Fast Style", 1.18, 0.92, 0.65], [4, "Wolf School Strong Style", 1.42, 1.22, 0.98], [7, "Grandmaster Aerondight Whirl", 1.78, 1.50, 1.45], [1, "Witcher Arrow-Deflection"]],
+  // #50 Kenshi Ronin: Starving Drifter -> Desert Sabre Guard -> Meitou Falling-Sun Master
+  50: [[0, "Border-Zone Drifter Swing", 0.95, 0.85, 0.45], [4, "Desert Sabre Heavy Guard", 1.28, 1.18, 0.85], [6, "Meitou Falling-Sun Execution", 1.65, 1.48, 1.25], [2, "Kenshi Cross-Block"]],
+  // #55 General Grievous: Kaleesh Warlord -> Dual-Blade Finesse -> 4-Arm Buzzsaw Moulinet
+  55: [[1, "Kaleesh Outrider Slash", 1.25, 1.00, 0.75], [6, "Dooku-Trained Quad Assault", 1.60, 1.35, 1.20], [7, "Unbound 4-Arm Buzzsaw Moulinet", 2.10, 1.65, 1.85], [7, "Spinning Rotor Shield"]],
+  // #67 Severus Snape: Student Hex-Duelist -> Death-Eater Occlumens -> Half-Blood Prince Sectumsempra
+  67: [[1, "Hogwarts Duelist", 1.15, 0.80, 0.55], [11, "Occlumens Counter-Weave", 1.40, 1.05, 0.85], [6, "Half-Blood Prince Sectumsempra", 1.75, 1.35, 1.20], [2, "Silent Non-Verbal Parry"]],
+  // #71 Gandalf: Grey Pilgrim Staff-Guard -> Glamdring Foe-Hammer -> White Rider Istari Mastery
+  71: [[5, "Grey Pilgrim Staff-Guard", 1.08, 0.88, 0.55], [4, "Glamdring Foe-Hammer Cleave", 1.38, 1.20, 0.92], [6, "Gandalf the White Istari Dawn", 1.70, 1.45, 1.25], [2, "Secret Fire Ward-Parry"]],
+  // #76 DARTH VADER: Clone Wars Form V Shien -> Mustafar Aggressive Djem So -> Dark Lord Cybernetic Power Cleave | Deflect: Casual 1-Handed Backhand Swat!
+  76: [[3, "Form V Shien (Clone Wars Anakin)", 1.22, 1.05, 0.78], [4, "Form V Djem So (Mustafar Fall)", 1.45, 1.30, 1.05], [4, "Cybernetic Dark Lord Djem So", 1.65, 1.55, 1.25], [1, "1-Handed Backhand Blaster Swat"]],
+  // #77 DARTH MAUL: Single-Blade Niman -> Double-Bladed Teräs Käsi -> Prime Form VII Juyo Saberstaff Cyclone | Deflect: Spinning Saberstaff Barrier!
+  77: [[5, "Form VI Niman (Single-Blade Probe)", 1.28, 1.00, 0.80], [7, "Double-Bladed Teräs Käsi Spin", 1.65, 1.40, 1.45], [7, "Form VII Juyo Saberstaff Cyclone", 2.05, 1.65, 1.95], [7, "Spinning Saberstaff Wall"]],
+  // #78 MACE WINDU: Form V Shien Initiate -> Council Master -> Form VII Vaapad Superconducting Blur | Deflect: Shatterpoint Redirect!
+  78: [[4, "Form V Shien (Council Member)", 1.18, 0.95, 0.70], [6, "Korun Shatterpoint Precision", 1.52, 1.28, 1.10], [6, "Form VII Vaapad Superconducting Loop", 1.92, 1.58, 1.55], [6, "Vaapad Shatterpoint Deflect"]],
+  // #79 GRANDMASTER YODA: Form III Soresu Sage -> Form IV Ataru Leap -> 900-Year Acrobatic Ataru Whirlwind | Deflect: Mid-Air Spinning Shoto Deflect!
+  79: [[2, "Form III Soresu (High Council Sage)", 1.25, 0.90, 0.75], [3, "Form IV Ataru (Acrobatic Duelist)", 1.68, 1.38, 1.35], [3, "900-Year Grandmaster Ataru Whirlwind", 2.15, 1.70, 1.85], [3, "Ataru Mid-Air Shoto Deflect"]]
+};
+
+function getHeroStanceSpec(cid, wpnLvl = 1, isDeflecting = false) {
+  const tier = wpnLvl >= 7 ? 2 : (wpnLvl >= 4 ? 1 : 0);
+  const row = HERO_STANCE_TABLE[cid];
+  if (row) {
+    const st = row[tier];
+    const def = row[3];
+    return {
+      pattern: isDeflecting ? def[0] : st[0],
+      stageName: isDeflecting ? def[1] : st[1],
+      deflectName: def[1],
+      speedMul: st[2] * (isDeflecting ? 1.35 : 1.0),
+      arcWidth: st[3],
+      wristAmp: st[4],
+      isDoubleBlade: (cid === 77 && wpnLvl >= 2), // Maul ignites second blade at Lv.2+ (or during cyclone)
+      isAcrobaticLeaper: (cid === 79)             // Prequel Yoda hops & flips around enemies while swinging!
+    };
+  }
+  // Non-saber heroes also evolve their combat stance from Early Career -> Seasoned -> Prime!
+  if (cid >= 56 && cid <= 75) {
+    const names = ["Apprentice Wand-Cast", "Auror Battle-Weave", "Arch-Mage Somatic Mastery"];
+    return { pattern: 11, stageName: names[tier], deflectName: "Protego Wrist-Parry", speedMul: 1 + tier * 0.22, arcWidth: 0.35 + tier * 0.15, wristAmp: 0.3 + tier * 0.2, isDoubleBlade: false, isAcrobaticLeaper: false };
+  }
+  if ([51, 41, 42].includes(cid)) {
+    const names = ["Street CQC Draw", "Center-Axis Relock", "Baba Yaga Gun-Fu Mastery"];
+    return { pattern: 8, stageName: names[tier], deflectName: "Kevlar Gauntlet Guard", speedMul: 1 + tier * 0.2, arcWidth: 0.22, wristAmp: 0.15, isDoubleBlade: false, isAcrobaticLeaper: false };
+  }
+  if ([52, 6, 13, 22].includes(cid)) {
+    const names = ["Frontier Hip-Draw", "High-Noon Quickdraw", "Legend Deadeye Fan"];
+    return { pattern: 9, stageName: names[tier], deflectName: "Side-Step Dodge", speedMul: 1 + tier * 0.25, arcWidth: 0.18, wristAmp: 0.2, isDoubleBlade: false, isAcrobaticLeaper: false };
+  }
+  const names = ["Standard Issue Stance", "Veteran Braced Stance", "Prime Spec-Ops Overwatch"];
+  return { pattern: 10, stageName: names[tier], deflectName: "Braced Suppression", speedMul: 1 + tier * 0.18, arcWidth: 0.2, wristAmp: 0.1, isDoubleBlade: false, isAcrobaticLeaper: false };
+}
+
+/* === 3. CHARACTER-SPECIFIC DOUBLE-TAP DISTANT DASH REGISTRY (#00-#79) === */
+function getHeroDashSpec(cid) {
+  if (cid === 76) return { name: "Vader Force Lunge & Swipe", cd: 4.5, dist: 145, style: "vaderLunge", col: "#ff1744", callout: "THERE IS NO ESCAPE!", desc: "Lunges forward with the Dark Side and executes a massive horizontal crimson bisection!" };
+  if (cid === 79) return { name: "Yoda Multi-Flip Tornado", cd: 3.8, dist: 165, style: "yodaFlip", col: "#00e676", callout: "AROUND THE SURVIVORS, A PERIMETER CREATE!", desc: "Somersaults in a rapid multi-flip emerald cyclone, slicing every enemy along the path!" };
+  if (cid === 77) return { name: "Maul Butterfly-Twist Blitz", cd: 4.0, dist: 160, style: "maulSpin", col: "#ff1744", callout: "AT LAST WE WILL HAVE REVENGE!", desc: "Leaps into an aerial butterfly-twist while spinning both crimson saberstaff blades!" };
+  if (cid === 78) return { name: "Windu Vaapad Shatter-Blitz", cd: 4.2, dist: 155, style: "vaapadBlitz", col: "#d500f9", callout: "THIS PARTY'S OVER!", desc: "Blurs forward in a purple Vaapad streak, shattering armor along the path!" };
+  if ([0, 3, 14, 18, 19, 24, 32, 33, 34, 48, 50, 55].includes(cid)) {
+    return { name: "Saber / Blade Cleave Rush", cd: 4.2, dist: 150, style: "saberRush", col: "#00f0ff", callout: "BLADE BLITZ!", desc: "Dashes through enemy ranks with a spinning blade cleave that bisects foes in the path!" };
+  }
+  if ([1, 16, 21, 25, 47, 54].includes(cid)) {
+    return { name: "Jetpack Rocket-Jump & Slam", cd: 4.5, dist: 165, style: "jetpackSlam", col: "#ff9100", callout: cid === 54 ? "JETPACK THRUST — CLEAR THE LZ!" : "THRUSTERS FULL BURN!", desc: "Ignites jetpack thrusters to rocket-jump over obstacles and slam down with an explosive blast wave!" };
+  }
+  if (cid >= 56 && cid <= 75) {
+    const spellCall = cid === 70 ? "AVADA FLIGHT!" : (cid === 71 ? "SHADOWFAX HASTE!" : (cid === 73 ? "SLING-RING PORTAL!" : (cid === 75 ? "WRAITH PHASE!" : "APPARATE!")));
+    return { name: "Arcane Apparition Blink", cd: 4.0, dist: 160, style: "apparitionBlink", col: "#b388ff", callout: spellCall, desc: "Shouts an incantation and teleports through a crack of arcane smoke & lightning, blasting foes at both ends!" };
+  }
+  if ([51, 52, 6, 13, 41, 42].includes(cid)) {
+    return { name: "Gunslinger Dive-Roll & Volley", cd: 3.8, dist: 140, style: "gunslingerRoll", col: "#ffd166", callout: cid === 51 ? "CENTER-AXIS TAKEDOWN!" : "DRAW!", desc: "Executes an evasive combat dive-roll and fires a 360-degree crit volley on landing!" };
+  }
+  return { name: "Tactical Phase-Thruster Dash", cd: 4.2, dist: 145, style: "tacDash", col: "#00e5ff", callout: "BREACHING!", desc: "Surges forward with tactical thrusters, knocking back and stunning enemies in the lane!" };
+}
+
+/* === 4. ALL 80 BESPOKE CANON CHARACTER OUTFIT PALETTES === */
 const BLADE_COLORS = [
-  ["Skywalker Cyan", "#00f0ff"], ["Avada Emerald", "#00e676"], ["Expelliarmus Crimson", "#ff1744"],
-  ["Eldritch Amethyst", "#d500f9"], ["Lumos Gold", "#ffd166"], ["Darksaber Obsidian", "#212121"], ["Patronus Silver-White", "#ffffff"]
+  ["Skywalker Cyan", "#00f0ff"], ["Yoda / Qui-Gon Emerald", "#00e676"], ["Sith Vader/Maul Crimson", "#ff1744"],
+  ["Windu Electrum Amethyst", "#d500f9"], ["Temple Guard Gold", "#ffd166"], ["Darksaber Obsidian", "#212121"], ["Ahsoka Pure White", "#ffffff"]
 ];
 
 const CANON_56 = [
@@ -174,11 +288,16 @@ const CANON_56 = [
   [["Wild Tangled Curls","#1a1412"],["Azka-Skull Hood","#212121"],["Manic Dark Crown","#111111"],["Laced Leather Corset","#1c141d"],["Swirling Dark Gown","#120d14"],["Silver Dagger Belt","#263238"],["Tattered Gothic Hem","#0d0a0f"],["Spiked Heel Boots","#111111"],["Dark-Order Cloak","#140e18"],["Green Dark-Mark Cloud","#00e676"]],
   [["Half-Moon Specs & Beard","#eceff1"],["Tassel Wizard Hat","#7e57c2"],["Young Auburn Beard","#8d6e63"],["Midnight Star Robes","#311b92"],["Silver & Gold Silk","#cfd8dc"],["Plum Velvet Suit","#4a148c"],["Embroidered Hem","#1a0f30"],["Buckled Wizard Shoes","#4e342e"],["Starlight Flowing Cloak","#311b92"],["Fawkes Phoenix Perch","#ff6d00"]],
   [["Slit-Nostril Pale Bald","#e0e7e9"],["Red-Eyed Serpent Visage","#cfd8dc"],["Shadow Hood","#111111"],["Tattered Dark Shroud","#101614"],["Slytherin Heir Robe","#1b3022"],["Smoke Tendril Tunic","#181a1d"],["Bare Pale Feet","#cfd8dc"],["Shadow Hem","#0a0d0c"],["Living Smoke Cloak","#0d1210"],["Coiled Nagini Serpent","#2e7d32"]],
-  [["Pointed Grey Hat & Beard","#78909c"],["Radiant White Crown","#ffffff"],["Windblown Pilgrim","#90a4ae"],[" Pilgrim Grey Robes","#607d8b"],["Gandalf the White","#eceff1"],["Mithril-Threaded Tunic","#cfd8dc"],["Grey Travelling Hem","#455a64"],["White Rider Boots","#e0e0e0"],["Grey Pilgrim Cloak","#546e7a"],["Glamdring Scabbard","#ffd166"]],
+  [["Pointed Grey Hat & Beard","#78909c"],["Radiant White Crown","#ffffff"],["Windblown Pilgrim","#90a4ae"],["Pilgrim Grey Robes","#607d8b"],["Gandalf the White","#eceff1"],["Mithril-Threaded Tunic","#cfd8dc"],["Grey Travelling Hem","#455a64"],["White Rider Boots","#e0e0e0"],["Grey Pilgrim Cloak","#546e7a"],["Glamdring Scabbard","#ffd166"]],
   [["Long White Hair & Beard","#eceff1"],["Orthanc Crown","#263238"],["Many-Colored Hood","#cfd8dc"],["Ivory White Robes","#e0e0e0"],["Robe of Many Colors","#b0bec5"],["Isengard Iron Trim","#37474f"],["White Robe Hem","#bdbdbd"],["Obsidian Boots","#1c2024"],["White Hand Cloak","#cfd8dc"],["Palantír Seeing-Stone","#ff6d00"]],
   [["Silver-Temples & Goatee","#1c2024"],["Astral Form Glow","#80deea"],["Defender Ponytail","#263238"],["Kamar-Taj Blue Tunic","#1565c0"],["Sanctum Master Robes","#0d47a1"],["Dark Defender Suit","#1b1e23"],["Bound Shin Wraps","#263238"],["Sanctum Boots","#3e2723"],["Cloak of Levitation","#b71c1c"],["Eye of Agamotto","#00e676"]],
   [["Scarlet Tiara & Auburn","#d32f2f"],["Darkhold Black-Tips","#8e0000"],["Sokovian Waves","#a1887f"],["Scarlet Corset & Coat","#b71c1c"],["Darkhold Corrupted Armor","#4a0e17"],["Civil Leather Jacket","#880e4f"],["Black Tactical Pants","#141619"],["Crimson Boots","#4a0e17"],["Scarlet Hex Cape","#8e0000"],["Floating Darkhold Pages","#ff1744"]],
-  [["Skull-Crown & Hood","#212121"],["Lich Glowing Skull","#cfd8dc"],["Horned Necro-Helm","#311b92"],["Bone-Ribbed Vestments","#261838"],["Flesh-Stitched Robes","#3e2723"],["Arch-Lich Plate","#1a1224"],["Tattered Crypt Hem","#120d16"],["Skeletal Greaves","#90a4ae"],["Shroud of the Damned","#1c102b"],["Floating Bone Totems","#b388ff"]]
+  [["Skull-Crown & Hood","#212121"],["Lich Glowing Skull","#cfd8dc"],["Horned Necro-Helm","#311b92"],["Bone-Ribbed Vestments","#261838"],["Flesh-Stitched Robes","#3e2723"],["Arch-Lich Plate","#1a1224"],["Tattered Crypt Hem","#120d16"],["Skeletal Greaves","#90a4ae"],["Shroud of the Damned","#1c102b"],["Floating Bone Totems","#b388ff"]],
+  // #76-#79 New Star Wars Legends Palettes
+  [["Obsidian Sith Dome Helm","#111317"],["Battle-Damaged Scarred Mask","#263238"],["Mustafar Hooded Anakin","#3e2723"],["Cybernetic Chest-Box Armor","#181b20"],["Emperor's Wrath Durasteel","#0d0f12"],["Jedi General Dark Tunic","#261c18"],["Armored Sith Greaves","#111111"],["Cybernetic Alloy Legs","#37474f"],["Flowing Sith Cape","#0a0b0e"],["No Cape","none"]],
+  [["Crown of Horns & Red Tattoos","#d50000"],["Hooded Naboo Assassin","#111111"],["Nightbrother Gold Markings","#ff9100"],["Sith Sleeveless Tunic","#141619"],["Mandalore Crimson Mail","#7f1d1d"],["Bare Tattooed Chest","#b71c1c"],["Sith Martial Trousers","#111111"],["Cybernetic Spider-Greaves","#78909c"],["Naboo Sith Cloak","#111111"],["No Cloak (Agile)","none"]],
+  [["Korun Jedi Master Bald","#6d4c41"],["Clone Wars General Helm","#cfd8dc"],["Temple Hood","#4e342e"],["Jedi Council Cream Tunic","#d7ccc8"],["Clone General Plate & Robe","#8d6e63"],["Dark Vaapad Vestments","#3e2723"],["Jedi Boots & Trousers","#4e342e"],["Armored General Greaves","#eceff1"],["Jedi Master Cloak","#5d4037"],["No Cloak","none"]],
+  [["Ancient Green Ears & Wisps","#7cb342"],["Hooded Dagobah Sage","#689f38"],["High Republic Gold Circlet","#8bc34a"],["Jedi Grandmaster Cream Robe","#d7ccc8"],["High Council Brown Tunic","#5d4037"],["Dagobah Woven Vest","#795548"],["Short Jedi Hem & Feet","#689f38"],["Council Sandals","#4e342e"],["Grandmaster Small Cloak","#bcaaa4"],["No Cloak (Acrobatic)","none"]]
 ];
 
 function getHeroOutfits(cid) {
@@ -192,7 +311,7 @@ function getHeroOutfits(cid) {
   };
 }
 
-/* === 3. ALL 76 BESPOKE 2-BUTTON UTILITY KITS (#00-#75) === */
+/* === 5. ALL 80 BESPOKE 2-BUTTON UTILITY KITS (#00-#79) === */
 const UTILS_56 = [
   [["Saber Throw",6.5,"quadSpin","orbit","Hurls spinning lightsaber to impale & rip back"],["Force Repulse",10,"factionPulse","nova","Telekinetic wave blasts back surrounding foes"]],
   [["Whistling Birds",8,"critBurst","missile","Launches seeking micro-munitions in all directions"],["Beskar Grapple",8.5,"grappleHook","grapple","Tethers & stuns the strongest nearby target"]],
@@ -269,7 +388,12 @@ const UTILS_56 = [
   [["Voice of Orthanc",8.5,"stareFreeze","nova","Commands all on-screen enemies to freeze in terror"],["Isengard Fire-Mine",10,"explosiveBow","missile","Hurls Orthanc blasting-fire orbs that detonate on impact"]],
   [["Mirror Dimension",9,"youShallNotPass","nova","Erects a crystalline Mirror Dimension barrier that reflects bolts"],["Eye of Agamotto",11.5,"timeRewind","orbit","Freezes time across the sector & rewinds cooldowns"]],
   [["Chaos Levitation",7,"leviosaFloat","nova","Wraps enemies in scarlet hexes & floats them off-screen to die!"],["Rewrite Reality",10.5,"avadaKedavra","chain","Disintegrates surrounding enemies in a scarlet chaos wave"]],
-  [["Raise Dead Army",6.5,"raiseDead","chain","Consumes nearby corpses to resurrect Skeletal Warriors & Archers!"],["Summon Bone Golem",12,"piertotumKnights","fort","Consumes corpses to raise a Colossal Bone Golem juggernaut!"]]
+  [["Raise Dead Army",6.5,"raiseDead","chain","Consumes nearby corpses to resurrect Skeletal Warriors & Archers!"],["Summon Bone Golem",12,"piertotumKnights","fort","Consumes corpses to raise a Colossal Bone Golem juggernaut!"]],
+  // #76-#79 Star Wars Legends Utilities
+  [["Force Choke Crush",7.5,"stareFreeze","chain","Lifts, chokes & crushes surrounding enemies across the sector"],["Imploding Saber Throw",6.5,"quadSpin","orbit","Hurls crimson lightsaber to impale & rip back through ranks"]],
+  [["Saberstaff Cyclone",5.5,"quadSpin","orbit","Whirls double-bladed saberstaff in a 360-degree crimson buzzsaw"],["Sith Choke Push",8.0,"factionPulse","nova","Unleashes a ferocious Dathomir Force shockwave"]],
+  [["Shatterpoint Strike",7.0,"executeDash","orbit","Instantly fractures armor weak-points on surrounding enemies & bosses"],["Vaapad Repulse",8.5,"factionPulse","nova","Channels inner darkness into a purple telekinetic shockwave"]],
+  [["Ataru Sonic Flip-Slam",5.5,"quadSpin","orbit","Launches into a blinding mid-air multi-flip emerald whirlwind"],["Tutaminis Force Absorb",8.5,"youShallNotPass","nova","Absorbs incoming energy & erupts a luminous Force ward"]]
 ];
 
 function getHeroUtils(cid) {
@@ -280,7 +404,7 @@ function getHeroUtils(cid) {
   ];
 }
 
-/* === 4. ALL 76 BESPOKE 3-LINE HERO QUOTES (#00-#75) === */
+/* === 6. ALL 80 BESPOKE 3-LINE HERO QUOTES (#00-#79) === */
 const Q_56 = [
   ["The Force is with me, always.", "Your overconfidence is your weakness.", "A Jedi uses the Force for defense."],
   ["This is the Way.", "Warm or cold, the guild contract is sealed.", "Beskar steel is part of my creed."],
@@ -327,7 +451,7 @@ const Q_56 = [
   ["Time to chrome the hell up, choom!", "Sandevistan overdrive—see you at the top of Arasaka Tower!", "This city always remembers a legend."],
   ["War... war never changes.", "V.A.T.S. locked at ninety-five percent critical!", "Another settlement cleared—pass an ice-cold Nuka!"],
   ["Witness me—shiny and chrome!", "What a day! What a lovely, high-octane day!", "Last of the V8 Interceptors—full nitro!"],
-  ["The right man in the wrong place can all the difference.", "HEV Mark-IV suit administering morphine.", "Zero-point energy field manipulator charged!"],
+  ["The right man in the wrong place can make all the difference.", "HEV Mark-IV suit administering morphine.", "Zero-point energy field manipulator charged!"],
   ["Wibbly-wobbly, timey-wimey... stuff.", "Allons-y! Sonic emitter at maximum resonance!", "I don't want to go—regeneration energy surging!"],
   ["Chozo Varia matrix online—morph ball ready.", "Hyper-beam charged to full capacity.", "The last Metroid is in captivity—the galaxy is at peace."],
   ["Wind's howling... medallion's humming.", "Steel for humans, silver for monsters.", "Toss a coin—the White Wolf hunts tonight."],
@@ -357,7 +481,12 @@ const Q_56 = [
   ["Against the power of Mordor there can be no victory.", "A new power is rising—its victory is at hand!", "So you have chosen... death."],
   ["Dormammu, I've come to bargain!", "By the Hoary Hosts of Hoggoth—into the Mirror Dimension!", "I went forward in time to view fourteen million outcomes."],
   ["You took everything from me.", "No more mutants... no more mercy.", "That doesn't seem fair—let's rewrite reality."],
-  ["Klaatu... Barada... Nikto! Rise from your graves!", "Every corpse on this battlefield belongs to my Grimoire!", "Skeletal Legion, Bone Golems—awaken and march!"]
+  ["Klaatu... Barada... Nikto! Rise from your graves!", "Every corpse on this battlefield belongs to my Grimoire!", "Skeletal Legion, Bone Golems—awaken and march!"],
+  // #76-#79 Star Wars Legends Quotes
+  ["I find your lack of faith disturbing.", "All I am surrounded by is fear... and dead men.", "You don't know the power of the Dark Side!"],
+  ["At last we will reveal ourselves to the Jedi—at last we will have revenge!", " Kenobi... KENOOOBIII!", "My double-bladed saberstaff hungers for battle!"],
+  ["This party's over.", "He's too dangerous to be left alive—Vaapad engaged!", "Take a seat, young Skywalker."],
+  ["Do. Or do not. There is no try.", "Size matters not! Judge me by my size, do you?", "Much to learn, you still have!"]
 ];
 
 function getBossQuote(cid, facId) {
@@ -365,8 +494,8 @@ function getBossQuote(cid, facId) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-/* === 5. HERO ALIGNMENTS & RIVAL INVASION CALLOUTS === */
-const BAD_HEROES = [2, 3, 7, 9, 11, 12, 17, 19, 21, 23, 26, 30, 36, 37, 49, 55, 62, 68, 70, 72, 75];
+/* === 7. HERO ALIGNMENTS & RIVAL INVASION CALLOUTS === */
+const BAD_HEROES = [2, 3, 7, 9, 11, 12, 17, 19, 21, 23, 26, 30, 36, 37, 49, 55, 62, 68, 70, 72, 75, 76, 77];
 const BOUNTY_HEROES = [1, 6, 15, 29, 41, 42, 48, 50, 51, 52, 54, 64, 65, 67, 74];
 function getHeroAlign(cid) {
   return BOUNTY_HEROES.includes(cid) ? "bounty" : (BAD_HEROES.includes(cid) ? "bad" : "good");
@@ -377,6 +506,15 @@ const MATCHUP_LINES = {
   "54_6": "Put Captain Solo in the cargo hold—you're worth a fortune frozen!",
   "3_0": "At last we will reveal ourselves to the Jedi. Join the Dark Side!",
   "0_3": "I will do what I must, Sith!",
+  "76_0": "The Force is with you, young Skywalker... but you are not a Jedi yet!",
+  "0_76": "I'll never turn to the Dark Side! I am a Jedi, like my father before me!",
+  "76_54": "Remember, bounty hunter: no disintegrations!",
+  "77_0": "Your master couldn't save himself—and neither will you, Jedi!",
+  "78_3": "In the name of the Galactic Senate of the Republic, you are under arrest, Chancellor!",
+  "3_78": "Are you threatening me, Master Jedi?!",
+  "79_3": "At an end your rule is, and not short enough it was!",
+  "3_79": "Master Yoda... you survived!",
+  "79_76": "Twisted by the Dark Side, young Skywalker has become.",
   "8_7": "I knew you were a Goa'uld—eyes glowing and everything!",
   "8_9": "Jaffa, kree! Tell your false god Jack O'Neill says hello!",
   "7_8": "Insolent Tau'ri! Kneel before Anupas!",

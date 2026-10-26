@@ -1,6 +1,6 @@
 // FILE: js/chaos.js
 // PART: 5 of 14
-// DETAIL: ChaosMath RNG, Movie-Accurate Acoustic Synth, 56 16-Note Alignment Themes, and Touch-Unlocked 500-Track Music Player with Persistent Filename Manifest & ID3 Tag Reader.
+// DETAIL: v8.0 Overhaul — ChaosMath RNG, Movie-Accurate Acoustic Synth + Bespoke Dash & Saberstaff FX, 80 16-Note Alignment Themes (#00-#79: Vader, Maul, Windu, Yoda), and 500-Track Music Player.
 
 "use strict";
 
@@ -82,8 +82,8 @@ function hashChunk(cx, cy) {
   return ChaosMath.createRNG(seed >>> 0);
 }
 
-/* === 2. MOVIE-ACCURATE WEB AUDIO SYNTHESIZER (Noise Buffers + Biquad Filters + FM) === */
-let actx = null, noiseBuf = null, ambTimer = 0, themeTimer = 0, themeStep = 0;
+/* === 2. MOVIE-ACCURATE WEB AUDIO SYNTHESIZER (Noise Buffers + Biquad Filters + Spell & Dash FX) === */
+let actx = null, noiseBuf = null, themeTimer = 0, themeStep = 0;
 
 function ensureAudio() {
   const vol = (typeof opts !== "undefined" && typeof opts.vol === "number") ? opts.vol : 0.45;
@@ -162,6 +162,15 @@ function sfxExplosion(scale = 1.0) {
   sfxTone(95, 24, 0.28 * scale, "sawtooth", 0.32, 0.06);
 }
 
+function sfxDisintegrate() {
+  sfxTone(980, 180, 0.06, "sine", 0.18, 0.02);
+  setTimeout(() => {
+    sfxTone(135, 26, 0.42, "sawtooth", 0.38, 0.02);
+    sfxTone(68, 22, 0.46, "triangle", 0.36, 0.02);
+    playNoise(0.35, "bandpass", 1800, 110, 2.2, 0.32);
+  }, 55);
+}
+
 function sfxForceLightning() {
   for (let k = 0; k < 3; k++) {
     setTimeout(() => {
@@ -171,21 +180,109 @@ function sfxForceLightning() {
   }
 }
 
+function sfxDash(dashStyle = "tacDash") {
+  try {
+    const ac = ensureAudio();
+    if (!ac) return;
+    if (dashStyle === "vaderLunge") {
+      // Vader respirator-like low air draw + heavy crimson saber cleave
+      playNoise(0.24, "bandpass", 420, 180, 2.2, 0.30);
+      sfxTone(62, 148, 0.26, "sawtooth", 0.32, 0.03);
+      setTimeout(() => sfxWeapon("orbit", 76, true), 90);
+    } else if (dashStyle === "yodaFlip") {
+      // Yoda rapid multi-flip Ataru Force whoosh + high-speed shoto hums
+      [0, 75, 150].forEach((ms, idx) => {
+        setTimeout(() => {
+          sfxTone(135 + idx * 45, 340 + idx * 60, 0.11, "triangle", 0.24, 0.04);
+          playNoise(0.08, "bandpass", 1400, 480, 1.8, 0.18);
+        }, ms);
+      });
+    } else if (dashStyle === "maulSpin") {
+      // Maul double-bladed saberstaff butterfly-twist Doppler spin
+      [0, 65, 130].forEach((ms) => {
+        setTimeout(() => {
+          sfxTone(78, 210, 0.12, "sawtooth", 0.26, 0.04);
+          sfxTone(158, 92, 0.12, "triangle", 0.20, 0.04);
+        }, ms);
+      });
+    } else if (dashStyle === "vaapadBlitz") {
+      // Mace Windu superconducting Vaapad electric purple blitz
+      playNoise(0.18, "highpass", 2200, 620, 2.5, 0.26);
+      sfxTone(104, 290, 0.22, "sawtooth", 0.28, 0.03);
+      sfxTone(620, 180, 0.16, "square", 0.18, 0.04);
+    } else if (dashStyle === "jetpackSlam") {
+      // Boba / Mando Jetpack Rocket-Jump ignition + landing blast
+      playNoise(0.32, "bandpass", 1100, 280, 1.1, 0.34);
+      sfxTone(180, 420, 0.24, "sawtooth", 0.22, 0.04);
+    } else if (dashStyle === "apparitionBlink") {
+      // Wizarding Apparition sharp vacuum crack + smoke pop
+      playNoise(0.06, "highpass", 3400, 800, 3.0, 0.36);
+      sfxTone(1450, 95, 0.12, "sawtooth", 0.28, 0.03);
+    } else {
+      playNoise(0.14, "bandpass", 1600, 420, 1.6, 0.24);
+      sfxTone(240, 580, 0.14, "triangle", 0.20, 0.04);
+    }
+  } catch (e) {}
+}
+
+function sfxSpell(spellType = "wand") {
+  try {
+    const ac = ensureAudio();
+    if (!ac) return;
+    if (spellType === "avada") {
+      playNoise(0.18, "bandpass", 3200, 420, 2.8, 0.34);
+      sfxTone(1880, 95, 0.22, "sawtooth", 0.32, 0.05);
+      sfxTone(140, 32, 0.28, "square", 0.26, 0.03);
+    } else if (spellType === "patronus" || spellType === "leviosa") {
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+        setTimeout(() => sfxTone(freq, freq * 1.06, 0.32, "sine", 0.12, 0.01), idx * 25);
+      });
+    } else if (spellType === "sectum") {
+      playNoise(0.09, "highpass", 3600, 950, 3.5, 0.28);
+      sfxTone(1420, 260, 0.08, "triangle", 0.24, 0.04);
+    } else if (spellType === "youShallNotPass") {
+      playNoise(0.38, "lowpass", 620, 45, 1.1, 0.40);
+      sfxTone(110, 28, 0.42, "sawtooth", 0.36, 0.03);
+      sfxTone(440, 220, 0.32, "triangle", 0.22, 0.02);
+    } else if (spellType === "raiseDead") {
+      [0, 35, 70].forEach((d, idx) => {
+        setTimeout(() => {
+          playNoise(0.04, "bandpass", 2600 - idx * 300, 1200, 4.0, 0.20);
+          sfxTone(180 + idx * 90, 320 + idx * 110, 0.14, "triangle", 0.18, 0.04);
+        }, d);
+      });
+    } else {
+      playNoise(0.048, "bandpass", 2900, 780, 2.6, 0.20);
+      sfxTone(980, 1640, 0.065, "sine", 0.16, 0.05);
+    }
+  } catch (e) {}
+}
+
 function sfxWeapon(style, wpnId = 0, isSaber = false) {
   try {
     const ac = ensureAudio();
     if (!ac) return;
     const now = ac.currentTime, vol = opts.vol;
+    if (wpnId >= 56 && wpnId <= 75 && !isSaber) {
+      if (wpnId === 70) sfxSpell("avada");
+      else if (wpnId === 67) sfxSpell("sectum");
+      else if (wpnId === 75) sfxSpell("raiseDead");
+      else if (wpnId === 59 || wpnId === 69 || wpnId === 71) sfxSpell("patronus");
+      else sfxSpell("wand");
+      return;
+    }
     if (isSaber) {
-      if ([18, 19, 24, 48, 50].includes(wpnId)) {
+      if ([18, 19, 24, 48, 50, 67, 71].includes(wpnId)) {
         playNoise(0.14, "bandpass", 1800, 420, 2.2, 0.25);
         sfxTone(540, 180, 0.11, "triangle", 0.18, 0.08);
         sfxTone(2400, 1650, 0.06, "sine", 0.08, 0.05);
         return;
       }
-      const baseH = wpnId === 3 ? 68 : (wpnId === 55 ? 88 : 92) + (Math.random() - 0.5) * 24;
-      const peakH = baseH * (1.85 + Math.random() * 0.55);
-      const dur = 0.21 + Math.random() * 0.08;
+      // Bespoke Lightsaber Hum Profiles (#76 Vader 62Hz, #77 Maul 78Hz, #78 Windu 104Hz, #79 Yoda 124Hz)
+      const baseMap = { 3: 68, 55: 88, 76: 62, 77: 78, 78: 104, 79: 124 };
+      const baseH = (baseMap[wpnId] || 92) + (Math.random() - 0.5) * 20;
+      const peakH = baseH * (wpnId === 77 ? 2.15 : (1.85 + Math.random() * 0.50));
+      const dur = wpnId === 79 ? 0.16 : (0.21 + Math.random() * 0.08);
       const o1 = ac.createOscillator(), o2 = ac.createOscillator(), flt = ac.createBiquadFilter(), g = ac.createGain();
       o1.type = "sawtooth"; o2.type = "triangle";
       flt.type = "lowpass"; flt.frequency.setValueAtTime(420, now);
@@ -194,7 +291,7 @@ function sfxWeapon(style, wpnId = 0, isSaber = false) {
       o1.frequency.setValueAtTime(baseH, now);
       o1.frequency.exponentialRampToValueAtTime(peakH, now + dur * 0.42);
       o1.frequency.exponentialRampToValueAtTime(baseH * 0.86, now + dur);
-      o2.frequency.setValueAtTime(baseH * 2.02, now);
+      o2.frequency.setValueAtTime(baseH * (wpnId === 77 ? 2.45 : 2.02), now);
       o2.frequency.exponentialRampToValueAtTime(peakH * 1.65, now + dur * 0.45);
       g.gain.setValueAtTime(0.001, now);
       g.gain.linearRampToValueAtTime(vol * 0.28, now + dur * 0.35);
@@ -271,6 +368,7 @@ function sfxSnap() {
   sfxTone(2300, 320, 0.036, "square", 0.22, 0.08);
 }
 
+/* === 3. ALL 80 BESPOKE 16-NOTE ALIGNMENT CHARACTER THEMES (#00-#79) === */
 const CHARACTER_THEMES = [
   [0.21,"square",  [293,293,392,587,523,493,440,784,587,523,493,440,784,587,523,493]],
   [0.20,"sawtooth",[146,146,220,196,174,146,130,146,146,220,261,233,196,174,146,130]],
@@ -327,27 +425,43 @@ const CHARACTER_THEMES = [
   [0.20,"square",  [220,293,220,196,174,261,220,146,220,293,329,293,261,349,293,220]],
   [0.19,"square",  [220,261,329,440,392,329,261,220,246,293,392,493,440,392,329,440]],
   [0.19,"sawtooth",[146,146,220,174,207,196,164,146,146,146,261,233,220,174,164,146]],
-  [0.17,"sawtooth",[130,138,174,164,138,130,110,98, 130,138,196,185,164,138,130,103]]
+  [0.17,"sawtooth",[130,138,174,164,138,130,110,98, 130,138,196,185,164,138,130,103]],
+  // #56-#75 Arcane Sanctum Spellcasters
+  [0.19,"triangle",[493,659,784,740,659,987,880,740,659,784,740,622,659,493,659,784]], // #56 Harry
+  [0.17,"triangle",[523,659,784,987,880,784,659,587,659,784,1046,987,880,784,659,523]], // #57 Hermione
+  [0.18,"square",  [293,370,440,587,523,440,370,329,293,370,440,659,587,493,440,293]], // #58 Ron
+  [0.21,"triangle",[587,698,880,1046,987,880,698,659,587,740,880,1174,1046,880,698,587]], // #59 Luna
+  [0.18,"square",  [261,329,392,523,587,523,440,392,329,392,493,659,587,523,392,261]], // #60 Cedric
+  [0.23,"triangle",[146,196,220,261,246,220,196,164,146,196,246,293,261,220,196,146]], // #61 Hagrid
+  [0.20,"sawtooth",[164,196,246,233,196,164,146,130,164,196,261,246,220,196,164,146]], // #62 Draco
+  [0.20,"triangle",[220,261,329,392,370,329,261,246,220,293,349,440,392,329,261,220]], // #63 Lupin
+  [0.18,"sawtooth",[196,233,293,349,329,293,233,196,220,261,329,392,349,293,233,196]], // #64 Sirius
+  [0.19,"sawtooth",[146,185,220,261,246,220,185,146,164,196,246,293,261,220,185,146]], // #65 Moody
+  [0.18,"square",  [329,392,493,587,659,587,493,392,349,440,523,659,587,493,392,329]], // #66 McGonagall
+  [0.21,"sawtooth",[146,174,220,207,174,164,146,130,146,185,233,220,185,164,146,110]], // #67 Snape
+  [0.17,"sawtooth",[155,185,233,220,185,155,138,123,155,196,246,233,196,155,138,110]], // #68 Bellatrix
+  [0.20,"triangle",[392,493,587,784,740,659,587,493,440,523,659,880,784,659,587,392]], // #69 Dumbledore
+  [0.23,"sawtooth",[110,116,146,138,116,110,98, 87, 110,130,164,155,130,116,110,82]],  // #70 Voldemort
+  [0.19,"square",  [261,329,392,523,659,587,523,392,349,440,523,698,659,523,392,261]], // #71 Gandalf
+  [0.22,"sawtooth",[130,130,155,196,185,155,130,110,130,130,174,220,196,155,130,98]],  // #72 Saruman
+  [0.18,"triangle",[329,392,493,622,587,493,392,329,370,440,554,659,587,493,392,329]], // #73 Doctor Strange
+  [0.19,"sawtooth",[196,233,293,311,293,233,196,174,196,246,311,349,311,246,196,164]], // #74 Scarlet Witch
+  [0.22,"sawtooth",[116,138,164,155,138,116,103,92, 116,146,185,174,146,138,116,87]],  // #75 Necromancer
+  // #76-#79 Star Wars Legends Themes
+  [0.22,"sawtooth",[196,196,196,155,233,196,155,233,196,293,293,293,311,233,185,155]], // #76 Darth Vader (Imperial March)
+  [0.15,"sawtooth",[146,164,174,146,164,174,146,164,220,233,220,196,174,164,146,130]], // #77 Darth Maul (Duel of the Fates)
+  [0.18,"square",  [196,220,261,293,349,329,293,261,220,261,329,392,349,293,261,196]], // #78 Mace Windu (Vaapad Shatterpoint)
+  [0.17,"triangle",[261,293,329,392,440,392,329,293,329,392,523,493,440,392,329,261]]  // #79 Grandmaster Yoda (Force/Ataru)
 ];
-
-const THEME_MOTIFS = CHARACTER_THEMES.slice(0, 10).map(t => t[2]);
 
 /* ============================================================================
    NOTE FOR TRACK NAMING & AUTOMATIC SHUFFLE (UP TO 500 TRACKS):
    ----------------------------------------------------------------------------
    FORMAT:
      music/track_<Number>_<Genre>_<Song-Name>.mp3
-     - Between 1st & 2nd underscore = Track Number (1..500)
-     - Between 2nd & 3rd underscore = Genre (e.g. Chill, Dubstep, Electronic)
-     - After 3rd underscore = Song Name (use hyphens "-" for spaces, e.g. Rain-Drops)
-
-   WHERE TO LIST DESCRIPTIVE FILENAMES:
-     Add your descriptive filenames inside CUSTOM_TRACK_LIST below (or name files
-     plainly as track_1.mp3, track_2.mp3... to use the 1..500 auto-scanner).
    ============================================================================ */
 
 const CUSTOM_TRACK_LIST = [
-  // List descriptive files in your "music/" folder here:
   "track_1_Electronic_Star_Birth.mp3",
   "track_2_Synthwave_Hello_World.mp3",
   "track_3_Beats_Darkstar.mp3"
@@ -378,7 +492,6 @@ function clampVol(v) {
 function parseTrackMetadata(urlOrName, fallbackNum = 1) {
   const rawFile = decodeURIComponent(String(urlOrName).split("/").pop().split("?")[0]);
   const noExt = rawFile.replace(/\.(mp3|ogg|wav|m4a)$/i, "");
-  // Parses: track_1_Chill_Rain-Drops -> num: 1, genre: "Chill", title: "Rain Drops"
   const m = noExt.match(/^track_(\d+)(?:_([^_]+))?(?:_(.+))?$/i);
   if (m) {
     const num = parseInt(m[1], 10) || fallbackNum;
@@ -406,7 +519,6 @@ function parseTrackMetadata(urlOrName, fallbackNum = 1) {
   };
 }
 
-// Reads embedded MP3 ID3v2 Title (TIT2) & Genre (TCON) tags automatically if present
 async function enrichTrackFromID3(meta) {
   if (!meta || meta.title !== `Track ${meta.num}`) return;
   try {
@@ -453,7 +565,6 @@ async function discoverMusicFiles() {
   isDiscoveringMusic = true;
   const foundMap = new Map();
 
-  // 1. Check CUSTOM_TRACK_LIST entries first (for track_1_Genre_Song-Name.mp3)
   for (let i = 0; i < CUSTOM_TRACK_LIST.length; i++) {
     const raw = CUSTOM_TRACK_LIST[i].trim();
     if (!raw) continue;
@@ -464,7 +575,6 @@ async function discoverMusicFiles() {
     }
   }
 
-  // 2. Sequential auto-discovery loop up to 500 tracks (track_1.mp3 or track_1_Genre.mp3)
   for (let i = 1; i <= 500; i++) {
     let matchedInSlot = false;
     const plainUrl = `music/track_${i}.mp3`;
@@ -485,13 +595,9 @@ async function discoverMusicFiles() {
         }
       }
     }
-    if (!matchedInSlot) {
-      // Benign expected end-of-playlist boundary check (not an error)
-      break;
-    }
+    if (!matchedInSlot) break;
   }
 
-  // 3. Fallback check for single roguelike_active_run_music.mp3
   if (foundMap.size === 0 && (await checkFileExists("music/roguelike_active_run_music.mp3"))) {
     foundMap.set("fallback", parseTrackMetadata("music/roguelike_active_run_music.mp3", 1));
   }
@@ -537,7 +643,6 @@ function rebuildShuffleQueue() {
 async function getNextTrackMeta() {
   if (!playlistInitialized) await discoverMusicFiles();
   if (activeQueue.length === 0) {
-    // Re-evaluate music folder at the end of every full shuffle cycle
     await discoverMusicFiles();
     rebuildShuffleQueue();
   }
@@ -657,13 +762,11 @@ async function skipTrackBackward() {
   const isDoubleTap = (now - lastBackTapTime) < 650;
   lastBackTapTime = now;
 
-  // Double-tap (or tap within first 3s) returns to previous song in history
   if ((isDoubleTap || (runAudio && runAudio.currentTime < 3.0)) && playedHistory.length > 0) {
     if (currentTrack) activeQueue.unshift(currentTrack);
     const prevMeta = playedHistory.pop();
     await playSpecificTrack(prevMeta, false);
   } else if (runAudio && currentTrack) {
-    // Single tap rewinds current song to 0:00
     runAudio.currentTime = 0;
     if (runAudio.paused && !userPausedMusic) runAudio.play().catch(() => {});
     showMusicToast(currentTrack);
@@ -741,16 +844,11 @@ function updateThemeMusic(rawDt) {
   const mainScr = document.getElementById("scrMain");
   const onMainMenu = mainScr && mainScr.classList.contains("active");
 
-  // Check if your custom MP3 music player is actively playing audio right now
   const mp3IsPlaying = (runAudio && !runAudio.paused && !userPausedMusic && currentFadeMode !== "out");
-
-  // Keep MP3 player running during active runs, or on the main menu if you pressed play
   const inRunSession = (typeof runActive !== "undefined" && runActive && !onMainMenu);
   updateActiveRunMP3(inRunSession || (onMainMenu && mp3IsPlaying));
 
-  // IF YOU HIT PLAY ON THE MP3 PLAYER ON MAIN MENU -> SKIP 8-BIT MUSIC
   if (onMainMenu && mp3IsPlaying) return;
-
   if (!onMainMenu) return;
 
   const cid = (typeof meta !== "undefined" && typeof meta.selChar === "number") ? meta.selChar : 0;
@@ -768,7 +866,6 @@ function updateThemeMusic(rawDt) {
     }
   }
 }
-
 
 /* === 4. AUTOMATED MUSIC PLAYER, SEEK BAR, GENRE FILTER & NOW-PLAYING TOAST === */
 function formatSec(s) {
@@ -886,7 +983,6 @@ function mountNexusMusicPlayer() {
       }
     };
 
-    // Hook "Deploy into Nexus" button so music starts inside the tap gesture automatically
     const playBtn = document.getElementById("goPlay");
     if (playBtn) {
       playBtn.addEventListener("click", () => {
@@ -911,7 +1007,6 @@ function mountNexusMusicPlayer() {
       updateMusicPlayerButtons();
     }, 500);
 
-    // Build playlist & shuffle queue automatically on boot
     discoverMusicFiles();
   } finally {
     window._inHudUpdate = false;

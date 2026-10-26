@@ -1,6 +1,6 @@
 // FILE: js/sim.js
 // PART: 12 of 14
-// DETAIL: v6.0 Physics Overhaul — Fixed Loop Index, Level-Scaling Prequel Saber Flourishes, Guaranteed Limb Sever & Angular Torso Bisection, 4-Stage Saber Impale/Kneel/Force-Wiggle/Recall, and Boomerang Physics.
+// DETAIL: v8.2 Overhaul — Per-Weapon Saber Slice Colors, Rival/Boss Weapon Drops & Pickup, Protected Veteran Corpses & Bisected Halves, Biographical Stances, and Allied Minion AI.
 
 "use strict";
 
@@ -22,8 +22,9 @@ const slX = new Float32Array(MAX_SLICE), slY = new Float32Array(MAX_SLICE),
       slRot = new Float32Array(MAX_SLICE), slVRot = new Float32Array(MAX_SLICE),
       slCutAng = new Float32Array(MAX_SLICE), slHeat = new Float32Array(MAX_SLICE),
       slRad = new Float32Array(MAX_SLICE), slHalf = new Uint8Array(MAX_SLICE),
-      slAct = new Uint8Array(MAX_SLICE);
+      slIsVet = new Uint8Array(MAX_SLICE), slAct = new Uint8Array(MAX_SLICE);
 const slBodyCol = new Array(MAX_SLICE).fill("#ff5252");
+const slHeadCol = new Array(MAX_SLICE).fill("#90a4ae");
 const slGlowCol = new Array(MAX_SLICE).fill("#00f0ff");
 let slHead = 0;
 
@@ -31,9 +32,7 @@ const eScarAng = new Float32Array(MAX_E), eScarHeat = new Float32Array(MAX_E),
       eScarOffY = new Float32Array(MAX_E), eScarHitCD = new Float32Array(MAX_E),
       eKneel = new Uint8Array(MAX_E);
 
-/* === 2. 4-STAGE THROWN BLADE IMPALE, KNEEL, FORCE-WIGGLE & RECALL STATE ===
-   Stage 1: Outward spinning flight -> Stage 2: Impales enemy, enemy falls to knees ->
-   Stage 3: Force-pull wiggle inside chest -> Stage 4: Rips out, enemy collapses dead, blade flies back to hand! */
+/* === 2. 4-STAGE THROWN BLADE IMPALE, KNEEL, FORCE-WIGGLE & RECALL STATE === */
 let thrownBlade = {
   active: false, stage: 0, timer: 0, wpnId: 0, isSaber: true,
   x: 0, y: 0, ang: 0, targetIdx: -1, glowCol: "#00f0ff", dmg: 140
@@ -50,16 +49,17 @@ function launchThrownBladeImpale(w, glowCol) {
     }
   }
   const launchA = best >= 0 ? Math.atan2(eY[best] - player.y, eX[best] - player.x) : player.aim;
+  const wCol = (w && w.bladeCol) ? w.bladeCol : (glowCol || "#00f0ff");
   thrownBlade.active = true;
-  thrownBlade.stage = 1; // 1=Flight Out, 2=Impaled Kneel & Force Wiggle, 3=Recall Flight to Hand
+  thrownBlade.stage = 1;
   thrownBlade.timer = 0.28;
   thrownBlade.wpnId = w ? w.id : player.cid;
-  thrownBlade.isSaber = ![14, 18, 19, 24, 48, 50].includes(thrownBlade.wpnId);
+  thrownBlade.isSaber = ![14, 18, 19, 24, 48, 50, 68].includes(thrownBlade.wpnId);
   thrownBlade.x = player.x + Math.cos(launchA) * 12;
   thrownBlade.y = player.y + Math.sin(launchA) * 12;
   thrownBlade.ang = launchA;
   thrownBlade.targetIdx = best;
-  thrownBlade.glowCol = glowCol || "#00f0ff";
+  thrownBlade.glowCol = wCol;
   thrownBlade.dmg = (135 + (player.lvl || 1) * 18) * (player.might || 1);
   player.forceHandTimer = 1.15;
   player.forceHandAng = launchA;
@@ -71,7 +71,6 @@ function updateThrownBladeSim(simDt) {
   const tIdx = thrownBlade.targetIdx;
 
   if (thrownBlade.stage === 1) {
-    // Stage 1: Spinning flight toward target, slicing weak foes along the path
     thrownBlade.timer -= simDt;
     thrownBlade.ang += simDt * 28;
     const goalX = (tIdx >= 0 && eAct[tIdx]) ? eX[tIdx] : (player.x + Math.cos(player.forceHandAng) * 145);
@@ -80,7 +79,6 @@ function updateThrownBladeSim(simDt) {
 
     if (d <= 18 || thrownBlade.timer <= 0) {
       if (tIdx >= 0 && eAct[tIdx]) {
-        // Stage 2: Blade impales target! Target drops to its knees!
         thrownBlade.stage = 2;
         thrownBlade.timer = 0.58;
         thrownBlade.x = eX[tIdx];
@@ -102,7 +100,6 @@ function updateThrownBladeSim(simDt) {
       thrownBlade.y += (dy / d) * Math.min(d, spd);
     }
   } else if (thrownBlade.stage === 2) {
-    // Stage 2: Impaled in kneeling enemy — Force-pull makes the blade wiggle violently inside them!
     thrownBlade.timer -= simDt;
     player.forceHandTimer = 0.25;
     if (tIdx >= 0 && eAct[tIdx]) {
@@ -116,7 +113,6 @@ function updateThrownBladeSim(simDt) {
       if (Math.random() < 0.55) spawnParticles(thrownBlade.x, thrownBlade.y, 1);
 
       if (thrownBlade.timer <= 0) {
-        // Rip blade free! Enemy collapses dead in two bisected halves!
         const ripDmg = eType[tIdx] >= 98 ? Math.max(thrownBlade.dmg * 1.8, eMax[tIdx] * 0.35) : (eHP[tIdx] + 999);
         eHP[tIdx] -= ripDmg;
         spawnDmg(eX[tIdx], eY[tIdx], ripDmg, true);
@@ -134,7 +130,6 @@ function updateThrownBladeSim(simDt) {
       thrownBlade.timer = 0.25;
     }
   } else {
-    // Stage 3: Blade flies back into the player's waiting hand
     thrownBlade.timer -= simDt;
     thrownBlade.ang += simDt * 26;
     const dx = player.x - thrownBlade.x, dy = player.y - thrownBlade.y, d = Math.hypot(dx, dy);
@@ -149,11 +144,19 @@ function updateThrownBladeSim(simDt) {
   }
 }
 
-function spawnBisectedBodyHalves(x, y, cutAngle, baseR, bodyCol, glowCol) {
+function spawnBisectedBodyHalves(x, y, cutAngle, baseR, bodyCol, glowCol, headCol = null, isVet = false) {
   const normA = cutAngle + Math.PI * 0.5;
   for (let h = 0; h < 2; h++) {
-    const idx = slHead;
-    slHead = (slHead + 1) % MAX_SLICE;
+    let idx = slHead;
+    // Protect Veteran (Rival/Boss) bisected halves from being overwritten by regular henchmen!
+    for (let tries = 0; tries < MAX_SLICE; tries++) {
+      const cand = (slHead + tries) % MAX_SLICE;
+      if (!slAct[cand] || !slIsVet[cand] || isVet) {
+        idx = cand;
+        slHead = (cand + 1) % MAX_SLICE;
+        break;
+      }
+    }
     const dir = h === 0 ? -1 : 1;
     slX[idx] = x + Math.cos(normA) * dir * 3;
     slY[idx] = y + Math.sin(normA) * dir * 3;
@@ -167,7 +170,9 @@ function spawnBisectedBodyHalves(x, y, cutAngle, baseR, bodyCol, glowCol) {
     slHeat[idx] = 1.0;
     slRad[idx] = baseR;
     slHalf[idx] = h;
+    slIsVet[idx] = isVet ? 1 : 0;
     slBodyCol[idx] = bodyCol;
+    slHeadCol[idx] = headCol || bodyCol;
     slGlowCol[idx] = glowCol;
     slAct[idx] = 1;
   }
@@ -203,22 +208,54 @@ function triggerRocketDetonation(x, y, dmg, blastRadius) {
 
 function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0ff") {
   if (!eAct[idx]) return;
-  const ex = eX[idx], ey = eY[idx], et = eType[idx];
+  const ex = eX[idx], ey = eY[idx], et = eType[idx], rCid = eRivalCid[idx];
   eAct[idx] = 0;
   eKneel[idx] = 0;
+  if (typeof eLevitate !== "undefined") { eLevitate[idx] = 0; eLevZ[idx] = 0; }
   player.kills++;
 
   if (player.cid === 33 && Math.hypot(ex - player.x, ey - player.y) <= 95) player.hp = Math.min(player.maxHp, player.hp + 1.5);
-  if (player.cid === 3) player.hp = Math.min(player.maxHp, player.hp + 0.8);
+  if ([3, 75, 76, 77].includes(player.cid)) player.hp = Math.min(player.maxHp, player.hp + 0.9);
   if (player.cid === 11 && player.kills % 10 === 0) player.hp = Math.min(player.maxHp, player.hp + 3.0);
 
+  // Resolve exact Rival / Boss outfit colors so their corpse & severed halves match their live look!
+  let bodyCol = et === 99 ? "#ff1744" : (eFormType[idx] === 1 ? "#ffd166" : (player.fac ? player.fac.c2 : "#ff5252"));
+  let headCol = et === 99 ? "#ffff00" : (player.fac ? player.fac.c1 : "#90a4ae");
+
+  if (et === 98 && rCid >= 0 && typeof CHAR_RAW !== "undefined" && CHAR_RAW[rCid]) {
+    const rFac = FACTIONS[CHAR_RAW[rCid][1]] || player.fac || FACTIONS[0];
+    const out = typeof getOutfit === "function" ? getOutfit(rCid) : { head: 0, torso: 0 };
+    const pal = typeof getHeroOutfits === "function" ? getHeroOutfits(rCid) : null;
+    headCol = (pal && pal.head && pal.head[out.head || 0]) ? pal.head[out.head || 0][1] : rFac.c1;
+    bodyCol = (pal && pal.torso && pal.torso[out.torso || 0]) ? pal.torso[out.torso || 0][1] : rFac.c2;
+  }
+
+  // Rival Bounty Hunter & Boss Signature Weapon Drop on Death!
+  if (et >= 98) {
+    const dropWpnId = (et === 98 && rCid >= 0) ? rCid : Math.floor(Math.random() * CHAR_RAW.length);
+    if (typeof spawnWeaponDrop === "function") {
+      spawnWeaponDrop(ex, ey, dropWpnId);
+    } else if (typeof activeWeaponDrops !== "undefined" && CHAR_RAW[dropWpnId]) {
+      activeWeaponDrops.push({
+        x: ex, y: ey, wpnId: dropWpnId,
+        name: CHAR_RAW[dropWpnId][4], superName: CHAR_RAW[dropWpnId][5], style: CHAR_RAW[dropWpnId][6],
+        bladeCol: typeof getWeaponColor === "function" ? getWeaponColor(dropWpnId) : "#00f0ff",
+        spawnTime: runTime || 0
+      });
+    }
+    const dropName = CHAR_RAW[dropWpnId] ? CHAR_RAW[dropWpnId][4] : "Signature Weapon";
+    spawnSpeech(ex, ey - 10, `WEAPON DROPPED: ${dropName.toUpperCase()}!`, "#ffd166", 3.0);
+  }
+
   if (sliceAngle !== null) {
-    const baseR = et === 99 ? 20 : (et === 3 ? 14 : 11);
-    const bCol = et === 99 ? "#ff1744" : (eFormType[idx] === 1 ? "#ffd166" : (player.fac ? player.fac.c2 : "#ff5252"));
-    spawnBisectedBodyHalves(ex, ey, sliceAngle, baseR, bCol, glowCol);
+    const baseR = et === 99 ? 20 : (et === 98 ? 13 : (et === 3 ? 14 : 11));
+    spawnBisectedBodyHalves(ex, ey, sliceAngle, baseR, bodyCol, glowCol, headCol, et >= 98);
+    if (player.cid === 75 || et >= 98) {
+      spawnCorpse(ex, ey, eSeed[idx], et, eLegsLost[idx], eArmsLost[idx], bodyCol, headCol, rCid);
+    }
   } else {
-    spawnCorpse(ex, ey, eSeed[idx], et, eLegsLost[idx], eArmsLost[idx]);
-    if (wasHeadshot) spawnGroundLimb(ex, ey - 8, "#ff1744", 2);
+    spawnCorpse(ex, ey, eSeed[idx], et, eLegsLost[idx], eArmsLost[idx], bodyCol, headCol, rCid);
+    if (wasHeadshot) spawnGroundLimb(ex, ey - 8, headCol, 2);
   }
 
   spawnParticles(ex, ey, 6);
@@ -228,13 +265,105 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
   if (player.kills % 10 === 0 && typeof updateHUD === "function") updateHUD();
 }
 
-/* === 3. REAL-TIME PHYSICAL BLADE SLICING (GUARANTEED LIMB SEVER + TORSO BISECTION) === */
+/* === 3. ALLIED MINION AI SIMULATION === */
+function updateMinionsSim(simDt) {
+  if (typeof mAct === "undefined") return;
+  for (let m = 0; m < MAX_MINION; m++) {
+    if (!mAct[m]) continue;
+    mLife[m] -= simDt;
+    if (mLife[m] <= 0 || mHP[m] <= 0) {
+      mAct[m] = 0;
+      spawnParticles(mX[m], mY[m], 4);
+      continue;
+    }
+    if (mAtkCD[m] > 0) mAtkCD[m] = Math.max(0, mAtkCD[m] - simDt);
+
+    let bestE = -1, bestD = 360;
+    for (let j = 0; j < MAX_E; j++) {
+      if (!eAct[j] || (typeof eLevitate !== "undefined" && eLevitate[j] > 0)) continue;
+      const d = Math.hypot(eX[j] - mX[m], eY[j] - mY[m]);
+      if (d < bestD) { bestD = d; bestE = j; }
+    }
+
+    const kind = mKind[m];
+    if (bestE >= 0) {
+      const dx = eX[bestE] - mX[m], dy = eY[bestE] - mY[m], d = Math.hypot(dx, dy) || 1;
+      const ang = Math.atan2(dy, dx);
+
+      if (kind === 2) {
+        if (d > 135) {
+          mVX[m] = (dx / d) * mSpd[m]; mVY[m] = (dy / d) * mSpd[m];
+          mX[m] += mVX[m] * simDt; mY[m] += mVY[m] * simDt;
+          mWalk[m] += simDt * 7;
+        } else if (d < 75) {
+          mVX[m] = -(dx / d) * mSpd[m] * 0.65; mVY[m] = -(dy / d) * mSpd[m] * 0.65;
+          mX[m] += mVX[m] * simDt; mY[m] += mVY[m] * simDt;
+          mWalk[m] += simDt * 5;
+        }
+        if (mAtkCD[m] <= 0) {
+          mAtkCD[m] = 0.82;
+          spawnProj(mX[m], mY[m], Math.cos(ang) * 380, Math.sin(ang) * 380, mDmg[m], 0.85, 5, 1, 4, 0, 0, 75);
+          sfx(640, 280, 0.04, "triangle", 0.09);
+        }
+      } else {
+        const eRad = eType[bestE] === 99 ? 22 : 12;
+        const reach = mRad[m] + eRad + 6;
+        if (d > reach * 0.85) {
+          mVX[m] = (dx / d) * mSpd[m]; mVY[m] = (dy / d) * mSpd[m];
+          mX[m] += mVX[m] * simDt; mY[m] += mVY[m] * simDt;
+          mWalk[m] += simDt * (kind === 1 ? 11 : 7.5);
+        }
+        if (d <= reach && mAtkCD[m] <= 0) {
+          mAtkCD[m] = kind === 1 ? 0.34 : (kind === 4 ? 0.92 : 0.52);
+          if (kind === 4) {
+            spawnBlastWave(mX[m], mY[m], 62, mCol[m]);
+            sfx(110, 42, 0.18, "sawtooth", 0.24);
+            for (let k = 0; k < MAX_E; k++) {
+              if (!eAct[k]) continue;
+              const dk = Math.hypot(eX[k] - mX[m], eY[k] - mY[m]);
+              if (dk <= 64) {
+                eHP[k] -= mDmg[m];
+                eStun[k] = Math.max(eStun[k], 0.85);
+                spawnDmg(eX[k], eY[k], mDmg[m], true);
+                if (eHP[k] <= 0) killEnemy(k, false);
+              }
+            }
+          } else {
+            eHP[bestE] -= mDmg[m];
+            eScarAng[bestE] = ang + 0.4;
+            eScarHeat[bestE] = 0.85;
+            if (kind === 1) { eBleed[bestE] = 1; eBleedRate[bestE] = eMax[bestE] * 0.08; eSlow[bestE] = 1.5; }
+            if ((kind === 0 || kind === 3) && Math.random() < 0.28 && eArmsLost[bestE] < 2) {
+              eArmsLost[bestE]++;
+              spawnGroundLimb(eX[bestE], eY[bestE], "#ff5252", 1);
+            }
+            spawnDmg(eX[bestE], eY[bestE], mDmg[m], kind === 3);
+            sfx(260, 110, 0.045, "triangle", 0.11);
+            if (eHP[bestE] <= 0) killEnemy(bestE, false, (kind === 0 || kind === 3) ? ang : null, mCol[m]);
+          }
+          mHP[m] -= (eType[bestE] >= 98 ? 14 : 5);
+        }
+      }
+    } else {
+      const formAng = (m * 1.15) + runTime * 0.8;
+      const gx = player.x + Math.cos(formAng) * 44, gy = player.y + Math.sin(formAng) * 44;
+      const dx = gx - mX[m], dy = gy - mY[m], d = Math.hypot(dx, dy);
+      if (d > 8) {
+        mVX[m] = (dx / d) * mSpd[m] * 0.8; mVY[m] = (dy / d) * mSpd[m] * 0.8;
+        mX[m] += mVX[m] * simDt; mY[m] += mVY[m] * simDt;
+        mWalk[m] += simDt * 6;
+      }
+    }
+  }
+}
+
+/* === 4. REAL-TIME PHYSICAL BLADE SLICING (GUARANTEED LIMB SEVER + TORSO BISECTION) === */
 function checkBladeSegmentSlice(hx, hy, tx, ty, w, bladeSweepAngle, glowCol) {
   const segDX = tx - hx, segDY = ty - hy;
   const segLenSq = segDX * segDX + segDY * segDY;
   if (segLenSq < 1) return;
 
-  const isPlasmaSaber = ![18, 19, 24, 48, 50].includes(w.id);
+  const isPlasmaSaber = ![18, 19, 24, 48, 50, 67, 71].includes(w.id);
   const visorBonus = (player.activeVisor && player.activeVisor > 0) ? 0.10 : 0;
 
   for (let j = 0; j < MAX_E; j++) {
@@ -248,7 +377,8 @@ function checkBladeSegmentSlice(hx, hy, tx, ty, w, bladeSweepAngle, glowCol) {
     const dist = Math.hypot(ex - cx, ey - cy);
     if (dist > eRad + 4.5) continue;
 
-    eScarHitCD[j] = 0.20;
+    eScarHitCD[j] = w.id === 77 ? 0.14 : 0.20;
+    player.combatAlertTimer = 1.6;
     const relX = Math.max(-0.95, Math.min(0.95, (cx - ex) / eRad));
     const relY = Math.max(-0.95, Math.min(0.95, (cy - ey) / eRad));
     recordShotImpact(relX, relY, 1, eType[j], relY < -0.35 ? 2 : 1);
@@ -259,12 +389,12 @@ function checkBladeSegmentSlice(hx, hy, tx, ty, w, bladeSweepAngle, glowCol) {
 
     const isCrit = Math.random() < ((player.crit || 0.08) + visorBonus + (w.lvl * 0.04));
     const isBossOrRival = eType[j] >= 98;
-    const hasHeavyShield = (eFormType[j] === 1 || eType[j] === 3) && !isCrit && eArmsLost[j] === 0;
+    const ignoresShields = (w.id === 76 || w.id === 78);
+    const hasHeavyShield = !ignoresShields && (eFormType[j] === 1 || eType[j] === 3) && !isCrit && eArmsLost[j] === 0;
 
     if (typeof sfxWeapon === "function") sfxWeapon("orbit", w.id, true);
 
     if (!isBossOrRival && !hasHeavyShield) {
-      // Unarmored / Standard Enemy: Instant limb dismemberment on outer edge or instant torso bisection!
       if (Math.abs(relX) > 0.52 && eArmsLost[j] < 2) {
         eArmsLost[j]++;
         eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.14;
@@ -282,28 +412,27 @@ function checkBladeSegmentSlice(hx, hy, tx, ty, w, bladeSweepAngle, glowCol) {
         spawnDmg(ex, ey, legDmg, true, true);
         if (eHP[j] <= 0) killEnemy(j, false, bladeSweepAngle, glowCol);
       } else {
-        // Direct Torso / Head Contact -> Instant Bisection into two falling halves!
         const fatalDmg = Math.max(eHP[j] + 10, (55 + w.lvl * 16) * player.might * 2.5);
         spawnDmg(ex, ey, fatalDmg, true);
         eHP[j] = 0;
         killEnemy(j, relY < -0.35, bladeSweepAngle, glowCol);
       }
     } else {
-      // Heavy Brute / Shield Phalanx / Boss: Automatically severs an arm/shield on first contact, then bisects!
       if (eArmsLost[j] < 2 && !isBossOrRival) {
         eArmsLost[j]++;
-        eFormType[j] = 0; // Slices away the Roman shield!
+        eFormType[j] = 0;
         eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.12;
         spawnGroundLimb(ex + (relX >= 0 ? 9 : -9), ey, "#ffd166", 1);
       }
-      const baseDmg = (42 + w.lvl * 14) * (w.lvl >= 5 ? 1.35 : 1.0) * player.might * (isCrit ? player.cdmg : 1.0);
+      if (w.id === 78) eShred[j] = Math.min(12, eShred[j] + 4);
+      const baseDmg = (42 + w.lvl * 14) * (w.lvl >= 5 ? 1.35 : 1.0) * player.might * (isCrit ? player.cdmg : 1.0) * (isBossOrRival ? (player.bossMul || 1.0) : 1.0);
       eHP[j] -= baseDmg;
       spawnDmg(ex, ey, baseDmg, isCrit, true);
       spawnParticles(cx, cy, 4);
       const kb = (isBossOrRival ? 4 : 10) * (player.kb || 1.0);
       const ka = Math.atan2(ey - player.y, ex - player.x);
       eX[j] += Math.cos(ka) * kb;
-      eY[j] += Math.sin(ka) * kb; // Fixed typo (was eY[i])
+      eY[j] += Math.sin(ka) * kb;
       if (eHP[j] <= 0) killEnemy(j, relY < -0.35, bladeSweepAngle, glowCol);
     }
   }
@@ -330,9 +459,20 @@ function hitTestPlayerProj(i) {
     const atkType = (pStyle[i] === 8 || pStyle[i] === 7) ? 1 : 0;
     recordShotImpact(nx, ny, atkType, eType[j], isHead ? 2 : 1);
 
-    if (eFormType[j] === 1 && !isHead && pStyle[i] !== 8 && Math.random() < 0.38) {
+    if (eFormType[j] === 1 && !isHead && pStyle[i] !== 8 && pSup[i] !== 3 && Math.random() < 0.38) {
       if (typeof sfxRicochet === "function") sfxRicochet();
       pVX[i] = -pVX[i] * 0.7; pVY[i] = -pVY[i] * 0.7;
+      pPrc[i]--;
+      if (pPrc[i] < 0) pAct[i] = 0;
+      return;
+    }
+
+    if (pSup[i] === 3 && eType[j] < 98) {
+      const avadaDmg = Math.max(eHP[j] + 999, pDmg[i] * 3.0);
+      eHP[j] = 0;
+      spawnDmg(eX[j], eY[j], avadaDmg, true);
+      spawnParticles(eX[j], eY[j], 10);
+      killEnemy(j, true);
       pPrc[i]--;
       if (pPrc[i] < 0) pAct[i] = 0;
       return;
@@ -381,6 +521,25 @@ function hitTestPlayerProj(i) {
       killEnemy(j, isHead, pStyle[i] === 8 ? pVX[i] : null, "#ff9100");
     }
 
+    if (pBounce[i] > 0 && pStyle[i] !== 8) {
+      pBounce[i]--;
+      let nextE = -1, nextD = 180;
+      for (let k = 0; k < MAX_E; k++) {
+        if (k !== j && eAct[k]) {
+          const dk = Math.hypot(eX[k] - pX[i], eY[k] - pY[i]);
+          if (dk < nextD) { nextD = dk; nextE = k; }
+        }
+      }
+      if (nextE >= 0) {
+        const spd = Math.hypot(pVX[i], pVY[i]) || 380;
+        const ba = Math.atan2(eY[nextE] - pY[i], eX[nextE] - pX[i]);
+        pVX[i] = Math.cos(ba) * spd;
+        pVY[i] = Math.sin(ba) * spd;
+        if (typeof sfxRicochet === "function") sfxRicochet();
+        return;
+      }
+    }
+
     pPrc[i]--;
     if (pPrc[i] < 0) {
       pAct[i] = 0;
@@ -389,10 +548,53 @@ function hitTestPlayerProj(i) {
   }
 }
 
+/* === 5. MASTER SIMULATION STEP (60 FPS) === */
 function updateSim(rawDt) {
   const t0 = performance.now();
   if (typeof updateThemeMusic === "function") updateThemeMusic(rawDt);
   if (!runActive || runPaused || !player) return;
+
+  // Pick up dropped Rival / Boss Signature Weapons from the battlefield!
+  if (typeof activeWeaponDrops !== "undefined" && activeWeaponDrops.length > 0) {
+    for (let w = activeWeaponDrops.length - 1; w >= 0; w--) {
+      const drop = activeWeaponDrops[w];
+      if (Math.hypot(player.x - drop.x, player.y - drop.y) < 34) {
+        const rc = CHAR_RAW[drop.wpnId] || CHAR_RAW[0];
+        const existingWpn = player.weapons.find(pw => pw.id === drop.wpnId);
+        if (existingWpn) {
+          existingWpn.lvl = Math.min(10, existingWpn.lvl + 2);
+          existingWpn.enabled = true;
+          spawnSpeech(player.x, player.y - 18, `UPGRADED ${rc[4].toUpperCase()} (LV.${existingWpn.lvl})!`, "#ffd166", 2.8);
+        } else {
+          const wCol = drop.bladeCol || (typeof getWeaponColor === "function" ? getWeaponColor(drop.wpnId) : "#00f0ff");
+          player.weapons.push({
+            id: drop.wpnId,
+            name: rc[4],
+            superName: rc[5],
+            style: rc[6],
+            lvl: 1,
+            cd: 0,
+            ang: 0,
+            angVel: 0,
+            enabled: true,
+            evolvedLv5: false,
+            bladeCol: wCol
+          });
+          if (rc[6] === "orbit" || (typeof isSwordWeapon === "function" && isSwordWeapon(drop.wpnId))) {
+            player.hasSaber = true;
+            player.saberMastery = Math.max(20, player.saberMastery || 0);
+          }
+          const en = player.weapons.filter(pw => pw.enabled !== false);
+          player.handSlotOffset = Math.max(0, en.length - 1);
+          player.swapTimer = 0;
+          spawnSpeech(player.x, player.y - 18, `CLAIMED RIVAL WEAPON: ${rc[4].toUpperCase()}!`, drop.bladeCol || "#00e676", 2.8);
+        }
+        sfx(440, 880, 0.22, "triangle");
+        activeWeaponDrops.splice(w, 1);
+        if (typeof updateHUD === "function") updateHUD();
+      }
+    }
+  }
 
   const simDt = rawDt * timeScale;
   runTime += simDt;
@@ -410,6 +612,18 @@ function updateSim(rawDt) {
   if (muzzleFlashTimer > 0) muzzleFlashTimer = Math.max(0, muzzleFlashTimer - simDt);
   if (player.recoilKick > 0) player.recoilKick = Math.max(0, player.recoilKick - simDt * 6.5);
   if (player.regen > 0 && player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + player.regen * simDt);
+
+  if ((player.acrobatZ || 0) > 0 || (player.acrobatVZ || 0) !== 0) {
+    player.acrobatZ = Math.max(0, (player.acrobatZ || 0) + (player.acrobatVZ || 0) * simDt);
+    player.acrobatVZ = (player.acrobatVZ || 0) - 185 * simDt;
+    if (player.acrobatZ <= 0) {
+      player.acrobatZ = 0;
+      player.acrobatVZ = 0;
+      player.acrobatFlip = 0;
+    } else if (player.acrobatFlip > 0) {
+      player.acrobatFlip = Math.max(0, player.acrobatFlip - simDt * 18);
+    }
+  }
 
   let mx = joy.act ? joy.dx : 0, my = joy.act ? joy.dy : 0;
   if (keys["KeyW"] || keys["ArrowUp"]) my -= 1;
@@ -437,7 +651,7 @@ function updateSim(rawDt) {
     player.bankTilt = (player.bankTilt || 0) * 0.82 + targetBank * 0.18;
 
     const nx = player.x + vx * simDt, ny = player.y + vy * simDt;
-    const ignoreLow = player.hover || player.inVehicle > 0 || [1, 16, 21, 25, 47, 54].includes(player.cid);
+    const ignoreLow = player.hover || (player.acrobatZ > 4) || player.inVehicle > 0 || [1, 16, 21, 25, 47, 54, 70, 73, 74, 79].includes(player.cid);
     if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(nx, player.y, ignoreLow)) player.x = nx;
     if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(player.x, ny, ignoreLow)) player.y = ny;
 
@@ -456,39 +670,75 @@ function updateSim(rawDt) {
       if (d < bestAimDist) { bestAimDist = d; aimTarget = j; }
     }
   }
-  const desiredAim = aimTarget >= 0
-    ? Math.atan2(eY[aimTarget] - player.y, eX[aimTarget] - player.x)
-    : (typeof player.moveDir === "number" ? player.moveDir : (player.aim || 0));
+
+  if (player.cid === 79 && aimTarget >= 0 && bestAimDist < 82) {
+    if ((player.acrobatZ || 0) <= 0.5) {
+      player.acrobatVZ = 44;
+      player.acrobatFlip = Math.PI * 2;
+    }
+    const orbitTan = Math.atan2(eY[aimTarget] - player.y, eX[aimTarget] - player.x) + Math.PI * 0.5;
+    const ox = player.x + Math.cos(orbitTan) * 95 * simDt;
+    const oy = player.y + Math.sin(orbitTan) * 95 * simDt;
+    if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(ox, oy, true)) {
+      player.x = ox; player.y = oy;
+    }
+  }
+
+  const desiredAim = (player.deflectStanceTimer > 0)
+    ? player.deflectAng
+    : (aimTarget >= 0
+      ? Math.atan2(eY[aimTarget] - player.y, eX[aimTarget] - player.x)
+      : (typeof player.moveDir === "number" ? player.moveDir : (player.aim || 0)));
   let aimDiff = desiredAim - (player.aim || 0);
   while (aimDiff > Math.PI) aimDiff -= Math.PI * 2;
   while (aimDiff < -Math.PI) aimDiff += Math.PI * 2;
-  player.aim = (player.aim || 0) + aimDiff * Math.min(1, simDt * 14);
+  player.aim = (player.aim || 0) + aimDiff * Math.min(1, simDt * (player.deflectStanceTimer > 0 ? 28 : 14));
 
   const out = typeof getOutfit === "function" ? getOutfit(player.cid) : { blade: 0 };
   const pal = typeof getHeroOutfits === "function" ? getHeroOutfits(player.cid) : null;
   const bladeGlowCol = (pal && pal.blade && pal.blade[out.blade || 0]) ? pal.blade[out.blade || 0][1] : (player.fac ? player.fac.c1 : "#00f0ff");
 
-  // Trigger 4-Stage Thrown Saber Impale if whirlwindTimer was just activated
-  if (player.whirlwindTimer > 1.05 && !thrownBlade.active && player.cid !== 55) {
+  if (player.whirlwindTimer > 1.05 && !thrownBlade.active && ![55, 77, 79].includes(player.cid)) {
     player.whirlwindTimer = 0;
-    launchThrownBladeImpale(player.weapons[0], bladeGlowCol);
+    const w0 = player.weapons[0];
+    const w0Col = (w0 && w0.id !== player.cid && w0.bladeCol) ? w0.bladeCol : bladeGlowCol;
+    launchThrownBladeImpale(w0, w0Col);
   }
   updateThrownBladeSim(simDt);
+  updateMinionsSim(simDt);
 
-  /* === LEVEL-SCALING STAR WARS PREQUEL FLOURISH ENGINE ===
-     As weapon level increases (Lv.1 -> Lv.10), flourishes evolve from deliberate Form III weaves
-     into fluid multi-angle Form IV/V figure-8s and behind-the-back Moulinet wrist spins! */
-  const primaryLvl = (player.weapons[0] ? player.weapons[0].lvl : 1);
-  player.flourishTimer = (player.flourishTimer || 0) - simDt;
-  if (player.flourishTimer <= 0) {
-    const fSeed = Math.floor(runTime * 19) + player.cid * 31 + player.kills;
-    const maxForm = primaryLvl >= 7 ? 3 : (primaryLvl >= 4 ? 2 : 1);
-    player.flourishForm = ChaosMath.int(fSeed, 0, maxForm);
-    player.flourishSpeed = ChaosMath.range(fSeed + 7, 3.8, 5.4) * (1 + primaryLvl * 0.08);
-    player.flourishTimer = ChaosMath.range(fSeed + 19, 0.95, 1.65);
+  if (typeof activeBarriers !== "undefined") {
+    for (let b = activeBarriers.length - 1; b >= 0; b--) {
+      const br = activeBarriers[b];
+      br.life -= simDt;
+      if (br.life <= 0) {
+        activeBarriers.splice(b, 1);
+        continue;
+      }
+      for (let j = 0; j < MAX_E; j++) {
+        if (!eAct[j]) continue;
+        const dx = eX[j] - br.x, dy = eY[j] - br.y, d = Math.hypot(dx, dy) || 1;
+        if (d < br.rad + 14) {
+          eX[j] = br.x + (dx / d) * (br.rad + 18);
+          eY[j] = br.y + (dy / d) * (br.rad + 18);
+          eStun[j] = Math.max(eStun[j], 0.45);
+          eHP[j] -= 42 * (player.might || 1) * simDt;
+          if (eHP[j] <= 0) killEnemy(j, false);
+        }
+      }
+    }
   }
-  const enemyCloseBoost = (aimTarget >= 0 && bestAimDist < 75) ? 1.45 : 1.0;
-  const fRate = (player.whirlwindTimer > 0 ? 15.0 : (player.flourishSpeed || 4.5)) * enemyCloseBoost;
+
+  /* === v8.0 BIOGRAPHICAL EARLY-TO-PRIME STANCE & DEFLECTION ENGINE === */
+  const primaryWpn = player.weapons[0] || { id: player.cid, lvl: 1 };
+  const isDeflectingNow = (player.deflectStanceTimer || 0) > 0;
+  const stanceSpec = typeof getHeroStanceSpec === "function"
+    ? getHeroStanceSpec(player.cid, primaryWpn.lvl, isDeflectingNow)
+    : { pattern: 2, speedMul: 1.2, arcWidth: 1.0, wristAmp: 0.7, isDoubleBlade: false, isAcrobaticLeaper: false };
+
+  player.activeStanceName = stanceSpec.stageName;
+  const enemyCloseBoost = (aimTarget >= 0 && bestAimDist < 78) ? 1.45 : 1.0;
+  const fRate = (player.whirlwindTimer > 0 ? 15.5 : (3.6 * stanceSpec.speedMul)) * enemyCloseBoost;
   player.flourishPhase = (player.flourishPhase || 0) + simDt * fRate;
 
   const enabledWpns = player.weapons.filter(w => w.enabled !== false);
@@ -511,31 +761,50 @@ function updateSim(rawDt) {
   const activeSlots = Math.min(armCap, enabledWpns.length);
   for (let s = 0; s < activeSlots; s++) {
     const w = enabledWpns[(player.handSlotOffset + s) % enabledWpns.length];
-    const isMeleeBlade = (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44].includes(w.id));
+    const isMeleeBlade = (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44, 73].includes(w.id));
 
-    // If primary blade is currently thrown & impaled in an enemy, skip hand-slice for slot 0
     if (s === 0 && thrownBlade.active && isMeleeBlade) continue;
 
+    // Each weapon uses its own independent canonical bladeCol (while primary weapon respects your Outfit Customizer)!
+    const wBladeCol = (w.id === player.cid)
+      ? bladeGlowCol
+      : (w.bladeCol || (typeof getWeaponColor === "function" ? getWeaponColor(w.id) : bladeGlowCol));
+
+    const wStance = typeof getHeroStanceSpec === "function"
+      ? getHeroStanceSpec(w.id, w.lvl, isDeflectingNow && s === 0)
+      : stanceSpec;
+    const pat = (player.whirlwindTimer > 0) ? 7 : wStance.pattern;
+    const ph = player.flourishPhase + s * 1.85;
+
     if (isMeleeBlade) {
-      const ph = player.flourishPhase + s * 1.85;
       let flourishOffset = 0;
       let wristSpin = 0;
-      if (player.whirlwindTimer > 0 || player.flourishForm === 2) {
-        // Form 2: Prequel Obi-Wan / Maul 360° Moulinet wrist spin
-        flourishOffset = Math.sin(ph * 0.7) * 0.95;
-        wristSpin = ph % (Math.PI * 2);
-      } else if (player.flourishForm === 3) {
-        // Form 3 (Lv.7+ Master Flurry): Rapid Ataru figure-8 + reverse-grip sweep
-        flourishOffset = Math.sin(ph) * 1.45 + Math.cos(ph * 2.0) * 0.65;
-        wristSpin = Math.sin(ph * 2.0) * 1.35;
-      } else if (player.flourishForm === 1) {
-        // Form 1: Anakin Djem So wide diagonal figure-8 cleave
-        flourishOffset = Math.sin(ph) * 1.28 + Math.cos(ph * 0.5) * 0.52;
-        wristSpin = Math.cos(ph) * 0.85;
+
+      if (pat === 0) {
+        flourishOffset = Math.sin(ph) * (0.95 * wStance.arcWidth);
+        wristSpin = Math.cos(ph) * (0.45 * wStance.wristAmp);
+      } else if (pat === 1) {
+        flourishOffset = Math.sin(ph * 1.4) * (0.52 * wStance.arcWidth);
+        wristSpin = Math.sin(ph * 2.8) * (0.85 * wStance.wristAmp);
+      } else if (pat === 2) {
+        flourishOffset = Math.sin(ph) * (0.78 * wStance.arcWidth) + Math.sin(ph * 2.0) * 0.28;
+        wristSpin = Math.sin(ph * 2.0) * (0.95 * wStance.wristAmp);
+      } else if (pat === 3) {
+        flourishOffset = Math.sin(ph) * (1.35 * wStance.arcWidth) + Math.cos(ph * 0.5) * 0.55;
+        wristSpin = (ph * 1.35) % (Math.PI * 2);
+      } else if (pat === 4) {
+        const cleaveWave = Math.sin(ph);
+        flourishOffset = Math.sign(cleaveWave) * Math.pow(Math.abs(cleaveWave), 0.65) * (1.28 * wStance.arcWidth);
+        wristSpin = cleaveWave * (0.75 * wStance.wristAmp);
+      } else if (pat === 5) {
+        flourishOffset = Math.sin(ph * 0.85) * (0.92 * wStance.arcWidth);
+        wristSpin = Math.sin(ph * 1.7) * (0.75 * wStance.wristAmp);
+      } else if (pat === 6) {
+        flourishOffset = Math.sin(ph * 1.25) * (1.42 * wStance.arcWidth) + Math.cos(ph * 2.5) * 0.62;
+        wristSpin = Math.sin(ph * 2.5) * (1.55 * wStance.wristAmp);
       } else {
-        // Form 0: Methodical Soresu defensive weave
-        flourishOffset = Math.sin(ph) * 1.05 + Math.sin(ph * 2.0) * 0.42;
-        wristSpin = Math.sin(ph * 1.5) * 0.65;
+        flourishOffset = Math.sin(ph * 0.65) * (0.88 * wStance.arcWidth);
+        wristSpin = ph % (Math.PI * 2);
       }
 
       const prevAng = typeof w.ang === "number" ? w.ang : player.aim;
@@ -545,21 +814,30 @@ function updateSim(rawDt) {
       w.wristSpin = wristSpin;
       w.ang = bladeWorldAng;
       w.angVel = (bladeWorldAng - prevAng) / Math.max(0.001, simDt);
+      w.isDoubleBlade = (w.id === 77 && (w.lvl >= 2 || player.whirlwindTimer > 0));
 
-      const reach = 8.5 + (player.armReach || 0);
+      const reach = (w.id === 79 ? 6.5 : 8.5) + (player.armReach || 0);
       const sideSign = (s % 2 === 0) ? 1 : -1;
       const hx = player.x + Math.cos(armAng) * reach - Math.sin(armAng) * (sideSign * 4.5);
       const hy = player.y + Math.sin(armAng) * reach + Math.cos(armAng) * (sideSign * 4.5);
-      const bladeLen = (w.lvl >= 5 ? 28 : 23) * (player.area || 1.0);
+      const baseLen = w.id === 79 ? 18 : (w.lvl >= 5 ? 28 : 23);
+      const bladeLen = baseLen * (player.area || 1.0);
       const tx = hx + Math.cos(bladeWorldAng) * bladeLen;
       const ty = hy + Math.sin(bladeWorldAng) * bladeLen;
 
       const sweepTangent = bladeWorldAng + (w.angVel >= 0 ? Math.PI * 0.35 : -Math.PI * 0.35);
-      checkBladeSegmentSlice(hx, hy, tx, ty, w, sweepTangent, bladeGlowCol);
+      checkBladeSegmentSlice(hx, hy, tx, ty, w, sweepTangent, wBladeCol);
+
+      if (w.isDoubleBlade) {
+        const tx2 = hx - Math.cos(bladeWorldAng) * bladeLen;
+        const ty2 = hy - Math.sin(bladeWorldAng) * bladeLen;
+        checkBladeSegmentSlice(hx, hy, tx2, ty2, w, sweepTangent + Math.PI, wBladeCol);
+      }
     } else {
-      w.ang = player.aim + (s * 0.2);
+      const rangedSway = pat === 11 ? Math.sin(ph) * wStance.arcWidth : (pat === 8 ? Math.sin(ph * 1.5) * 0.12 : 0);
+      w.ang = player.aim + (s * 0.2) + rangedSway;
       w.armAng = w.ang;
-      w.wristSpin = 0;
+      w.wristSpin = pat === 11 ? Math.cos(ph) * wStance.wristAmp : 0;
     }
 
     if (player.swapPause > 0.05) continue;
@@ -618,6 +896,25 @@ function updateSim(rawDt) {
     if (eScarHitCD[i] > 0) eScarHitCD[i] = Math.max(0, eScarHitCD[i] - simDt);
     if (eScarHeat[i] > 0.08) eScarHeat[i] = Math.max(0.08, eScarHeat[i] - simDt * 0.75);
 
+    if (typeof eLevitate !== "undefined" && eLevitate[i] > 0) {
+      eLevitate[i] -= simDt;
+      eLevZ[i] = Math.min(95, (eLevZ[i] || 4) + 22 * simDt);
+      eX[i] += eLevVX[i] * simDt;
+      eY[i] += eLevVY[i] * simDt;
+      if (!isEnemyOnScreen(i) || eLevitate[i] <= 0) {
+        const ox = Math.max(player.x - 160, Math.min(player.x + 160, eX[i]));
+        const oy = Math.max(player.y - 160, Math.min(player.y + 160, eY[i]));
+        eAct[i] = 0; eLevitate[i] = 0; eLevZ[i] = 0;
+        player.kills++;
+        const xpVal = eType[i] >= 98 ? 65 : (3.5 + waveNum * 0.55);
+        spawnOrb(ox, oy, xpVal);
+        for (let k = 0; k < MAX_O; k++) {
+          if (oAct[k] && Math.hypot(oX[k] - ox, oY[k] - oy) < 8) oHome[k] = 1;
+        }
+      }
+      continue;
+    }
+
     if (eBleed[i] > 0) {
       eHP[i] -= eBleedRate[i] * simDt;
       if (Math.random() < 3.5 * simDt) spawnDrip(eX[i], eY[i] + 8, i, 2.5 + Math.random() * 1.8);
@@ -646,10 +943,20 @@ function updateSim(rawDt) {
     const baseAng = Math.atan2(goalY - eY[i], goalX - eX[i]);
     const patAng = ChaosMath.movePattern(eMoveStyle[i], baseAng, runTime, eSeed[i]);
     const steered = ChaosMath.steerAround(eX[i], eY[i], eX[i] + Math.cos(patAng) * 60, eY[i] + Math.sin(patAng) * 60, nearObs, 0.95, eSeed[i]);
+    const targetHeading = Math.atan2(steered.vy, steered.vx);
+    eTurnTimer[i] += simDt;
+    if (eTurnTimer[i] >= 0.08) {
+      eTurnTimer[i] = 0;
+      let hDiff = targetHeading - (eTurnAng[i] || targetHeading);
+      while (hDiff > Math.PI) hDiff -= Math.PI * 2;
+      while (hDiff < -Math.PI) hDiff += Math.PI * 2;
+      eTurnAng[i] = (eTurnAng[i] || targetHeading) + hDiff * 0.65;
+    }
+    const useHeading = eTurnAng[i] || targetHeading;
     const legPenalty = eLegsLost[i] >= 2 ? 0.28 : (eLegsLost[i] === 1 ? 0.58 : 1.0);
     const spd = eSpd[i] * legPenalty * (eSlow[i] > 0 ? Math.max(0.25, 1 - (player.slow || 0)) : 1.0) * ChaosMath.moveSpeedMul(eMoveStyle[i], runTime, eSeed[i]);
 
-    eVX[i] = steered.vx * spd; eVY[i] = steered.vy * spd;
+    eVX[i] = Math.cos(useHeading) * spd; eVY[i] = Math.sin(useHeading) * spd;
     eX[i] += eVX[i] * simDt; eY[i] += eVY[i] * simDt;
 
     const distP = Math.hypot(player.x - eX[i], player.y - eY[i]);
@@ -663,6 +970,7 @@ function updateSim(rawDt) {
     }
 
     if (distP < (eType[i] === 99 ? 26 : 16)) {
+      player.combatAlertTimer = 2.0;
       if (player.cid === 30) {
         const acidDmg = 80 * simDt * 3.0;
         eHP[i] -= acidDmg;
@@ -675,8 +983,8 @@ function updateSim(rawDt) {
         if (eHP[i] <= 0) { killEnemy(i, false); continue; }
       }
 
-      if (player.dodge > 0 && Math.random() < Math.min(0.65, player.dodge)) {
-        spawnSpeech(player.x, player.y - 12, "EVADED!", "#00e5ff", 0.55);
+      if ((player.acrobatZ || 0) > 8 || (player.dodge > 0 && Math.random() < Math.min(0.65, player.dodge))) {
+        spawnSpeech(player.x, player.y - 12, (player.acrobatZ || 0) > 8 ? "ATARU LEAP!" : "EVADED!", "#00e5ff", 0.55);
       } else {
         if (player.cid === 23) player.adaptTimer = 5.0;
         if (player.cid === 50) {
@@ -688,7 +996,7 @@ function updateSim(rawDt) {
         const hitZone = Math.random() < 0.16 ? 0 : (Math.random() < 0.45 ? 1 : (2 + Math.floor(Math.random() * 4)));
         let rawDmg = (eType[i] === 99 ? 24 : 9) * simDt * 3.2;
         if (player.guardZone === hitZone) rawDmg *= (player.cid === 51 || player.cid === 40) ? 0.05 : 0.25;
-        if (player.cid === 1) rawDmg *= 0.80;
+        if ([1, 61, 76].includes(player.cid)) rawDmg *= 0.80;
         const effArmor = (player.armor || 0) + (player.adaptTimer > 0 ? 5 : 0);
         const netDmg = Math.max(0.4, rawDmg * (100 / (100 + effArmor * 8)));
 
@@ -703,9 +1011,12 @@ function updateSim(rawDt) {
         if (player.hp <= 0) {
           if (player.revives > 0) {
             player.revives--; player.hp = player.maxHp * 0.6; player.limbs.fill(100);
-            if (player.cid === 46) { player.might *= 1.20; player.spd *= 1.20; player.area *= 1.20; }
+            if ([46, 69, 70, 76].includes(player.cid)) {
+              player.might *= 1.20; player.spd *= 1.15; player.area *= 1.15;
+            }
             spawnBlastWave(player.x, player.y, 130, "#ffd166");
-            spawnSpeech(player.x, player.y, "SECOND WIND REVIVAL!", "#ffd166", 2.4);
+            const revMsg = player.cid === 69 ? "FAWKES PHOENIX REBIRTH!" : (player.cid === 70 ? "HORCRUX SOUL ANCHOR!" : "SECOND WIND REVIVAL!");
+            spawnSpeech(player.x, player.y, revMsg, "#ffd166", 2.4);
             sfx(220, 880, 0.35, "triangle");
           } else {
             meta.dmEarned += Math.max(1, Math.floor(player.kills / 18) + (player.dmRun || 0));
@@ -769,6 +1080,20 @@ function updateSim(rawDt) {
     }
 
     if (pEnemy[i]) {
+      if (typeof activeBarriers !== "undefined") {
+        let reflected = false;
+        for (let b = 0; b < activeBarriers.length; b++) {
+          const br = activeBarriers[b];
+          if (Math.hypot(pX[i] - br.x, pY[i] - br.y) <= br.rad + 6) {
+            pEnemy[i] = 0; pVX[i] = -pVX[i] * 1.4; pVY[i] = -pVY[i] * 1.4;
+            pSup[i] = 2; pLife[i] = 0.9; reflected = true;
+            if (typeof sfxRicochet === "function") sfxRicochet();
+            break;
+          }
+        }
+        if (reflected) continue;
+      }
+
       const dp = Math.hypot(pX[i] - player.x, pY[i] - player.y);
       if (dp < 38 && !pSnap[i]) { pSnap[i] = 1; if (typeof sfxSnap === "function") sfxSnap(); }
 
@@ -776,14 +1101,19 @@ function updateSim(rawDt) {
         pAct[i] = 0; spawnParticles(pX[i], pY[i], 3); sfx(680, 1220, 0.04, "sine", 0.12); continue;
       }
 
-      if (player.hasSaber && dp < 32 && Math.random() < (0.30 + (player.saberMastery / 100) * 0.68)) {
-        pEnemy[i] = 0; pVX[i] = -pVX[i] * 1.45; pVY[i] = -pVY[i] * 1.45;
-        pDmg[i] = (32 + player.lvl * 9) * (player.might || 1); pSup[i] = 2; pLife[i] = 0.95;
-        player.swordSwingTimer = 0.22; player.saberMastery = Math.min(100, player.saberMastery + 0.35);
+      if (player.hasSaber && dp < 34 && Math.random() < (0.35 + (player.saberMastery / 100) * 0.65)) {
+        pEnemy[i] = 0; pVX[i] = -pVX[i] * 1.55; pVY[i] = -pVY[i] * 1.55;
+        pDmg[i] = (36 + player.lvl * 10) * (player.might || 1) * (player.cid === 78 ? 1.45 : 1.0);
+        pSup[i] = 2; pLife[i] = 0.95;
+        player.deflectStanceTimer = 0.28;
+        player.deflectAng = Math.atan2(pY[i] - player.y, pX[i] - player.x);
+        player.swordSwingTimer = 0.22;
+        player.saberMastery = Math.min(100, player.saberMastery + 0.40);
         if (typeof sfxRicochet === "function") sfxRicochet();
         continue;
       }
       if (dp < 14) {
+        player.combatAlertTimer = 2.0;
         const effArmor = (player.armor || 0) + (player.adaptTimer > 0 ? 5 : 0);
         player.hp -= Math.max(1, pDmg[i] * (100 / (100 + effArmor * 8)));
         pAct[i] = 0; spawnParticles(player.x, player.y, 3);
@@ -832,13 +1162,14 @@ function updateSim(rawDt) {
     }
   }
   if (leveledUp) {
+    if (typeof syncHeroSpellbook === "function") syncHeroSpellbook();
     if (typeof updateHUD === "function") updateHUD();
     if (typeof triggerLevelUp === "function") triggerLevelUp();
   }
 
   player.hudSyncTimer = (player.hudSyncTimer || 0) + rawDt;
   const curInteract = (typeof findInteractTarget === "function" && findInteractTarget()) ? 1 : 0;
-  if (curInteract !== (player.lastInteractFlag || 0) || player.hudSyncTimer >= 0.18) {
+  if (curInteract !== (player.lastInteractFlag || 0) || player.hudSyncTimer >= 0.25) {
     player.lastInteractFlag = curInteract;
     player.hudSyncTimer = 0;
     if (typeof updateHUD === "function") updateHUD();
@@ -859,7 +1190,10 @@ function updateSim(rawDt) {
   const maxPersist = opts.persistCount || 100;
   if (cCnt > maxPersist) {
     let toRemove = cCnt - maxPersist;
-    for (let i = 0; i < MAX_CORPSE && toRemove > 0; i++) if (corpAct[i]) { corpAct[i] = 0; toRemove--; }
+    for (let i = 0; i < MAX_CORPSE && toRemove > 0; i++) {
+      // Never delete fallen Rival (98) or Boss (99) trophy corpses!
+      if (corpAct[i] && corpType[i] < 98) { corpAct[i] = 0; toRemove--; }
+    }
   }
 
   frameMs = +(performance.now() - t0).toFixed(1);

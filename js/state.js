@@ -1,6 +1,6 @@
 // FILE: js/state.js
 // PART: 9 of 14
-// DETAIL: v7.0 Arcane Sanctum Overhaul — 11-Genre Starter Unlocks, Allied Minion SoA Pool (MAX_MINION=36), Corpse-Consumption Summoner, Enemy Levitation State, and Arcane Barriers.
+// DETAIL: v8.2 Overhaul — Canonical Weapon Color Registry (getWeaponColor), Rival/Boss Weapon Drop Pool (activeWeaponDrops), Un-Fading Veteran Corpse & Outfit Preservation Pools, and Allied Minion SoA State.
 
 "use strict";
 
@@ -18,7 +18,7 @@ let meta = {
 let opts = {
   zoom: 1.0, dmgNums: true, flash: true, lowPart: false, hiCon: true,
   fps: true, vol: 0.45, amb: true, joySize: 44, ttDelay: 350, hudFlip: false,
-  persistCount: 100
+  persistCount: 100, doubleTapDash: true
 };
 
 let timeScale = 1.0;
@@ -56,11 +56,11 @@ const eLegDmg = new Float32Array(MAX_E), eTailDmg = new Float32Array(MAX_E),
       eBleed = new Uint8Array(MAX_E), eBleedRate = new Float32Array(MAX_E),
       eTurnAng = new Float32Array(MAX_E), eTurnTimer = new Float32Array(MAX_E);
 
-// v7.0 Levitation / Wingardium Leviosa Float-Away State
+// Levitation / Wingardium Leviosa Float-Away State
 const eLevitate = new Float32Array(MAX_E), eLevZ = new Float32Array(MAX_E),
       eLevVX = new Float32Array(MAX_E), eLevVY = new Float32Array(MAX_E);
 
-// v7.0 Allied Necromancer & Transfiguration Minion Pool (0=Swordsman, 1=Critter/Hound/Viper, 2=Bowman, 3=Knight, 4=Bone Golem)
+// Allied Necromancer & Transfiguration Minion Pool (0=Swordsman, 1=Critter/Hound/Viper, 2=Bowman, 3=Knight, 4=Bone Golem)
 const mX = new Float32Array(MAX_MINION), mY = new Float32Array(MAX_MINION),
       mVX = new Float32Array(MAX_MINION), mVY = new Float32Array(MAX_MINION),
       mHP = new Float32Array(MAX_MINION), mMax = new Float32Array(MAX_MINION),
@@ -75,10 +75,14 @@ const drX = new Float32Array(MAX_DRIP), drY = new Float32Array(MAX_DRIP),
       drLife = new Float32Array(MAX_DRIP), drOwner = new Int16Array(MAX_DRIP), drAct = new Uint8Array(MAX_DRIP);
 let drHead = 0;
 
+// Enhanced Corpse Pool with Veteran (Rival/Boss) Outfit Color & Identity Preservation
 const corpX = new Float32Array(MAX_CORPSE), corpY = new Float32Array(MAX_CORPSE),
       corpSeed = new Uint32Array(MAX_CORPSE), corpType = new Uint8Array(MAX_CORPSE),
       corpLegs = new Uint8Array(MAX_CORPSE), corpArms = new Uint8Array(MAX_CORPSE),
-      corpFade = new Float32Array(MAX_CORPSE), corpAct = new Uint8Array(MAX_CORPSE);
+      corpFade = new Float32Array(MAX_CORPSE), corpRot = new Float32Array(MAX_CORPSE),
+      corpRivalCid = new Int16Array(MAX_CORPSE).fill(-1), corpAct = new Uint8Array(MAX_CORPSE);
+const corpCol = new Array(MAX_CORPSE).fill("rgba(55, 68, 82, 0.82)");
+const corpHeadCol = new Array(MAX_CORPSE).fill("#90a4ae");
 let corpHead = 0, activeCorpseCount = 0;
 
 const lmbX = new Float32Array(MAX_LIMB), lmbY = new Float32Array(MAX_LIMB),
@@ -120,7 +124,7 @@ const ptX = new Float32Array(MAX_PT), ptY = new Float32Array(MAX_PT),
       ptLife = new Float32Array(MAX_PT), ptAct = new Uint8Array(MAX_PT);
 
 let runChunkDeltas = new Map();
-let activeForts = [], activeMines = [], movedBarricades = [], activeBarriers = [];
+let activeForts = [], activeMines = [], movedBarricades = [], activeBarriers = [], activeWeaponDrops = [];
 let runActive = false, runPaused = false, runSeed = 1337, runTime = 0, totalRunTime = 0, waveNum = 1;
 let rivalTimer = 0, orbWarpTimer = 0, fpsCount = 60, frameMs = 4.2, flashAlpha = 0, flameVisTimer = 0, muzzleFlashTimer = 0;
 let player = null, joy = { act: false, id: -1, ox: 0, oy: 0, dx: 0, dy: 0 }, pinchDist = 0;
@@ -143,9 +147,17 @@ function countActiveCorpsesNear(x, y, maxDist = 280) {
 function consumeCorpseAt(x, y, maxDist = 280) {
   let best = -1, bestD = maxDist;
   for (let i = 0; i < MAX_CORPSE; i++) {
-    if (!corpAct[i]) continue;
+    // Prefer consuming regular henchman corpses first so Rival/Boss trophy bodies stay on the ground!
+    if (!corpAct[i] || corpType[i] >= 98) continue;
     const d = Math.hypot(corpX[i] - x, corpY[i] - y);
     if (d <= bestD) { bestD = d; best = i; }
+  }
+  if (best < 0) {
+    for (let i = 0; i < MAX_CORPSE; i++) {
+      if (!corpAct[i]) continue;
+      const d = Math.hypot(corpX[i] - x, corpY[i] - y);
+      if (d <= bestD) { bestD = d; best = i; }
+    }
   }
   if (best < 0) return null;
   const cx = corpX[best], cy = corpY[best];
@@ -169,7 +181,6 @@ function spawnMinion(x, y, kind = 0, hp = 120, dmg = 32, spd = 115, life = 24, c
     if (!mAct[i]) { slot = i; break; }
   }
   if (slot < 0) {
-    // Replace oldest lowest-tier minion if pool is full
     slot = 0;
     for (let i = 1; i < MAX_MINION; i++) {
       if (mKind[i] < mKind[slot] || mLife[i] < mLife[slot]) slot = i;
@@ -210,10 +221,39 @@ function saveMeta() {
   if (typeof updateMenuUI === "function") updateMenuUI();
 }
 
+/* === 4. CANONICAL BLADE & WEAPON COLOR REGISTRY === */
+function getDefaultBladeIdx(cid) {
+  if ([3, 33, 76, 77].includes(cid)) return 2; // Sith Crimson / Crucible Red (Sidious, Doom Slayer, Vader, Maul)
+  if (cid === 78) return 3;                    // Amethyst Purple (Mace Windu)
+  if ([55, 79].includes(cid)) return 1;        // Emerald Green (General Grievous, Grandmaster Yoda)
+  if ([7, 12].includes(cid)) return 4;         // Solar / Ori Gold
+  if (cid === 1) return 5;                     // Mandalorian Darksaber Obsidian
+  if ([48, 71].includes(cid)) return 6;        // Silver / Istari Pure White
+  return 0;                                    // Default Skywalker Cyan
+}
+
+function getWeaponColor(wpnId) {
+  const hexes = ["#00f0ff", "#00e676", "#ff1744", "#d500f9", "#ffd166", "#212121", "#ffffff"];
+  // Check explicit hero blade palette first if available
+  if (typeof getHeroOutfits === "function") {
+    const pal = getHeroOutfits(wpnId);
+    const defIdx = getDefaultBladeIdx(wpnId);
+    if (pal && pal.blade && pal.blade[defIdx] && pal.blade[defIdx][1]) {
+      return pal.blade[defIdx][1];
+    }
+  }
+  const defIdx = getDefaultBladeIdx(wpnId);
+  return hexes[defIdx] || "#00f0ff";
+}
+
 function getOutfit(cid) {
   if (!meta.outfits) meta.outfits = {};
-  if (!meta.outfits[cid]) meta.outfits[cid] = { head: 0, torso: 0, legs: 0, back: 0, blade: cid === 3 ? 2 : 0 };
-  if (typeof meta.outfits[cid].blade !== "number") meta.outfits[cid].blade = cid === 3 ? 2 : 0;
+  const defBlade = getDefaultBladeIdx(cid);
+  if (!meta.outfits[cid]) {
+    meta.outfits[cid] = { head: 0, torso: 0, legs: 0, back: 0, blade: defBlade };
+  } else if (typeof meta.outfits[cid].blade !== "number" || (!meta.outfits[cid]._userSetBlade && meta.outfits[cid].blade === 0 && defBlade !== 0)) {
+    meta.outfits[cid].blade = defBlade;
+  }
   return meta.outfits[cid];
 }
 
@@ -221,6 +261,15 @@ function cycleOutfitPart(cid, partKey) {
   const o = getOutfit(cid), spec = typeof getHeroOutfits === "function" ? getHeroOutfits(cid) : null;
   const maxLen = (spec && spec[partKey]) ? spec[partKey].length : 3;
   o[partKey] = ((o[partKey] || 0) + 1) % maxLen;
+  if (partKey === "blade") {
+    o._userSetBlade = true;
+    // Sync active primary weapon color if player is currently this hero
+    if (player && player.cid === cid && player.weapons && player.weapons[0] && player.weapons[0].id === cid) {
+      if (spec && spec.blade && spec.blade[o.blade]) {
+        player.weapons[0].bladeCol = spec.blade[o.blade][1];
+      }
+    }
+  }
   saveMeta(); sfx(380, 620, 0.06, "triangle", 0.14);
 }
 
@@ -263,19 +312,61 @@ function spawnGroundLimb(x, y, col, kind = 0) {
   spawnDrip(lmbX[i], lmbY[i], -1, 4.2);
 }
 
-function spawnCorpse(x, y, seed, type, legsLost, armsLost = 0) {
-  const i = corpHead; corpHead = (corpHead + 1) % MAX_CORPSE;
+function spawnCorpse(x, y, seed, type, legsLost, armsLost = 0, customCol = null, headCol = null, rivalCid = -1) {
+  // Never overwrite a fallen Rival (98) or Boss (99) corpse when the ring buffer wraps around!
+  let i = corpHead;
+  for (let tries = 0; tries < MAX_CORPSE; tries++) {
+    const cand = (corpHead + tries) % MAX_CORPSE;
+    if (!corpAct[cand] || corpType[cand] < 98) {
+      i = cand;
+      corpHead = (cand + 1) % MAX_CORPSE;
+      break;
+    }
+  }
   corpX[i] = x; corpY[i] = y; corpSeed[i] = seed; corpType[i] = type;
-  corpLegs[i] = legsLost; corpArms[i] = armsLost; corpFade[i] = 1.0; corpAct[i] = 1;
-  spawnDrip(x, y, -1, 6.0);
+  corpLegs[i] = legsLost; corpArms[i] = armsLost; corpFade[i] = 1.0;
+  corpRot[i] = ((seed % 628) / 100) - 3.14;
+  corpRivalCid[i] = rivalCid;
+
+  if (type === 98 && rivalCid >= 0 && typeof CHAR_RAW !== "undefined" && CHAR_RAW[rivalCid]) {
+    const rFac = FACTIONS[CHAR_RAW[rivalCid][1]] || (player ? player.fac : FACTIONS[0]);
+    const out = getOutfit(rivalCid);
+    const pal = typeof getHeroOutfits === "function" ? getHeroOutfits(rivalCid) : null;
+    corpHeadCol[i] = (pal && pal.head && pal.head[out.head || 0]) ? pal.head[out.head || 0][1] : rFac.c1;
+    corpCol[i] = (pal && pal.torso && pal.torso[out.torso || 0]) ? pal.torso[out.torso || 0][1] : rFac.c2;
+  } else if (type === 99) {
+    corpHeadCol[i] = "#ffff00";
+    corpCol[i] = customCol || "#ff1744";
+  } else {
+    corpHeadCol[i] = headCol || (player && player.fac ? player.fac.c1 : "#90a4ae");
+    corpCol[i] = customCol || (player && player.fac ? player.fac.c2 : "rgba(55, 68, 82, 0.85)");
+  }
+  corpAct[i] = 1;
+  spawnDrip(x, y, -1, type >= 98 ? 8.0 : 6.0);
+}
+
+function spawnWeaponDrop(x, y, wpnId) {
+  if (typeof CHAR_RAW === "undefined" || !CHAR_RAW[wpnId]) return;
+  const rc = CHAR_RAW[wpnId];
+  const bCol = getWeaponColor(wpnId);
+  activeWeaponDrops.push({
+    x, y,
+    wpnId,
+    name: rc[4],
+    superName: rc[5],
+    style: rc[6],
+    bladeCol: bCol,
+    spawnTime: runTime || 0
+  });
 }
 
 function purgeRunMemory() {
   runActive = false; runPaused = false; runChunkDeltas.clear();
-  activeForts.length = 0; activeMines.length = 0; movedBarricades.length = 0; activeBarriers.length = 0;
+  activeForts.length = 0; activeMines.length = 0; movedBarricades.length = 0;
+  activeBarriers.length = 0; activeWeaponDrops.length = 0;
   eAct.fill(0); eLegDmg.fill(0); eTailDmg.fill(0); eLegsLost.fill(0); eArmsLost.fill(0);
   eBleed.fill(0); eBleedRate.fill(0); eLevitate.fill(0); eLevZ.fill(0);
-  mAct.fill(0); drAct.fill(0); corpAct.fill(0); lmbAct.fill(0);
+  mAct.fill(0); drAct.fill(0); corpAct.fill(0); corpRivalCid.fill(-1); lmbAct.fill(0);
   pAct.fill(0); pHit.fill(0); pBounce.fill(0); pSnap.fill(0); oAct.fill(0); oHome.fill(0); dAct.fill(0); ptAct.fill(0);
   shWrite = 0; shCount = 0; activeCorpseCount = 0; player = null;
 }

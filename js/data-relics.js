@@ -1,6 +1,6 @@
 // FILE: js/data-relics.js
 // PART: 8 of 14
-// DETAIL: v7.0 Arcane Sanctum Overhaul — 50 Relics DB and 100% Bespoke Side-Profile Weapon Silhouette SVGs for All 76 Heroes (#00-#75).
+// DETAIL: v8.0 Overhaul — 50 Relics DB, 100% Bespoke Side-Profile Weapon Silhouette SVGs for All 80 Heroes (#00-#79: Vader, Maul Double-Blade, Windu, Yoda), and Dash SVG Icon.
 
 "use strict";
 
@@ -58,7 +58,7 @@ const RELICS_DB = [
   [49, "Nexus Singularity Core", "+15% All Damage, +15% Area & -10% Cooldown", "omni", 0.15]
 ];
 
-/* === 2. ALL 76 BESPOKE SIDE-PROFILE WEAPON SILHOUETTE SVGs (#00-#75) === */
+/* === 2. ALL 80 BESPOKE SIDE-PROFILE WEAPON SILHOUETTE SVGs (#00-#79) === */
 const WPN_SVG_56 = {
   0: (c1, c2) => `<line x1="7" y1="17" x2="21" y2="3" stroke="${c1}" stroke-width="4.2" stroke-linecap="round"/><line x1="7" y1="17" x2="21" y2="3" stroke="#fff" stroke-width="1.6"/><line x1="2.5" y1="21.5" x2="7.5" y2="16.5" stroke="#cfd8dc" stroke-width="3.4"/><circle cx="6.5" cy="17.5" r="1.5" fill="#ff1744"/>`,
   1: (c1, c2) => `<rect x="3" y="11" width="11" height="5" rx="1" fill="#607d8b" stroke="${c2}" stroke-width="1"/><polygon points="14,10 22,7 17,12" fill="${c1}"/><polygon points="14,13 23,13 17,15" fill="${c1}"/><polygon points="14,16 22,19 17,14" fill="${c1}"/>`,
@@ -135,7 +135,15 @@ const WPN_SVG_56 = {
   72: (c1, c2) => `<line x1="4" y1="20" x2="20" y2="4" stroke="#111111" stroke-width="4"/><circle cx="20" cy="4" r="3.5" fill="#ff9100"/><rect x="9" y="10" width="6" height="4" fill="#37474f"/>`,
   73: (c1, c2) => `<ellipse cx="12" cy="12" rx="8" ry="4" fill="none" stroke="#ff9100" stroke-width="2.4" transform="rotate(-30 12 12)"/><circle cx="12" cy="12" r="3" fill="#00e5ff"/>`,
   74: (c1, c2) => `<circle cx="12" cy="12" r="7" fill="none" stroke="#ff1744" stroke-width="2.2"/><circle cx="12" cy="12" r="3" fill="#e040fb"/><path d="M4,4 L9,9 M20,4 L15,9" stroke="#ff1744" stroke-width="2"/>`,
-  75: (c1, c2) => `<rect x="3" y="7" width="18" height="14" rx="2" fill="#311b92" stroke="#b388ff" stroke-width="1.6"/><circle cx="12" cy="14" r="3.5" fill="#00ff88"/><line x1="7" y1="10" x2="17" y2="10" stroke="#b388ff" stroke-width="1.5"/>`
+  75: (c1, c2) => `<rect x="3" y="7" width="18" height="14" rx="2" fill="#311b92" stroke="#b388ff" stroke-width="1.6"/><circle cx="12" cy="14" r="3.5" fill="#00ff88"/><line x1="7" y1="10" x2="17" y2="10" stroke="#b388ff" stroke-width="1.5"/>`,
+  // #76 Darth Vader: Black-ribbed MPP shroud hilt + crimson Sith blade
+  76: (c1, c2) => `<line x1="7" y1="17" x2="21" y2="3" stroke="#ff1744" stroke-width="4.5" stroke-linecap="round"/><line x1="7" y1="17" x2="21" y2="3" stroke="#fff" stroke-width="1.6"/><line x1="2.5" y1="21.5" x2="7.5" y2="16.5" stroke="#212121" stroke-width="4.0"/><line x1="5" y1="19" x2="7.5" y2="16.5" stroke="#cfd8dc" stroke-width="2.2"/>`,
+  // #77 Darth Maul: Long Double-Bladed Saberstaff (Twin Crimson Blades extending from both ends!)
+  77: (c1, c2) => `<line x1="2" y1="22" x2="9" y2="15" stroke="#ff1744" stroke-width="3.8" stroke-linecap="round"/><line x1="15" y1="9" x2="22" y2="2" stroke="#ff1744" stroke-width="3.8" stroke-linecap="round"/><line x1="2.5" y1="21.5" x2="9" y2="15" stroke="#fff" stroke-width="1.3"/><line x1="15" y1="9" x2="21.5" y2="2.5" stroke="#fff" stroke-width="1.3"/><line x1="8.5" y1="15.5" x2="15.5" y2="8.5" stroke="#cfd8dc" stroke-width="3.4"/><circle cx="12" cy="12" r="1.4" fill="#ff1744"/>`,
+  // #78 Mace Windu: Electrum Gold-and-Chrome Hilt + Amethyst Purple Blade
+  78: (c1, c2) => `<line x1="7" y1="17" x2="21" y2="3" stroke="#d500f9" stroke-width="4.4" stroke-linecap="round"/><line x1="7" y1="17" x2="21" y2="3" stroke="#fff" stroke-width="1.6"/><line x1="2.5" y1="21.5" x2="7.5" y2="16.5" stroke="#ffd166" stroke-width="3.8"/><line x1="4" y1="20" x2="6" y2="18" stroke="#cfd8dc" stroke-width="2.0"/>`,
+  // #79 Grandmaster Yoda: Compact Emerald Shoto Lightsaber + Ataru Spin Rings
+  79: (c1, c2) => `<circle cx="13" cy="11" r="7.5" fill="none" stroke="#00e676" stroke-width="1.1" stroke-dasharray="3 2"/><line x1="8" y1="16" x2="19" y2="5" stroke="#00e676" stroke-width="4.0" stroke-linecap="round"/><line x1="8" y1="16" x2="19" y2="5" stroke="#fff" stroke-width="1.5"/><line x1="4.5" y1="19.5" x2="8" y2="16" stroke="#cfd8dc" stroke-width="3.2"/>`
 };
 
 function makeSVG(type, c1 = "#00e5ff", c2 = "#ffd166", wpnId = -1) {
@@ -143,6 +151,8 @@ function makeSVG(type, c1 = "#00e5ff", c2 = "#ffd166", wpnId = -1) {
   let p = "";
   if (typeof WPN_SVG_56 !== "undefined" && wpnId >= 0 && WPN_SVG_56[wpnId]) {
     p = WPN_SVG_56[wpnId](c1, c2);
+  } else if (type === "dash") {
+    p = `<polygon points="4,12 13,5 11,10 21,10 12,19 14,14 4,14" fill="${c1}" stroke="${c2}" stroke-width="1.1"/>`;
   } else if (type === "orbit") {
     p = `<line x1="8" y1="16" x2="21" y2="3" stroke="${c1}" stroke-width="4" stroke-linecap="round"/><line x1="3" y1="21" x2="8" y2="16" stroke="#90a4ae" stroke-width="3"/>`;
   } else if (type === "beam") {
