@@ -91,7 +91,8 @@ function gloryExecTick() {
     const k = Math.min(1, t / 0.18), tx = eX[i] - Math.cos(E.ang) * 13, ty = eY[i] - Math.sin(E.ang) * 13;
     player.x = E.x0 + (tx - E.x0) * k; player.y = E.y0 + (ty - E.y0) * k;
     player.aim = E.ang; eStagger[i] = Math.max(eStagger[i], 1.0);
-    if (E.style === "saber" && t > 0.18) player.whirlwindTimer = 0.2;
+    // v11: the Saber Form Engine plays the Form's own finisher (Falling Avalanche, Makashi lunge, Juyo spin cut...)
+    if (E.style === "saber" && t > 0.18 && !(typeof saberGloryActive === "function" && saberGloryActive())) player.whirlwindTimer = 0.2;
   }
   if (!E.hit && t >= 0.5) {
     E.hit = true;
@@ -109,7 +110,8 @@ function gloryImpact(E) {
   for (let k = 0; k < 6; k++) spawnDrip(ex + (Math.random() - 0.5) * 16, ey + (Math.random() - 0.5) * 12, -1, 3 + Math.random() * 3);
   if (E.style === "saber" || E.style === "doom") {
     const col = E.style === "doom" ? "#ff1744" : (player.weapons[0] && player.weapons[0].bladeCol) || "#00e5ff";
-    killEnemy(i, false, E.ang + Math.PI / 2, col);
+    const cutA = (E.style === "saber" && typeof saberGloryCutAngle === "function") ? saberGloryCutAngle(E.ang) : E.ang + Math.PI / 2;
+    killEnemy(i, false, cutA, col);
     if (E.style === "doom") { spawnGroundLimb(ex + 8, ey, bodyCol, 1); spawnGroundLimb(ex - 8, ey, bodyCol, 1); }
   } else if (E.style === "spine") {
     killEnemy(i, true, null);

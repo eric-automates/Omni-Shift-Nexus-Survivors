@@ -477,8 +477,50 @@ const CHARACTER_THEMES = [
 const CUSTOM_TRACK_LIST = [
   "track_1_Electronic_Star_Birth.mp3",
   "track_2_Synthwave_Hello_World.mp3",
-  "track_3_Beats_Darkstar.mp3"
+  "track_3_Beats_Darkstar.mp3",
+  "track_4_Synthwave_Midnight_Drive.mp3",
+  "track_5_Electro_Orbital_Colossus.mp3",
+  "track_6_DnB_Black_Diamond.mp3",
+  "track_7_Retrowave_Brave_Space_Explorers.mp3",
+  "track_8_Cyberpunk_System_Overload.mp3",
+  "track_9_Orchestral_Battle_Theme_A.mp3",
+  "track_10_Dubstep_The_9th_Circle.mp3",
+  "track_11_Darksynth_Mist_City.mp3",
+  "track_12_Techno_Tower_Defense_Theme.mp3",
+  "track_13_Electronic_Cyberpunk_Moonlight_Sonata.mp3",
+  "track_14_Beats_Space_Bass.mp3",
+  "track_15_Cinematic_Epic_Boss_Battle.mp3",
+  "track_16_Synthwave_Space_City.mp3",
+  "track_17_Breakbeat_Lucid_Trigger.mp3",
+  "track_18_Metal_Megasong.mp3",
+  "track_19_Jungle_Final_Hour.mp3",
+  "track_20_Electronic_The_Rush.mp3"
 ];
+
+// v11: artist / license credit per track (shown in the now-playing toast and the player's track list).
+// Full attribution list: music/MUSIC_CREDITS.md. CC-BY tracks REQUIRE this credit to stay with the game.
+const TRACK_CREDITS = {
+  "track_4_Synthwave_Midnight_Drive.mp3": "congusbongus · CC0 · opengameart.org/content/midnight-drive",
+  "track_5_Electro_Orbital_Colossus.mp3": "Matthew Pablo · CC-BY 3.0 · opengameart.org/content/space-boss-battle-theme",
+  "track_6_DnB_Black_Diamond.mp3": "Joth · CC0 · opengameart.org/content/black-diamond",
+  "track_7_Retrowave_Brave_Space_Explorers.mp3": "Alexandr Zhelanov · CC-BY 4.0 · opengameart.org/content/brave-space-explorers",
+  "track_8_Cyberpunk_System_Overload.mp3": "Tricks & Traps (tricksntraps) · CC0 · opengameart.org/content/t-t-free-cyberpunk-pack-2",
+  "track_9_Orchestral_Battle_Theme_A.mp3": "cynicmusic · CC0 · opengameart.org/content/battle-theme-a",
+  "track_10_Dubstep_The_9th_Circle.mp3": "Joth · CC0 · opengameart.org/content/the-9th-circle",
+  "track_11_Darksynth_Mist_City.mp3": "Section7 · CC-BY 4.0 · opengameart.org/content/mist-city",
+  "track_12_Techno_Tower_Defense_Theme.mp3": "DST · CC0 · opengameart.org/content/tower-defense-theme",
+  "track_13_Electronic_Cyberpunk_Moonlight_Sonata.mp3": "Joth · CC0 · opengameart.org/content/cyberpunk-moonlight-sonata",
+  "track_14_Beats_Space_Bass.mp3": "Fupi · CC0 · opengameart.org/content/space-bass",
+  "track_15_Cinematic_Epic_Boss_Battle.mp3": "Juhani Junkala (SubspaceAudio) · CC0 · opengameart.org/content/boss-battle-music",
+  "track_16_Synthwave_Space_City.mp3": "MintoDog · CC0 · opengameart.org/content/space-city",
+  "track_17_Breakbeat_Lucid_Trigger.mp3": "Liq_mmry (posted by khtlrpzvgm) · CC0 · opengameart.org/content/lucid-trigger",
+  "track_18_Metal_Megasong.mp3": "Emma_MA · CC0 · opengameart.org/content/megasong",
+  "track_19_Jungle_Final_Hour.mp3": "isaiah658 · CC0 · opengameart.org/content/final-hour",
+  "track_20_Electronic_The_Rush.mp3": "tebruno99 · CC0 · opengameart.org/content/the-rush"
+};
+function getTrackCredit(meta) {
+  return (meta && TRACK_CREDITS[meta.fileName]) || "";
+}
 
 const AUTO_GENRES = [
   "Chill", "Electronic", "Dubstep", "Synthwave", "Rock",
@@ -672,7 +714,9 @@ function showMusicToast(trackMeta) {
   const titleEl = document.getElementById("nexus-Player-Title");
   if (titleEl) titleEl.textContent = trackMeta.label;
   if (!toast) return;
-  toast.innerHTML = `<span style="color:#ffd166">🎵</span> <b>${trackMeta.title}</b> <span style="color:#00e5ff">(${trackMeta.genre})</span>`;
+  const credit = getTrackCredit(trackMeta);
+  toast.innerHTML = `<span style="color:#ffd166">🎵</span> <b>${trackMeta.title}</b> <span style="color:#00e5ff">(${trackMeta.genre})</span>` +
+    (credit ? `<br><span style="color:#90a4ae;font-size:0.82em">by ${credit.split(" · ").slice(0, 2).join(" · ")}</span>` : "");
   toast.style.opacity = "1";
   toast.style.transform = "translateY(0)";
   clearTimeout(toastHideTimer);
@@ -922,6 +966,8 @@ function renderGenreFilterList() {
       const row = document.createElement("div");
       row.style.cssText = `padding:3px 6px;border-radius:3px;font-size:9.5px;cursor:pointer;display:flex;justify-content:space-between;background:${active ? "#12324a" : "transparent"};color:${active ? "#ffd166" : "#cfd8dc"}`;
       row.innerHTML = `<span>${active ? "▶ " : ""}${t.num}. ${t.title}</span><span style="color:#00e5ff">${t.genre}</span>`;
+      const credit = getTrackCredit(t);
+      if (credit) row.title = credit;
       row.onclick = () => playSpecificTrack(t, true);
       tBox.appendChild(row);
     });

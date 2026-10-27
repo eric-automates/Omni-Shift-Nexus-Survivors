@@ -78,15 +78,18 @@ function drawBallHand(tCtx, hx, hy, rad, fillCol, outlineCol = "#08101a") {
 /* === 3. PROTRUDING WEAPON SILHOUETTES (INCLUDING MAUL DOUBLE-BLADE & YODA SHOTO) === */
 const FEMALE_HEROES = new Set([8, 11, 14, 20, 23, 25, 27, 28, 30, 42, 47, 57, 59, 66, 68, 74]);
 
-function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift = 0, angVel = 0) {
+// bladeLenPx (v11): > 0 draws the blade at exactly the Saber Form Engine's hitbox length, < 0 draws only the hilt
+// (retracted / stowed). dblOverride: true/false forces Maul's second blade on/off (null = always double).
+function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift = 0, angVel = 0, bladeLenPx = 0, dblOverride = null) {
   const lenMul = isLv5 ? 1.22 : 1.0;
   const effCol = bladeCol || (typeof getWeaponColor === "function" ? getWeaponColor(wpnId) : "#00f0ff");
 
   if (style === "orbit") {
-    const bLen = (wpnId === 79 ? 16.5 : 21.5) * lenMul;
-    const isDouble = (wpnId === 77); // Darth Maul Double-Bladed Saberstaff
+    const bLen = bladeLenPx > 0 ? bladeLenPx : (wpnId === 79 ? 16.5 : 21.5) * lenMul;
+    const isDouble = dblOverride === null ? (wpnId === 77) : !!dblOverride; // Darth Maul Double-Bladed Saberstaff
+    const steelBlade = [14, 18, 19, 24, 34, 48, 50, 68, 71].includes(wpnId);
 
-    if (Math.abs(angVel) > 1.2) {
+    if (bladeLenPx === 0 && Math.abs(angVel) > 1.2) {
       const trailSweep = Math.max(-0.65, Math.min(0.65, -angVel * 0.045));
       tCtx.save();
       tCtx.fillStyle = [18, 19, 24, 48, 50, 68].includes(wpnId) ? "#cfd8dc" : effCol;
@@ -108,13 +111,29 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
 
     tCtx.fillStyle = wpnId === 78 ? "#ffd166" : (wpnId === 76 ? "#212121" : "#b0bec5");
     tCtx.fillRect(isDouble ? -5.0 : -2.5, -1.4, isDouble ? 10.0 : 5.5, 2.8);
+    if (bladeLenPx < 0) {                       // retracted: emitter shroud only
+      tCtx.fillStyle = "#37474f"; tCtx.fillRect(isDouble ? 4.0 : 2.4, -1.7, 1.4, 3.4);
+      if (isDouble) tCtx.fillRect(-5.4, -1.7, 1.4, 3.4);
+      return;
+    }
 
-    if ([18, 19, 24, 48, 50, 68].includes(wpnId)) {
+    if (steelBlade) {
       tCtx.fillStyle = "#cfd8dc";
       tCtx.beginPath();
       tCtx.moveTo(3, -1.9); tCtx.lineTo(bLen, 0); tCtx.lineTo(3, 1.9);
       tCtx.closePath(); tCtx.fill();
     } else {
+      // v11: soft plasma glow around the core
+      tCtx.save();
+      tCtx.globalAlpha = 0.22;
+      tCtx.strokeStyle = effCol;
+      tCtx.lineWidth = (isSuper ? 4.0 : 3.0) + 4.5;
+      tCtx.lineCap = "round";
+      tCtx.beginPath();
+      tCtx.moveTo(isDouble ? 4.5 : 3, 0); tCtx.lineTo(bLen, 0);
+      if (isDouble) { tCtx.moveTo(-4.5, 0); tCtx.lineTo(-bLen, 0); }
+      tCtx.stroke();
+      tCtx.restore();
       tCtx.strokeStyle = effCol;
       tCtx.lineWidth = isSuper ? 4.0 : 3.0;
       tCtx.lineCap = "round";
@@ -191,6 +210,45 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
   if (style === "beam" || style === "chain") {
     tCtx.fillStyle = effCol;
     tCtx.fillRect(6, -0.8, 6 * lenMul, 1.6);
+  }
+}
+
+// v11: a blade posed by the Saber Form Engine (js/saberforms.js): exact sim geometry, grip, motion trail, stowed hilt.
+// Grievous' extra blades (R.extra) are drawn the same way from their own engine states.
+function drawSaberFormSlot(tCtx, w, R, col, handCol, aim, slotIdx) {
+  drawSaberBladePose(tCtx, w, R, col, handCol, aim, slotIdx, R.st, true);
+  if (R.extra) for (let k = 0; k < R.extra.length; k++) {
+    const X = R.extra[k];
+    if (X && typeof X.arm === "number") drawSaberBladePose(tCtx, w, X, col, handCol, aim, X.slot, X.st, false);
+  }
+}
+
+function drawSaberBladePose(tCtx, w, R, col, handCol, aim, slotIdx, bladeSt, main) {
+  const sideSign = (slotIdx % 2 === 0) ? 1 : -1, upper = slotIdx >= 2 ? -3.5 : 0;
+  if (R.lit < 0.04) {                                     // retracted: hilt clipped to the belt, hand at rest
+    tCtx.save();
+    tCtx.translate(4.8 * sideSign, 5.2 + upper);
+    tCtx.rotate(Math.PI / 2 - 0.3 * sideSign);
+    drawWeaponModel(tCtx, w.id, "orbit", w.lvl >= 5, w.lvl >= 10, col, 0, 0, -1, R.dbl);
+    tCtx.restore();
+    drawBallHand(tCtx, 7.2 * sideSign, 1.2 + upper, 2.4, handCol);
+    return;
+  }
+  if (typeof saberDrawTrail === "function") saberDrawTrail(tCtx, w, col, bladeSt);
+  tCtx.save();
+  tCtx.rotate(R.arm);
+  tCtx.translate(R.reach, R.side);
+  tCtx.save();
+  tCtx.rotate(R.blade - R.arm);
+  drawWeaponModel(tCtx, w.id, "orbit", w.lvl >= 5, w.lvl >= 10, col, 0, 0, Math.max(0.5, R.len), R.dbl);
+  if (R.grip === 2 || R.dbl) drawBallHand(tCtx, R.dbl ? -4.2 : -3.6, 0, 2.3, handCol);   // second hand on the hilt
+  tCtx.restore();
+  drawBallHand(tCtx, 0, 0, 2.5, handCol);
+  tCtx.restore();
+  if (main && slotIdx === 0 && R.grip !== 2 && !R.dbl && !R.extra) {   // the free hand
+    if (R.off === "front") drawBallHand(tCtx, Math.cos(aim) * 10, Math.sin(aim) * 10 - 3, 2.3, handCol);            // Soresu: extended
+    else if (R.off === "back") drawBallHand(tCtx, -Math.cos(aim) * 5.5, -Math.sin(aim) * 5.5 - 5, 2.3, handCol);    // Makashi: raised behind
+    else if (R.off === "fist") drawBallHand(tCtx, Math.cos(aim + 0.9) * 6.5, Math.sin(aim + 0.9) * 6.5, 2.4, handCol); // Vader: clenched
   }
 }
 
@@ -617,6 +675,9 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
       const wActiveCol = (w.id === cid)
         ? cBlade
         : (w.bladeCol || (typeof getWeaponColor === "function" ? getWeaponColor(w.id) : cBlade));
+
+      const sfR = (isLivePlayer && isMeleeBlade && typeof saberRenderState === "function") ? saberRenderState(w) : null;
+      if (sfR) { drawSaberFormSlot(tCtx, w, sfR, wActiveCol, handCol, aim, slotIdx); return; }
 
       const isTelekineticSlot = (slotIdx >= 2 && kStyle === 5) || (kStyle === 5 && slotIdx >= 1 && w.style !== "chain");
       const armAng = (isLivePlayer && typeof w.armAng === "number")
@@ -1290,7 +1351,8 @@ function renderScene() {
     ctx.restore();
   }
 
-  drawHeroSprite(player.x, player.y, player.fac, player.cid, player.walk, player.aim, player.inVehicle, ctx, player.guardZone);
+  // v11: the body steps into Form strikes (lunge offset from js/saberforms.js)
+  drawHeroSprite(player.x + (player.sfLX || 0), player.y + (player.sfLY || 0), player.fac, player.cid, player.walk, player.aim, player.inVehicle, ctx, player.guardZone);
 
   if (typeof thrownBlade !== "undefined" && thrownBlade.active) {
     ctx.save();

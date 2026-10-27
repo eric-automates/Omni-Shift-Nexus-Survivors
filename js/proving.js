@@ -2,7 +2,7 @@
 // PART: v10 module 8 of 8
 // DETAIL: v10 "Debug All" Proving Ground — an automated in-game test runner launched from the main menu. It deploys the
 //         selected hero into a training arena (no natural spawns, invulnerable), places training dummies and plays 12
-//         live gameplay actions in real time (boot/HUD, firing, 360-degree melee sweep, skills, dash, looting, level-up,
+//         live gameplay actions in real time (boot/HUD, firing, close-quarters blade strikes, skills, dash, looting, level-up,
 //         driving, squad orders, glory kill, time rewind, memory purge), ticking each one PASS/FAIL on a live checklist
 //         with a copyable report at the end. Doubles as a regression smoke test for the v9.01 fixes.
 
@@ -50,7 +50,7 @@ const PROVING_TESTS = [
     setup(D) { pgClearArena(); D.d = pgDummy(player.x + (player.hasSaber ? 40 : 110), player.y); D.hp0 = eHP[D.d]; },
     tick(D) { return eHP[D.d] < D.hp0 - 1 ? true : (D.t > 4 ? "dummy never took damage" : null); } },
 
-  { name: "360° Melee Sweep", desc: "v9.01: dummies behind & beside you at 26px all get sliced",
+  { name: "Close-Quarters Blade", desc: "v11: dummies behind & beside you at 26px are all cut down by targeted Form strikes",
     setup(D) {
       pgClearArena();
       const prim = player.weapons[0];

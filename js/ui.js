@@ -27,7 +27,7 @@ function ensurePlayerVisors() {
 
 async function runDynamicEOFScan() {
   const files = ["js/chaos.js", "js/data-factions.js", "js/data-heroes.js", "js/data-relics.js", "js/state.js", "js/world.js", "js/combat.js", "js/sim.js", "js/render.js",
-                 "js/fx.js", "js/rewind.js", "js/arsenal.js", "js/squad.js", "js/glory.js", "js/biomes.js", "js/campaign.js", "js/proving.js", "js/ui.js"];
+                 "js/fx.js", "js/rewind.js", "js/arsenal.js", "js/squad.js", "js/glory.js", "js/biomes.js", "js/campaign.js", "js/proving.js", "js/saberforms.js", "js/ui.js"];
   const results = [];
   for (let i = 0; i < files.length; i++) {
     const f = files[i], marker = "// " + "EOF:" + f;
@@ -66,7 +66,8 @@ function checkLoadedScripts() {
     ["fx.js", typeof fxTimeMul === "function"], ["rewind.js", typeof rewindPlayback === "function"],
     ["arsenal.js", typeof castWhistlingBirds === "function"], ["squad.js", typeof squadMinionsSim === "function"],
     ["glory.js", typeof gloryExecute === "function"], ["biomes.js", typeof biomeRenderGround === "function"],
-    ["campaign.js", typeof renderCampaign === "function"], ["proving.js", typeof startProvingGround === "function"]
+    ["campaign.js", typeof renderCampaign === "function"], ["proving.js", typeof startProvingGround === "function"],
+    ["saberforms.js", typeof saberEngineStep === "function"]
   ];
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
   if (failed.length > 0) {
@@ -433,10 +434,17 @@ function triggerLevelUp() {
         const nxt = ch.w.lvl + 1;
         const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[ch.w.id]) ? HERO_SIG_GEAR[ch.w.id] : null;
         const lv5Name = sig ? sig[0] : ch.w.name;
-        const nxtStance = typeof getHeroStanceSpec === "function" ? getHeroStanceSpec(ch.w.id, nxt, false).stageName : "Combat Form";
+        let nxtStance = typeof getHeroStanceSpec === "function" ? getHeroStanceSpec(ch.w.id, nxt, false).stageName : "Combat Form";
+        // v11: blades preview their next lightsaber Form / sword stance from the Saber Form Engine
+        let formUp = nxt === 4 || nxt === 7, formWord = "STANCE";
+        if (typeof saberFormInfo === "function" && typeof saberEngineOwns === "function" && saberEngineOwns(ch.w)) {
+          const curF = saberFormInfo(ch.w), nxF = saberFormInfo({ id: ch.w.id, lvl: nxt, style: ch.w.style });
+          nxtStance = saberFormLabel(nxF) + (nxF.stage.era ? " — " + nxF.stage.era : "");
+          formUp = nxF.idx !== curF.idx; formWord = nxF.saber ? "FORM" : "STANCE";
+        }
         card.className = "card unlocked" + (nxt === 10 ? " super-flash" : "");
         title = nxt === 10 ? "★ SUPERCHARGE: " + ch.w.superName + " (Lv.10)" : (nxt === 5 ? "★ LV.5 PRIMARY: " + lv5Name : ch.w.name + " (Lv." + nxt + "/10)");
-        sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (nxt === 4 || nxt === 7 ? `STANCE EVOLUTION: ${nxtStance.toUpperCase()}` : "Weapon, Stance & Spellbook Upgrade");
+        sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (formUp ? `${formWord} EVOLUTION: ${nxtStance.toUpperCase()}` : "Weapon, Stance & Spellbook Upgrade");
         desc = nxt === 10 ? `Supercharges ${nxtStance} & unlocks 2.35x Ultimate Damage!` : `+25% Base Damage, Stance: ${nxtStance}, & unlocks next Spellbook tier!`;
         ico = makeSVG(ch.w.style, nxt >= 5 ? "#ffd166" : "#00e5ff", "#ffd166", ch.w.id);
       } else if (ch.type === "sigup") {

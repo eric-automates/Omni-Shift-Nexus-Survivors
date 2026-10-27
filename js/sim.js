@@ -63,7 +63,8 @@ function projRecordHit(i, j) {
 // Real per-bolt deflect chance (the HUD now shows this exact number).
 function getSaberDeflectChance() {
   if (!player || !player.hasSaber) return 0;
-  return Math.min(1, 0.35 + ((player.saberMastery || 0) / 100) * 0.65);
+  const formBonus = typeof saberFormDeflectBonus === "function" ? saberFormDeflectBonus() : 0;   // v11: Soresu / Shien parry better
+  return Math.max(0, Math.min(1, 0.35 + ((player.saberMastery || 0) / 100) * 0.65 + formBonus));
 }
 
 // FIX: the death / revive check used to live only inside the melee-contact branch, so enemy
@@ -470,85 +471,107 @@ function updateMinionsSim(simDt) {
 }
 
 /* === 4. REAL-TIME PHYSICAL BLADE SLICING (GUARANTEED LIMB SEVER + TORSO BISECTION) === */
-function checkBladeSegmentSlice(hx, hy, tx, ty, w, bladeSweepAngle, glowCol) {
+function checkBladeSegmentSlice(hx, hy, tx, ty, w, bladeSweepAngle, glowCol, hm) {
   const segDX = tx - hx, segDY = ty - hy;
   const segLenSq = segDX * segDX + segDY * segDY;
   if (segLenSq < 1) return;
-
-  const isPlasmaSaber = ![18, 19, 24, 48, 50, 67, 71].includes(w.id);
-  const visorBonus = (player.activeVisor && player.activeVisor > 0) ? 0.10 : 0;
-
   for (let j = 0; j < MAX_E; j++) {
     if (!eAct[j] || eScarHitCD[j] > 0) continue;
     const eRad = eType[j] === 99 ? 22 : (eType[j] === 3 ? 15 : 11);
     const ex = eX[j], ey = eY[j];
-
     let t = ((ex - hx) * segDX + (ey - hy) * segDY) / segLenSq;
     t = Math.max(0, Math.min(1, t));
     const cx = hx + t * segDX, cy = hy + t * segDY;
-    const dist = Math.hypot(ex - cx, ey - cy);
-    if (dist > eRad + 4.5) continue;
-
-    eScarHitCD[j] = w.id === 77 ? 0.14 : 0.20;
-    player.combatAlertTimer = 1.6;
-    const relX = Math.max(-0.95, Math.min(0.95, (cx - ex) / eRad));
-    const relY = Math.max(-0.95, Math.min(0.95, (cy - ey) / eRad));
-    recordShotImpact(relX, relY, 1, eType[j], relY < -0.35 ? 2 : 1);
-
-    eScarAng[j] = bladeSweepAngle;
-    eScarHeat[j] = 1.0;
-    eScarOffY[j] = (cy - ey) * 0.55;
-
-    const isCrit = Math.random() < ((player.crit || 0.08) + visorBonus + (w.lvl * 0.04));
-    const isBossOrRival = eType[j] >= 98;
-    const ignoresShields = (w.id === 76 || w.id === 78);
-    const hasHeavyShield = !ignoresShields && (eFormType[j] === 1 || eType[j] === 3) && !isCrit && eArmsLost[j] === 0;
-
-    if (typeof sfxWeapon === "function") sfxWeapon("orbit", w.id, true);
-
-    if (!isBossOrRival && !hasHeavyShield) {
-      if (Math.abs(relX) > 0.52 && eArmsLost[j] < 2) {
-        eArmsLost[j]++;
-        eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.14;
-        spawnGroundLimb(ex + (relX > 0 ? 9 : -9), ey, isPlasmaSaber ? "#263238" : "#ff1744", 1);
-        const limbDmg = eMax[j] * 0.65;
-        eHP[j] -= limbDmg;
-        spawnDmg(ex, ey, limbDmg, true, true);
-        if (eHP[j] <= 0) killEnemy(j, false, bladeSweepAngle, glowCol);
-      } else if (relY > 0.42 && eLegsLost[j] < 2) {
-        eLegsLost[j]++;
-        eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.16;
-        spawnGroundLimb(ex, ey + 8, isPlasmaSaber ? "#263238" : "#ff1744", 0);
-        const legDmg = eMax[j] * 0.65;
-        eHP[j] -= legDmg;
-        spawnDmg(ex, ey, legDmg, true, true);
-        if (eHP[j] <= 0) killEnemy(j, false, bladeSweepAngle, glowCol);
-      } else {
-        const fatalDmg = Math.max(eHP[j] + 10, (55 + w.lvl * 16) * player.might * 2.5);
-        spawnDmg(ex, ey, fatalDmg, true);
-        eHP[j] = 0;
-        killEnemy(j, relY < -0.35, bladeSweepAngle, glowCol);
-      }
-    } else {
-      if (eArmsLost[j] < 2 && !isBossOrRival) {
-        eArmsLost[j]++;
-        eFormType[j] = 0;
-        eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.12;
-        spawnGroundLimb(ex + (relX >= 0 ? 9 : -9), ey, "#ffd166", 1);
-      }
-      if (w.id === 78) eShred[j] = Math.min(12, eShred[j] + 4);
-      if (typeof gloryOnHeavyHit === "function") gloryOnHeavyHit(j);   // v10: heavy melee can stagger elites
-      const baseDmg = (42 + w.lvl * 14) * (w.lvl >= 5 ? 1.35 : 1.0) * player.might * (isCrit ? player.cdmg : 1.0) * (isBossOrRival ? (player.bossMul || 1.0) : 1.0);
-      eHP[j] -= baseDmg;
-      spawnDmg(ex, ey, baseDmg, isCrit, true);
-      spawnParticles(cx, cy, 4);
-      const kb = (isBossOrRival ? 4 : 10) * (player.kb || 1.0);
-      const ka = Math.atan2(ey - player.y, ex - player.x);
-      eX[j] += Math.cos(ka) * kb;
-      eY[j] += Math.sin(ka) * kb;
-      if (eHP[j] <= 0) killEnemy(j, relY < -0.35, bladeSweepAngle, glowCol);
-    }
+    if (Math.hypot(ex - cx, ey - cy) > eRad + 4.5) continue;
+    bladeHitEnemy(j, cx, cy, w, bladeSweepAngle, glowCol, hm);
   }
+}
+
+// One blade contact. hm (v11 Saber Form Engine hit mode, optional): kind 0 = touch / graze (burns, never an
+// instant kill), 1 = committed cut, 2 = heavy (Falling Avalanche: breaks guards, splits top-to-bottom),
+// 3 = thrust (runs the target through: intact, scorched corpse), 4 = flurry cut (short re-hit window).
+function bladeHitEnemy(j, cx, cy, w, bladeSweepAngle, glowCol, hm) {
+  const isPlasmaSaber = ![18, 19, 24, 48, 50, 67, 71].includes(w.id);
+  const visorBonus = (player.activeVisor && player.activeVisor > 0) ? 0.10 : 0;
+  const kind = hm ? hm.kind : 1;
+  const eRad = eType[j] === 99 ? 22 : (eType[j] === 3 ? 15 : 11);
+  const ex = eX[j], ey = eY[j];
+
+  eScarHitCD[j] = hm ? hm.hitCD : (w.id === 77 ? 0.14 : 0.20);
+  player.combatAlertTimer = 1.6;
+  const relX = Math.max(-0.95, Math.min(0.95, (cx - ex) / eRad));
+  const relY = Math.max(-0.95, Math.min(0.95, (cy - ey) / eRad));
+  recordShotImpact(relX, relY, 1, eType[j], relY < -0.35 ? 2 : 1);
+
+  eScarAng[j] = bladeSweepAngle;
+  eScarHeat[j] = 1.0;
+  eScarOffY[j] = (cy - ey) * 0.55;
+
+  const isCrit = Math.random() < ((player.crit || 0.08) + visorBonus + (w.lvl * 0.04) + (hm ? hm.crit : 0));
+  const isBossOrRival = eType[j] >= 98;
+  const ignoresShields = (w.id === 76 || w.id === 78) || (hm && (kind === 2 || hm.lethal));
+  const hasHeavyShield = !ignoresShields && (eFormType[j] === 1 || eType[j] === 3) && !isCrit && eArmsLost[j] === 0;
+
+  if (!hm && typeof sfxWeapon === "function") sfxWeapon("orbit", w.id, true);
+  let killed = false;
+
+  if (kind === 0) {
+    // a graze: the blade burns whatever it touches, but only committed strikes cut people down
+    const graze = (18 + w.lvl * 6) * player.might * (isBossOrRival ? (player.bossMul || 1.0) : 1.0) * (hasHeavyShield ? 0.4 : 1.0);
+    eHP[j] -= graze;
+    spawnDmg(ex, ey, graze, false);
+    if (eHP[j] <= 0) { killEnemy(j, false, bladeSweepAngle, glowCol); killed = true; }
+  } else if (!isBossOrRival && !hasHeavyShield) {
+    if (kind === 3 || (hm && hm.lethal) || kind === 2) {
+      const fatalDmg = Math.max(eHP[j] + 10, (55 + w.lvl * 16) * player.might * 2.5);
+      spawnDmg(ex, ey, fatalDmg, true);
+      eHP[j] = 0;
+      if (kind === 3) killEnemy(j, false, null, glowCol);              // run through: intact, scorched corpse
+      else killEnemy(j, relY < -0.35, bladeSweepAngle, glowCol);
+      killed = true;
+    } else if (Math.abs(relX) > 0.52 && eArmsLost[j] < 2) {
+      eArmsLost[j]++;
+      eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.14;
+      spawnGroundLimb(ex + (relX > 0 ? 9 : -9), ey, isPlasmaSaber ? "#263238" : "#ff1744", 1);
+      const limbDmg = eMax[j] * 0.65;
+      eHP[j] -= limbDmg;
+      spawnDmg(ex, ey, limbDmg, true, true);
+      if (eHP[j] <= 0) { killEnemy(j, false, bladeSweepAngle, glowCol); killed = true; }
+    } else if (relY > 0.42 && eLegsLost[j] < 2) {
+      eLegsLost[j]++;
+      eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.16;
+      spawnGroundLimb(ex, ey + 8, isPlasmaSaber ? "#263238" : "#ff1744", 0);
+      const legDmg = eMax[j] * 0.65;
+      eHP[j] -= legDmg;
+      spawnDmg(ex, ey, legDmg, true, true);
+      if (eHP[j] <= 0) { killEnemy(j, false, bladeSweepAngle, glowCol); killed = true; }
+    } else {
+      const fatalDmg = Math.max(eHP[j] + 10, (55 + w.lvl * 16) * player.might * 2.5);
+      spawnDmg(ex, ey, fatalDmg, true);
+      eHP[j] = 0;
+      killEnemy(j, relY < -0.35, bladeSweepAngle, glowCol);
+      killed = true;
+    }
+  } else {
+    if (eArmsLost[j] < 2 && !isBossOrRival) {
+      eArmsLost[j]++;
+      eFormType[j] = 0;
+      eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.12;
+      spawnGroundLimb(ex + (relX >= 0 ? 9 : -9), ey, "#ffd166", 1);
+    }
+    if (w.id === 78) eShred[j] = Math.min(12, eShred[j] + 4);
+    if (typeof gloryOnHeavyHit === "function") gloryOnHeavyHit(j);   // v10: heavy melee can stagger elites
+    const baseDmg = (42 + w.lvl * 14) * (w.lvl >= 5 ? 1.35 : 1.0) * player.might * (isCrit ? player.cdmg : 1.0) * (isBossOrRival ? (player.bossMul || 1.0) : 1.0) * (hm ? hm.dmg : 1.0);
+    eHP[j] -= baseDmg;
+    spawnDmg(ex, ey, baseDmg, isCrit, true);
+    spawnParticles(cx, cy, 4);
+    const kb = (isBossOrRival ? 4 : 10) * (player.kb || 1.0) * (kind === 2 ? 2.0 : 1.0);
+    const ka = Math.atan2(ey - player.y, ex - player.x);
+    eX[j] += Math.cos(ka) * kb;
+    eY[j] += Math.sin(ka) * kb;
+    if (eHP[j] <= 0) { killEnemy(j, relY < -0.35, bladeSweepAngle, glowCol); killed = true; }
+  }
+  if (hm && typeof saberOnBladeHit === "function") saberOnBladeHit(j, cx, cy, w, hm, killed);
 }
 
 function hitTestPlayerProj(i) {
@@ -828,7 +851,8 @@ function stepSimulation(rawDt) {
     }
   }
 
-  if (player.cid === 79 && aimTarget >= 0 && bestAimDist < 82) {
+  // v11: with the Saber Form Engine Yoda's leaps come from his Ataru stages (Hawk-Bat Swoop), not a constant hop.
+  if (player.cid === 79 && aimTarget >= 0 && bestAimDist < 82 && !(typeof saberEngineActive === "function" && saberEngineActive())) {
     if ((player.acrobatZ || 0) <= 0.5) {
       player.acrobatVZ = 44;
       player.acrobatFlip = Math.PI * 2;
@@ -852,13 +876,10 @@ function stepSimulation(rawDt) {
   // v9.01 smart proximity auto-lock: anything inside 85px snaps the aim (and blades) onto it fast.
   const closeThreat = aimTarget >= 0 && bestAimDist < 85;
   player.aim = (player.aim || 0) + aimDiff * Math.min(1, simDt * (player.deflectStanceTimer > 0 ? 28 : (closeThreat ? 30 : 14)));
-  // ...and orbit / lightsaber weapons open their swing arc into a 360-degree defensive circle.
-  const prevSweep = player.defSweep || 0;
-  player.defSweep = Math.max(0, Math.min(1, prevSweep + ((closeThreat && !(player.deflectStanceTimer > 0)) ? 7.5 : -3.2) * simDt));
-  if (player.defSweep > 0) {
-    if (prevSweep <= 0) player.defSpin = (player.weapons[0] && typeof player.weapons[0].ang === "number") ? player.weapons[0].ang : player.aim;
-    player.defSpin = (player.defSpin + simDt * 14.5 * (1 + 0.25 * Math.min(100, player.saberMastery || 0) / 100)) % (Math.PI * 2);
-  }
+  // v11: the v9.01 "360-degree defensive circle" (a constant 2.3 rev/s spin whenever anything was within 85px)
+  // is gone. Close-quarters coverage now comes from real, targeted Form strikes (js/saberforms.js) that turn to
+  // meet enemies on any side, plus a Sarlacc Sweep / twirl only when the hero is genuinely surrounded.
+  player.defSweep = 0; player.defSpin = 0;
 
   const out = typeof getOutfit === "function" ? getOutfit(player.cid) : { blade: 0 };
   const pal = typeof getHeroOutfits === "function" ? getHeroOutfits(player.cid) : null;
@@ -925,6 +946,7 @@ function stepSimulation(rawDt) {
   const hasteCdr = (player.overclockTimer > 0 ? 0.5 : 1.0) * (player.sandTimer > 0 ? 0.55 : 1.0) * reaverCdr;
 
   const activeSlots = Math.min(armCap, enabledWpns.length);
+  if (typeof saberEngineBeginStep === "function") saberEngineBeginStep(simDt);
   for (let s = 0; s < activeSlots; s++) {
     const w = enabledWpns[(player.handSlotOffset + s) % enabledWpns.length];
     const isMeleeBlade = (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44, 73].includes(w.id));
@@ -942,7 +964,12 @@ function stepSimulation(rawDt) {
     const pat = (player.whirlwindTimer > 0) ? 7 : wStance.pattern;
     const ph = player.flourishPhase + s * 1.85;
 
-    if (isMeleeBlade) {
+    let sfHandled = false;
+    if (isMeleeBlade && typeof saberEngineStep === "function" && saberEngineOwns(w)) {
+      // v11 Saber Form Engine: real guard / wind-up / strike / follow-through choreography + swept collision
+      try { sfHandled = saberEngineStep(w, s, activeSlots, simDt, wBladeCol); } catch (e) { saberEngineFail(e); sfHandled = false; }
+    }
+    if (isMeleeBlade && !sfHandled) {
       let flourishOffset = 0;
       let wristSpin = 0;
 
@@ -974,15 +1001,8 @@ function stepSimulation(rawDt) {
       }
 
       const prevAng = typeof w.ang === "number" ? w.ang : player.aim;
-      let armAng = player.aim + flourishOffset + (s % 2 === 1 ? -0.38 : 0.22);
-      let bladeWorldAng = armAng + wristSpin;
-      const sweepK = player.defSweep || 0;
-      if (sweepK > 0.001) {
-        // v9.01 proximity sweep: blend the stance flourish into a full-circle defensive spin
-        const spinAng = player.defSpin + s * (Math.PI * 2 / Math.max(1, activeSlots));
-        bladeWorldAng = lerpAng(bladeWorldAng, spinAng, sweepK);
-        armAng = lerpAng(armAng, spinAng - 0.35, sweepK);
-      }
+      const armAng = player.aim + flourishOffset + (s % 2 === 1 ? -0.38 : 0.22);
+      const bladeWorldAng = armAng + wristSpin;
       w.armAng = armAng;
       w.wristSpin = wristSpin;
       w.ang = bladeWorldAng;
@@ -1006,7 +1026,7 @@ function stepSimulation(rawDt) {
         const ty2 = hy - Math.sin(bladeWorldAng) * bladeLen;
         checkBladeSegmentSlice(hx, hy, tx2, ty2, w, sweepTangent + Math.PI, wBladeCol);
       }
-    } else {
+    } else if (!isMeleeBlade) {
       const rangedSway = pat === 11 ? Math.sin(ph) * wStance.arcWidth : (pat === 8 ? Math.sin(ph * 1.5) * 0.12 : 0);
       w.ang = player.aim + (s * 0.2) + rangedSway;
       w.armAng = w.ang;
@@ -1038,6 +1058,7 @@ function stepSimulation(rawDt) {
     }
   }
 
+  if (typeof saberEngineEndStep === "function") saberEngineEndStep();
   if (typeof updateHeroSpecials === "function") updateHeroSpecials(simDt);
   if (typeof updateWorldObjects === "function") updateWorldObjects(simDt);
 
@@ -1297,6 +1318,7 @@ function stepSimulation(rawDt) {
         player.deflectAng = Math.atan2(pY[i] - player.y, pX[i] - player.x);
         player.swordSwingTimer = 0.22;
         player.saberMastery = Math.min(100, player.saberMastery + 0.40);
+        if (typeof saberOnDeflect === "function") saberOnDeflect(i);      // v11: parry pose, Shien redirect, riposte
         if (typeof sfxRicochet === "function") sfxRicochet();
         continue;
       }

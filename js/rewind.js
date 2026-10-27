@@ -11,7 +11,7 @@ const REWIND_KEY_DT = 0.1;                      // seconds of simulated time bet
 const REWIND_BUDGET_BYTES = 30 * 1024 * 1024;   // ring buffer budget (~40 s of history at default pool sizes)
 const REWIND_PLAYER_FIELDS = ["x", "y", "aim", "hp", "vehicleHp", "inVehicle", "walk", "moveDir", "vx", "vy", "dashCD", "dashTimer",
   "acrobatZ", "acrobatVZ", "acrobatFlip", "deflectStanceTimer", "whirlwindTimer", "sandTimer", "overclockTimer", "sigGearCD", "cqcCD",
-  "autoFlameCD", "kneeDartCD", "swapTimer", "handSlotOffset", "swapPause", "defSweep", "defSpin", "adaptTimer", "vatsTimer", "vatsCD",
+  "autoFlameCD", "kneeDartCD", "swapTimer", "handSlotOffset", "swapPause", "sfLX", "sfLY", "adaptTimer", "vatsTimer", "vatsCD",
   "sandCD", "guardZone", "swordSwingTimer", "swordLungeTimer", "forceHandTimer", "armReach", "equipAnimTimer", "flourishPhase",
   "fortTimer", "sixShotsLeft", "sixBurstCD", "sixReloadCD"];
 const RW_PSTRIDE = REWIND_PLAYER_FIELDS.length + 6;   // + 6 limb integrity values

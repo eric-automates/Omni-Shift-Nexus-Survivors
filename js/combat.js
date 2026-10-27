@@ -1070,6 +1070,8 @@ function fireWeapon(w) {
       if (typeof sfxSpell === "function") sfxSpell("wand");
       spawnProj(player.x, player.y, Math.cos(aimAng) * 440, Math.sin(aimAng) * 440, baseDmg * 1.2, 0.75, 9, 3 + player.pierce, 4, sup, 0, 71);
     }
+    // v11: the Saber Form Engine (js/saberforms.js) choreographs every swing, hop and swing sound itself.
+    if (typeof saberEngineOwns === "function" && saberEngineOwns(w)) return;
     if (best <= 58 * player.area) {
       player.swordSwingTimer = 0.34;
       player.armReach = 5.5;
