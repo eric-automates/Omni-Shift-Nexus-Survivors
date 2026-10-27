@@ -26,6 +26,9 @@ const slX = new Float32Array(MAX_SLICE), slY = new Float32Array(MAX_SLICE),
 const slBodyCol = new Array(MAX_SLICE).fill("#ff5252");
 const slHeadCol = new Array(MAX_SLICE).fill("#90a4ae");
 const slGlowCol = new Array(MAX_SLICE).fill("#00f0ff");
+// v9.01: each half keeps the seed + helmet state of the body it came from, so stacked halves never
+// re-roll / flicker their faces and helmets frame to frame.
+const slSeed = new Uint32Array(MAX_SLICE), slHelmetOff = new Uint8Array(MAX_SLICE);
 let slHead = 0;
 
 const eScarAng = new Float32Array(MAX_E), eScarHeat = new Float32Array(MAX_E),
@@ -87,6 +90,38 @@ function resolvePlayerDeath() {
     showScreen("scrMain");
   }
   return true;
+}
+
+// Shortest-arc angle interpolation (used by the 360-degree proximity sweep).
+function lerpAng(a, b, t) {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2; else if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
+
+// v9.01: continuous fiery exhaust behind every live missile / rocket. Emission is driven by distance
+// travelled (one puff every ~3.6 px, minimum 60/s) and uses the ring-buffer particle pool, so the trail
+// stays unbroken at any FPS, speed or time-scale. Every third puff is rolling smoke, the rest is flame.
+let rocketTrailCounter = 0;
+function emitRocketTrail(x, y, ang, simDt, scale = 1, hot = false, speed = 300) {
+  const per = opts.lowPart ? 9 : 3.6;
+  const n = Math.max((opts.lowPart ? 25 : 60) * simDt, (speed * simDt) / per) * (hot ? 1.3 : 1);
+  let cnt = Math.floor(n); if (Math.random() < n - cnt) cnt++;
+  const bx = -Math.cos(ang), by = -Math.sin(ang), stepLen = speed * simDt;
+  for (let k = 0; k < cnt; k++) {
+    const back = 5.5 * scale + stepLen * (k / Math.max(1, cnt));    // spread puffs along the path just flown
+    const j = (Math.random() - 0.5) * 2.4 * scale;
+    const px = x + bx * back - by * j, py = y + by * back + bx * j;
+    const sp = 26 + Math.random() * 38;
+    if (rocketTrailCounter++ % 3 === 2) {
+      spawnPt(px, py, bx * sp * 0.35 + (Math.random() - 0.5) * 12, by * sp * 0.35 + (Math.random() - 0.5) * 12,
+              0.5 + Math.random() * 0.35, (2.4 + Math.random() * 1.6) * scale, 6, 2);             // smoke
+    } else {
+      const fs = 22 + Math.random() * 20;                              // tighter drift = no holes in the flame
+      spawnPt(px, py, bx * fs + (Math.random() - 0.5) * 10, by * fs + (Math.random() - 0.5) * 10,
+              0.18 + Math.random() * 0.16, (2.2 + Math.random() * 1.6) * scale, 2, 1);            // flame
+    }
+  }
 }
 
 /* === 2. 4-STAGE THROWN BLADE IMPALE, KNEEL, FORCE-WIGGLE & RECALL STATE === */
@@ -201,7 +236,7 @@ function updateThrownBladeSim(simDt) {
   }
 }
 
-function spawnBisectedBodyHalves(x, y, cutAngle, baseR, bodyCol, glowCol, headCol = null, isVet = false) {
+function spawnBisectedBodyHalves(x, y, cutAngle, baseR, bodyCol, glowCol, headCol = null, isVet = false, seed = 0) {
   const normA = cutAngle + Math.PI * 0.5;
   for (let h = 0; h < 2; h++) {
     let idx = slHead;
@@ -231,6 +266,8 @@ function spawnBisectedBodyHalves(x, y, cutAngle, baseR, bodyCol, glowCol, headCo
     slBodyCol[idx] = bodyCol;
     slHeadCol[idx] = headCol || bodyCol;
     slGlowCol[idx] = glowCol;
+    slSeed[idx] = seed >>> 0;
+    slHelmetOff[idx] = (!isVet && typeof corpseHelmetOff === "function" && corpseHelmetOff(seed >>> 0)) ? 1 : 0;
     slAct[idx] = 1;
   }
 }
@@ -247,8 +284,16 @@ function spawnBlastWave(x, y, maxRadius = 68, color = "#ff6d00") {
 }
 
 function triggerRocketDetonation(x, y, dmg, blastRadius) {
+  if (typeof fxDetonation === "function") fxDetonation(x, y, blastRadius);
   spawnBlastWave(x, y, blastRadius, "#ff6d00");
   spawnParticles(x, y, 12);
+  // v9.01 coloured particles: fireball core + rolling smoke
+  const fireN = opts.lowPart ? 4 : 12;
+  for (let k = 0; k < fireN; k++) {
+    const a = Math.random() * Math.PI * 2, sp = 30 + Math.random() * 90;
+    spawnPt(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.25 + Math.random() * 0.25, 3 + Math.random() * 3, 2, 1);
+    if (k % 2 === 0) spawnPt(x, y, Math.cos(a) * sp * 0.4, Math.sin(a) * sp * 0.4, 0.8 + Math.random() * 0.5, 4 + Math.random() * 3, 6, 2);
+  }
   sfx(120, 45, 0.28, "sawtooth", 0.32);
   for (let j = 0; j < MAX_E; j++) {
     if (!eAct[j]) continue;
@@ -266,18 +311,23 @@ function triggerRocketDetonation(x, y, dmg, blastRadius) {
 function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0ff") {
   if (!eAct[idx]) return;
   const ex = eX[idx], ey = eY[idx], et = eType[idx], rCid = eRivalCid[idx];
+  // v10 rewind: an enemy that was already killed (and paid out) before a rewind comes back as a
+  // "temporal echo" - killing it again shows the gore but never pays XP / drops / relics twice.
+  const isEcho = eEcho[idx] === 1;
   eAct[idx] = 0;
   eKneel[idx] = 0;
   if (typeof eLevitate !== "undefined") { eLevitate[idx] = 0; eLevZ[idx] = 0; }
-  player.kills++;
+  if (V10.onKill.length) v10Run(V10.onKill, idx, ex, ey, et, isEcho);
+  eStagger[idx] = 0; eEcho[idx] = 0; eDummy[idx] = 0;
+  if (!isEcho) player.kills++;
 
-  if (player.cid === 33 && Math.hypot(ex - player.x, ey - player.y) <= 95) player.hp = Math.min(player.maxHp, player.hp + 1.5);
-  if ([3, 75, 76, 77].includes(player.cid)) player.hp = Math.min(player.maxHp, player.hp + 0.9);
-  if (player.cid === 11 && player.kills % 10 === 0) player.hp = Math.min(player.maxHp, player.hp + 3.0);
+  if (!isEcho && player.cid === 33 && Math.hypot(ex - player.x, ey - player.y) <= 95) player.hp = Math.min(player.maxHp, player.hp + 1.5);
+  if (!isEcho && [3, 75, 76, 77].includes(player.cid)) player.hp = Math.min(player.maxHp, player.hp + 0.9);
+  if (!isEcho && player.cid === 11 && player.kills % 10 === 0) player.hp = Math.min(player.maxHp, player.hp + 3.0);
 
   // Resolve exact Rival / Boss outfit colors so their corpse & severed halves match their live look!
-  let bodyCol = et === 99 ? "#ff1744" : (eFormType[idx] === 1 ? "#ffd166" : (player.fac ? player.fac.c2 : "#ff5252"));
-  let headCol = et === 99 ? "#ffff00" : (player.fac ? player.fac.c1 : "#90a4ae");
+  let bodyCol = et === 99 ? "#ff1744" : (eFormType[idx] === 1 ? "#ffd166" : enemyCol2());
+  let headCol = et === 99 ? "#ffff00" : enemyCol1();
 
   if (et === 98 && rCid >= 0 && typeof CHAR_RAW !== "undefined" && CHAR_RAW[rCid]) {
     const rFac = FACTIONS[CHAR_RAW[rCid][1]] || player.fac || FACTIONS[0];
@@ -288,7 +338,7 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
   }
 
   // Rival Bounty Hunter & Boss Signature Weapon Drop on Death!
-  if (et >= 98) {
+  if (et >= 98 && !isEcho) {
     const dropWpnId = (et === 98 && rCid >= 0) ? rCid : Math.floor(Math.random() * CHAR_RAW.length);
     if (typeof spawnWeaponDrop === "function") {
       spawnWeaponDrop(ex, ey, dropWpnId);
@@ -306,7 +356,7 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
 
   if (sliceAngle !== null) {
     const baseR = et === 99 ? 20 : (et === 98 ? 13 : (et === 3 ? 14 : 11));
-    spawnBisectedBodyHalves(ex, ey, sliceAngle, baseR, bodyCol, glowCol, headCol, et >= 98);
+    spawnBisectedBodyHalves(ex, ey, sliceAngle, baseR, bodyCol, glowCol, headCol, et >= 98, eSeed[idx]);
     if (player.cid === 75 || et >= 98) {
       spawnCorpse(ex, ey, eSeed[idx], et, eLegsLost[idx], eArmsLost[idx], bodyCol, headCol, rCid);
     }
@@ -316,6 +366,7 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
   }
 
   spawnParticles(ex, ey, 6);
+  if (isEcho) { spawnParticles(ex, ey, 5, 9, 2.5); return; }   // echoes dissolve in cyan, no payout
   const xpVal = et === 99 ? 120 : (et === 98 ? 65 : (3.2 + waveNum * 0.55));
   spawnOrb(ex, ey, xpVal);
   if (et >= 98 && typeof grantRelic === "function") grantRelic();
@@ -327,6 +378,8 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
 /* === 3. ALLIED MINION AI SIMULATION === */
 function updateMinionsSim(simDt) {
   if (typeof mAct === "undefined") return;
+  // v10: js/squad.js owns minion AI (adds squad orders + rifle fireteams); this body is the fallback.
+  if (typeof squadMinionsSim === "function") { squadMinionsSim(simDt); return; }
   for (let m = 0; m < MAX_MINION; m++) {
     if (!mAct[m]) continue;
     mLife[m] -= simDt;
@@ -484,6 +537,7 @@ function checkBladeSegmentSlice(hx, hy, tx, ty, w, bladeSweepAngle, glowCol) {
         spawnGroundLimb(ex + (relX >= 0 ? 9 : -9), ey, "#ffd166", 1);
       }
       if (w.id === 78) eShred[j] = Math.min(12, eShred[j] + 4);
+      if (typeof gloryOnHeavyHit === "function") gloryOnHeavyHit(j);   // v10: heavy melee can stagger elites
       const baseDmg = (42 + w.lvl * 14) * (w.lvl >= 5 ? 1.35 : 1.0) * player.might * (isCrit ? player.cdmg : 1.0) * (isBossOrRival ? (player.bossMul || 1.0) : 1.0);
       eHP[j] -= baseDmg;
       spawnDmg(ex, ey, baseDmg, isCrit, true);
@@ -615,13 +669,25 @@ function hitTestPlayerProj(i) {
 function updateSim(rawDt) {
   const t0 = performance.now();
   if (typeof updateThemeMusic === "function") updateThemeMusic(rawDt);
+  if (V10.onFrame.length) v10Run(V10.onFrame, rawDt);
   if (!runActive || runPaused || !player) return;
+
+  // v9.01: negative Temporal Nexus rungs stream BACKWARD through the rewind ring buffer (with
+  // fractional keyframe interpolation, so even -0.1x is smooth) instead of simulating forward.
+  if (timeScale < 0 && typeof rewindPlayback === "function") {
+    rewindPlayback(rawDt);
+    frameMs = +(performance.now() - t0).toFixed(1);
+    return;
+  }
+  // v10 hit-stop / cinematic slow-motion (glory kills, boss kills, squad wheel) scales real time.
+  const dt = rawDt * ((typeof fxTimeMul === "function") ? fxTimeMul(rawDt) : 1);
+  if (!(dt > 0)) { frameMs = +(performance.now() - t0).toFixed(1); return; }
 
   // FIX: sub-step long frames and high time-scales so a single step never exceeds ~1/60 s of
   // simulated time (at 10x a bolt used to jump past its target in one step and never hit).
-  const scaled = rawDt * timeScale;
-  const steps = Math.min(8, Math.max(1, Math.ceil(scaled / (SIM_MAX_STEP * 1.05))));
-  const subDt = rawDt / steps;
+  const scaled = dt * timeScale;
+  const steps = Math.min(12, Math.max(1, Math.ceil(scaled / (SIM_MAX_STEP * 1.05))));
+  const subDt = dt / steps;
   for (let s = 0; s < steps; s++) {
     stepSimulation(subDt);
     if (!runActive || runPaused || !player) break;
@@ -728,7 +794,8 @@ function stepSimulation(rawDt) {
   const vehBoost = (typeof player.vehBoostMul === "number") ? player.vehBoostMul : 1.0;
   const vehMul = player.inVehicle === 1 ? (1.42 * vehBoost) : (player.inVehicle === 2 ? 0.88 : 1.0);
   const rushSpdMul = (player.overclockTimer > 0 ? 2.0 : 1.0) * (player.sandTimer > 0 ? 1.8 : 1.0);
-  const effSpd = (player.spd || 110) * legFactor * vehMul * rushSpdMul * (player.guardZone >= 0 ? 0.82 : 1.0);
+  const hazSlow = (player.hazSlowT > 0 && typeof biomeActive === "function") ? (1 - (biomeActive().hazard.slow || 0)) : 1.0;   // v10 biome hazards
+  const effSpd = (player.spd || 110) * legFactor * vehMul * rushSpdMul * (player.guardZone >= 0 ? 0.82 : 1.0) * hazSlow;
 
   if (mag > 0.04) {
     const moveAng = Math.atan2(my, mx) + legImbalance * 0.28;
@@ -754,7 +821,8 @@ function stepSimulation(rawDt) {
 
   let aimTarget = -1, bestAimDist = 380;
   for (let j = 0; j < MAX_E; j++) {
-    if (eAct[j] && isEnemyOnScreen(j)) {
+    // v10: staggered elites are left alone by auto-aim - they are waiting for a glory kill
+    if (eAct[j] && !(eStagger[j] > 0) && isEnemyOnScreen(j)) {
       const d = Math.hypot(eX[j] - player.x, eY[j] - player.y);
       if (d < bestAimDist) { bestAimDist = d; aimTarget = j; }
     }
@@ -781,7 +849,16 @@ function stepSimulation(rawDt) {
   let aimDiff = desiredAim - (player.aim || 0);
   while (aimDiff > Math.PI) aimDiff -= Math.PI * 2;
   while (aimDiff < -Math.PI) aimDiff += Math.PI * 2;
-  player.aim = (player.aim || 0) + aimDiff * Math.min(1, simDt * (player.deflectStanceTimer > 0 ? 28 : 14));
+  // v9.01 smart proximity auto-lock: anything inside 85px snaps the aim (and blades) onto it fast.
+  const closeThreat = aimTarget >= 0 && bestAimDist < 85;
+  player.aim = (player.aim || 0) + aimDiff * Math.min(1, simDt * (player.deflectStanceTimer > 0 ? 28 : (closeThreat ? 30 : 14)));
+  // ...and orbit / lightsaber weapons open their swing arc into a 360-degree defensive circle.
+  const prevSweep = player.defSweep || 0;
+  player.defSweep = Math.max(0, Math.min(1, prevSweep + ((closeThreat && !(player.deflectStanceTimer > 0)) ? 7.5 : -3.2) * simDt));
+  if (player.defSweep > 0) {
+    if (prevSweep <= 0) player.defSpin = (player.weapons[0] && typeof player.weapons[0].ang === "number") ? player.weapons[0].ang : player.aim;
+    player.defSpin = (player.defSpin + simDt * 14.5 * (1 + 0.25 * Math.min(100, player.saberMastery || 0) / 100)) % (Math.PI * 2);
+  }
 
   const out = typeof getOutfit === "function" ? getOutfit(player.cid) : { blade: 0 };
   const pal = typeof getHeroOutfits === "function" ? getHeroOutfits(player.cid) : null;
@@ -897,8 +974,15 @@ function stepSimulation(rawDt) {
       }
 
       const prevAng = typeof w.ang === "number" ? w.ang : player.aim;
-      const armAng = player.aim + flourishOffset + (s % 2 === 1 ? -0.38 : 0.22);
-      const bladeWorldAng = armAng + wristSpin;
+      let armAng = player.aim + flourishOffset + (s % 2 === 1 ? -0.38 : 0.22);
+      let bladeWorldAng = armAng + wristSpin;
+      const sweepK = player.defSweep || 0;
+      if (sweepK > 0.001) {
+        // v9.01 proximity sweep: blend the stance flourish into a full-circle defensive spin
+        const spinAng = player.defSpin + s * (Math.PI * 2 / Math.max(1, activeSlots));
+        bladeWorldAng = lerpAng(bladeWorldAng, spinAng, sweepK);
+        armAng = lerpAng(armAng, spinAng - 0.35, sweepK);
+      }
       w.armAng = armAng;
       w.wristSpin = wristSpin;
       w.ang = bladeWorldAng;
@@ -964,18 +1048,22 @@ function stepSimulation(rawDt) {
     : ((player.diff && typeof player.diff.hpMul === "number") ? Math.max(0.8, Math.min(1.6, player.diff.hpMul)) : 1.0);
   const targetPop = Math.min(MAX_E - 12, Math.floor((14 + waveNum * 4.5) * diffSpawnMul));
 
-  if (activeEnemies < 5 && runTime < 2.5) {
-    spawnEnemy(false, false);
-  } else if (activeEnemies < targetPop && Math.random() < (2.6 + waveNum * 0.38) * simDt) {
-    spawnEnemy(false, false);
-  }
+  // v10: player.noSpawns (Proving Ground), player.spawnMul / bossAt / rivalEvery (campaign sectors)
+  const spawnRateMul = player.spawnMul || 1;
+  if (!player.noSpawns) {
+    if (activeEnemies < 5 && runTime < 2.5) {
+      spawnEnemy(false, false);
+    } else if (activeEnemies < Math.min(MAX_E - 12, targetPop * spawnRateMul) && Math.random() < (2.6 + waveNum * 0.38) * spawnRateMul * simDt) {
+      spawnEnemy(false, false);
+    }
 
-  if (runTime > 120 && !player.bossSpawned) {
-    player.bossSpawned = true; spawnEnemy(true, false);
-    spawnSpeech(player.x, player.y - 24, "SECTOR TITAN DETECTED!", "#ff1744", 3.2);
+    if (runTime > (player.bossAt || 120) && !player.bossSpawned) {
+      player.bossSpawned = true; spawnEnemy(true, false);
+      spawnSpeech(player.x, player.y - 24, (player.bossName ? player.bossName.toUpperCase() : "SECTOR TITAN") + " DETECTED!", "#ff1744", 3.2);
+    }
+    rivalTimer += simDt;
+    if (rivalTimer >= (player.rivalEvery || 75)) { rivalTimer = 0; spawnEnemy(false, true); }
   }
-  rivalTimer += simDt;
-  if (rivalTimer >= 75) { rivalTimer = 0; spawnEnemy(false, true); }
 
   const nearObs = typeof getNearbyObstacles === "function" ? getNearbyObstacles(player.x, player.y, 340) : [];
   const diffHpMul = (player.diff && typeof player.diff.hpMul === "number") ? player.diff.hpMul : 1.0;
@@ -984,6 +1072,7 @@ function stepSimulation(rawDt) {
     if (!eAct[i]) continue;
     if (eScarHitCD[i] > 0) eScarHitCD[i] = Math.max(0, eScarHitCD[i] - simDt);
     if (eScarHeat[i] > 0.08) eScarHeat[i] = Math.max(0.08, eScarHeat[i] - simDt * 0.75);
+    if (eDummy[i]) continue;   // v10 Proving Ground training dummies: no AI, no fire, no contact damage
 
     if (typeof eLevitate !== "undefined" && eLevitate[i] > 0) {
       eLevitate[i] -= simDt;
@@ -1001,11 +1090,15 @@ function stepSimulation(rawDt) {
           continue;
         }
         eAct[i] = 0; eLevitate[i] = 0; eLevZ[i] = 0;
-        player.kills++;
-        const xpVal = eType[i] >= 98 ? 65 : (3.5 + waveNum * 0.55);
-        spawnOrb(ox, oy, xpVal);
-        for (let k = 0; k < MAX_O; k++) {
-          if (oAct[k] && Math.hypot(oX[k] - ox, oY[k] - oy) < 8) oHome[k] = 1;
+        if (V10.onKill.length) v10Run(V10.onKill, i, ox, oy, eType[i], eEcho[i] === 1);
+        const wasEcho = eEcho[i] === 1; eEcho[i] = 0; eStagger[i] = 0;
+        if (!wasEcho) {
+          player.kills++;
+          const xpVal = eType[i] >= 98 ? 65 : (3.5 + waveNum * 0.55);
+          spawnOrb(ox, oy, xpVal);
+          for (let k = 0; k < MAX_O; k++) {
+            if (oAct[k] && Math.hypot(oX[k] - ox, oY[k] - oy) < 8) oHome[k] = 1;
+          }
         }
       }
       continue;
@@ -1016,6 +1109,7 @@ function stepSimulation(rawDt) {
       if (Math.random() < 3.5 * simDt) spawnDrip(eX[i], eY[i] + 8, i, 2.5 + Math.random() * 1.8);
       if (eHP[i] <= 0) { killEnemy(i, false); continue; }
     }
+    if (eStagger[i] > 0) continue;   // v10 glory-kill stagger: frozen & harmless (timer runs in js/glory.js)
     if (eSlow[i] > 0) eSlow[i] = Math.max(0, eSlow[i] - simDt);
     if (eStun[i] > 0) { eStun[i] = Math.max(0, eStun[i] - simDt); continue; }
     if (eGrapple[i] > 0) {
@@ -1079,7 +1173,9 @@ function stepSimulation(rawDt) {
         if (eHP[i] <= 0) { killEnemy(i, false); continue; }
       }
 
-      if ((player.acrobatZ || 0) > 8 || (player.dodge > 0 && Math.random() < Math.min(0.65, player.dodge))) {
+      if (player.invulnT > 0) {
+        // v10: brief invulnerability (glory-kill finishers, Proving Ground) - no contact damage
+      } else if ((player.acrobatZ || 0) > 8 || (player.dodge > 0 && Math.random() < Math.min(0.65, player.dodge))) {
         // FIX: this text used to be spawned on EVERY dodged frame, flooding the damage-number pool.
         if (!(player.evadeTxtCD > 0)) {
           spawnSpeech(player.x, player.y - 12, (player.acrobatZ || 0) > 8 ? "ATARU LEAP!" : "EVADED!", "#00e5ff", 0.55);
@@ -1158,9 +1254,10 @@ function stepSimulation(rawDt) {
           curAng += Math.max(-4.5 * simDt, Math.min(4.5 * simDt, diff));
         }
         pVX[i] = Math.cos(curAng) * curSpd; pVY[i] = Math.sin(curAng) * curSpd;
-        if (Math.random() < 0.75) spawnParticles(pX[i] - Math.cos(curAng) * 8, pY[i] - Math.sin(curAng) * 8, 1);
       }
       pX[i] += pVX[i] * simDt; pY[i] += pVY[i] * simDt;
+      // emitted AFTER the move so the exhaust starts right at the nozzle (no gap behind the flame)
+      if (pStyle[i] === 2 && !pEnemy[i]) emitRocketTrail(pX[i], pY[i], Math.atan2(pVY[i], pVX[i]), simDt, pSup[i] ? 1.25 : 1.0, pSup[i] > 0, Math.hypot(pVX[i], pVY[i]));
     }
 
     if (pEnemy[i]) {
@@ -1203,6 +1300,7 @@ function stepSimulation(rawDt) {
         if (typeof sfxRicochet === "function") sfxRicochet();
         continue;
       }
+      if (dp < 14 && player.invulnT > 0) { pAct[i] = 0; spawnParticles(pX[i], pY[i], 2, 9); continue; }
       if (dp < 14) {
         player.combatAlertTimer = 2.0;
         const effArmor = (player.armor || 0) + (player.adaptTimer > 0 ? 5 : 0);
@@ -1281,7 +1379,17 @@ function stepSimulation(rawDt) {
   }
 
   for (let i = 0; i < MAX_D; i++) if (dAct[i]) { dY[i] -= 18 * simDt; dLife[i] -= simDt; if (dLife[i] <= 0) dAct[i] = 0; }
-  for (let i = 0; i < MAX_PT; i++) if (ptAct[i]) { ptX[i] += ptVX[i] * simDt; ptY[i] += ptVY[i] * simDt; ptLife[i] -= simDt; if (ptLife[i] <= 0) ptAct[i] = 0; }
+  for (let i = 0; i < MAX_PT; i++) {
+    if (!ptAct[i]) continue;
+    const k = ptKind[i];
+    if (k === 1) { const d = 1 - 3.0 * simDt; ptVX[i] *= d; ptVY[i] = ptVY[i] * d - 14 * simDt; }                       // flame
+    else if (k === 2) { const d = 1 - 2.2 * simDt; ptVX[i] *= d; ptVY[i] = ptVY[i] * d - 9 * simDt; ptSize[i] += 5.5 * simDt; } // smoke
+    else if (k === 3) { const d = 1 - 5.5 * simDt; ptVX[i] *= d; ptVY[i] *= d; }                                          // casing
+    else if (k === 4) { const d = 1 - 1.2 * simDt; ptVX[i] *= d; ptVY[i] = ptVY[i] * d - 6 * simDt; }                     // ember
+    else if (k === 5) { const d = 1 - 3.5 * simDt; ptVX[i] *= d; ptVY[i] *= d; ptSize[i] += 3.0 * simDt; }               // dust
+    ptX[i] += ptVX[i] * simDt; ptY[i] += ptVY[i] * simDt; ptLife[i] -= simDt;
+    if (ptLife[i] <= 0) ptAct[i] = 0;
+  }
   for (let i = 0; i < MAX_DRIP; i++) if (drAct[i]) { if (drZ[i] > 0) drZ[i] = Math.max(0, drZ[i] - 18 * simDt); drLife[i] -= simDt; if (drLife[i] <= 0) drAct[i] = 0; }
   for (let i = 0; i < MAX_BLAST; i++) if (blAct[i]) {
     blLife[i] -= simDt;
@@ -1300,6 +1408,9 @@ function stepSimulation(rawDt) {
       if (corpAct[i] && corpType[i] < 98) { corpAct[i] = 0; toRemove--; }
     }
   }
+
+  // v10 modules: squads, glory kills, biome hazards & weather, rewind recording, fx timers, Proving Ground
+  if (V10.onStep.length && player) v10Run(V10.onStep, simDt, rawDt);
 
   // Final safety net: any other HP loss this step (future hazards etc.) still ends the run.
   if (player && player.hp <= 0) resolvePlayerDeath();

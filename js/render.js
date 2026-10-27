@@ -141,6 +141,13 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
     return;
   }
 
+  if (wpnId === 1) {   // v9.01: IB-94 Beskar heavy blaster pistol (Mandalorian primary)
+    tCtx.fillStyle = "#37474f"; tCtx.fillRect(-2.5, -1.1, 3.4, 3.2);
+    tCtx.fillStyle = "#cfd8dc"; tCtx.fillRect(0, -1.9, 9.5 * lenMul, 2.6);
+    tCtx.fillStyle = "#78909c"; tCtx.fillRect(9.5 * lenMul, -1.3, 3.2, 1.7);
+    tCtx.fillStyle = "#263238"; tCtx.fillRect(2 - rackShift * 2.0, -3.1, 4.6, 1.2);
+    return;
+  }
   if (wpnId === 54) {
     tCtx.fillStyle = "#6d4c41"; tCtx.fillRect(-5, -1.2, 5, 2.6);
     tCtx.fillStyle = "#263238"; tCtx.fillRect(0, -1.6, 14 * lenMul, 3.0);
@@ -693,6 +700,9 @@ function renderBiomeAndWorld() {
   const left = player.x - viewW * 0.5;
   const top = player.y - viewH * 0.5;
 
+  // v10 adaptive biomes (js/biomes.js) paint the ground, decals and hazards for the hero's universe.
+  const themed = (typeof biomeRenderGround === "function") && biomeRenderGround(left, top, viewW, viewH, bRing);
+  if (!themed) {
   ctx.fillStyle = bgCol;
   ctx.fillRect(left, top, viewW, viewH);
   if (bRing && bRing.tint && bRing.tint !== "rgba(0,0,0,0)") {
@@ -709,6 +719,7 @@ function renderBiomeAndWorld() {
   for (let gx = gx0; gx < left + viewW; gx += gStep) { ctx.moveTo(gx, top); ctx.lineTo(gx, top + viewH); }
   for (let gy = gy0; gy < top + viewH; gy += gStep) { ctx.moveTo(left, gy); ctx.lineTo(left + viewW, gy); }
   ctx.stroke();
+  }
 
   const cSize = typeof CHUNK_SIZE !== "undefined" ? CHUNK_SIZE : 256;
   const cx0 = Math.floor(left / cSize), cx1 = Math.floor((left + viewW) / cSize);
@@ -717,7 +728,7 @@ function renderBiomeAndWorld() {
   for (let cy = cy0; cy <= cy1; cy++) {
     for (let cx = cx0; cx <= cx1; cx++) {
       const h = (cx * 73856093) ^ (cy * 19349663) ^ (typeof runSeed !== "undefined" ? runSeed : 1337);
-      for (let p = 0; p < 3; p++) {
+      for (let p = 0; p < 3 && !themed; p++) {
         const px = cx * cSize + ChaosMath.range(h + p * 31, 24, cSize - 24);
         const py = cy * cSize + ChaosMath.range(h + p * 59, 24, cSize - 24);
         const pr = ChaosMath.range(h + p * 83, 14, 38);
@@ -733,6 +744,8 @@ function renderBiomeAndWorld() {
         const r = o.rad || 20;
         ctx.save();
         ctx.translate(o.x, o.y);
+        if ((themed && o.type <= 3 && biomeDrawObject(o, r)) ||
+            (o.type >= 7 && typeof drawExtraWorldObject === "function" && drawExtraWorldObject(o, r))) { ctx.restore(); continue; }
 
         if (o.type === 0) {
           ctx.save(); ctx.translate(4, 5);
@@ -870,6 +883,7 @@ function renderBiomeAndWorld() {
 /* === 6. RENDER ALLIED MINIONS === */
 function renderAlliedMinions() {
   if (typeof mAct === "undefined") return;
+  if (typeof squadRenderMinions === "function") { squadRenderMinions(); return; }   // v10 js/squad.js
   for (let i = 0; i < MAX_MINION; i++) {
     if (!mAct[i]) continue;
     const mx = mX[i], my = mY[i], kind = mKind[i], rad = mRad[i] || 10;
@@ -898,6 +912,99 @@ function renderAlliedMinions() {
   }
 }
 
+/* === 6b. v9.01 DEAD HEADS, KNOCKED HELMETS & COLOURED PARTICLES === */
+const DEAD_SKIN = ["#f1c27d", "#e0ac69", "#c68642", "#8d5524", "#ffdbac", "#d1a17a"];
+const DEAD_HAIR = ["#2b1b12", "#4e342e", "#1b1b1b", "#8d6e63", "#d7ccc8", "#3e2723"];
+// Draws a dead head centred on (0,0), face "up" = -y. Everything derives from `seed`, so the same
+// body always renders the same face/helmet, and eyes are fixed (no gaze tracking, no blinking).
+function drawDeadHead(tCtx, seed, helmCol, helmetOff, type, rOverride) {
+  const h = Math.imul((seed >>> 0) ^ 0x9e3779b9, 2246822519) >>> 0;
+  const r = rOverride > 0 ? rOverride : (type === 99 ? 5.2 : 3.1 + (h % 11) / 10);
+  if (!helmetOff) {
+    tCtx.fillStyle = helmCol || "#90a4ae";
+    tCtx.beginPath(); tCtx.arc(0, 0, r, 0, Math.PI * 2); tCtx.fill();
+    tCtx.fillStyle = "#0b0f14";                                   // visor - lights out
+    tCtx.fillRect(-r * 0.72, -r * 0.42, r * 1.44, r * 0.5);
+    tCtx.fillStyle = "rgba(120, 144, 156, 0.55)";                 // dead lens glints, fixed
+    tCtx.fillRect(-r * 0.5, -r * 0.34, r * 0.32, r * 0.22);
+    tCtx.fillRect(r * 0.18, -r * 0.34, r * 0.32, r * 0.22);
+    return;
+  }
+  const skin = DEAD_SKIN[h % DEAD_SKIN.length], hair = DEAD_HAIR[(h >>> 4) % DEAD_HAIR.length];
+  tCtx.fillStyle = skin;
+  tCtx.beginPath(); tCtx.arc(0, 0, r, 0, Math.PI * 2); tCtx.fill();
+  if ((h >>> 8) % 4 !== 0) {                                      // hair (25% shaved / bald)
+    tCtx.fillStyle = hair;
+    tCtx.beginPath(); tCtx.arc(0, 0, r, Math.PI * 1.08, Math.PI * 1.92); tCtx.closePath(); tCtx.fill();
+  }
+  const sp = r * (0.36 + ((h >>> 12) % 5) * 0.04), ey = -r * 0.12, es = r * (0.22 + ((h >>> 15) % 3) * 0.04);
+  const gaze = ((h >>> 18) % 8) / 8 * Math.PI * 2, gx = Math.cos(gaze) * es * 0.35, gy = Math.sin(gaze) * es * 0.25;
+  for (let side = -1; side <= 1; side += 2) {
+    tCtx.fillStyle = "#cfd8dc";                                   // faded, glassy whites
+    tCtx.fillRect(side * sp - es, ey - es * 0.55, es * 2, es * 1.1);
+    tCtx.fillStyle = "#546e7a";                                   // dull pupils, fixed gaze
+    tCtx.fillRect(side * sp - es * 0.38 + gx, ey - es * 0.3 + gy, es * 0.76, es * 0.62);
+    tCtx.fillStyle = skin;                                        // heavy half-closed lids
+    tCtx.fillRect(side * sp - es * 1.05, ey - es * 0.75, es * 2.1, es * 0.62);
+    tCtx.strokeStyle = hair; tCtx.lineWidth = Math.max(0.5, r * 0.14);   // brow, seeded tilt
+    const tilt = (((h >>> 21) % 5) - 2) * 0.08 * side;
+    tCtx.beginPath(); tCtx.moveTo(side * sp - es * 1.1, ey - es * 1.15 - tilt * r); tCtx.lineTo(side * sp + es * 1.1, ey - es * 1.15 + tilt * r); tCtx.stroke();
+  }
+  tCtx.strokeStyle = "rgba(60, 30, 20, 0.55)"; tCtx.lineWidth = Math.max(0.45, r * 0.11);
+  tCtx.beginPath(); tCtx.moveTo(0, ey + es * 0.2); tCtx.lineTo(r * 0.06, ey + es * 0.2 + r * (0.22 + ((h >>> 24) % 3) * 0.05)); tCtx.stroke();   // nose
+  tCtx.beginPath(); tCtx.moveTo(-r * 0.22, r * 0.5); tCtx.lineTo(r * 0.24, r * 0.46); tCtx.stroke();                                              // slack mouth
+}
+
+function drawKnockedHelmet(tCtx, col) {
+  tCtx.fillStyle = col || "#90a4ae";
+  tCtx.beginPath(); tCtx.ellipse(0, 0, 4.6, 3.8, 0, Math.PI * 0.95, Math.PI * 2.05); tCtx.closePath(); tCtx.fill();
+  tCtx.fillStyle = "#0b0f14"; tCtx.fillRect(-3.2, -1.4, 6.4, 1.6);
+  tCtx.strokeStyle = "rgba(255,255,255,0.28)"; tCtx.lineWidth = 0.7;
+  tCtx.beginPath(); tCtx.ellipse(0, 0, 4.6, 3.8, 0, Math.PI * 1.1, Math.PI * 1.6); tCtx.stroke();
+}
+
+function drawSpineTrophy(tCtx) {
+  tCtx.fillStyle = "#eceff1";
+  tCtx.beginPath(); tCtx.arc(6, 0, 3.4, 0, Math.PI * 2); tCtx.fill();
+  tCtx.fillStyle = "#263238"; tCtx.fillRect(6.6, -1.6, 1.3, 1.2); tCtx.fillRect(6.6, 0.5, 1.3, 1.2);
+  tCtx.fillStyle = "#d7ccc8";
+  for (let v = 0; v < 6; v++) tCtx.fillRect(1.5 - v * 2.4, -1.1, 1.8, 2.2);
+  tCtx.fillStyle = "#b71c1c"; tCtx.fillRect(-13, -0.5, 14, 1.0);
+}
+
+function drawParticles() {
+  ctx.save();
+  for (let i = 0; i < MAX_PT; i++) {            // smoke underneath
+    if (!ptAct[i] || ptKind[i] !== 2) continue;
+    const f = ptLife[i] / (ptMax[i] || 1);
+    ctx.globalAlpha = Math.min(0.4, f * 0.5);
+    ctx.fillStyle = PT_PALETTE[ptCol[i]] || "#90a4ae";
+    ctx.beginPath(); ctx.arc(ptX[i], ptY[i], ptSize[i], 0, Math.PI * 2); ctx.fill();
+  }
+  for (let i = 0; i < MAX_PT; i++) {
+    if (!ptAct[i]) continue;
+    const k = ptKind[i];
+    if (k === 2) continue;
+    const f = ptLife[i] / (ptMax[i] || 1), sz = ptSize[i] || 3;
+    if (k === 1) {                                 // flame: white-hot -> orange -> red, shrinking
+      ctx.globalAlpha = Math.min(1, 0.3 + f);
+      ctx.fillStyle = f > 0.66 ? "#fff59d" : (f > 0.33 ? "#ff9100" : "#ff3d00");
+      const s2 = sz * (0.45 + f * 0.65);
+      ctx.fillRect(ptX[i] - s2 * 0.5, ptY[i] - s2 * 0.5, s2, s2);
+    } else if (k === 5) {                          // dust puff
+      ctx.globalAlpha = Math.min(0.32, f * 0.4);
+      ctx.fillStyle = PT_PALETTE[ptCol[i]] || "#a1887f";
+      ctx.beginPath(); ctx.arc(ptX[i], ptY[i], sz, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.globalAlpha = k === 3 ? Math.min(1, f * 3) : (k === 4 ? Math.min(1, f * 1.4) : 1);
+      ctx.fillStyle = PT_PALETTE[ptCol[i]] || "#ffd166";
+      if (k === 3) ctx.fillRect(ptX[i] - 1.2, ptY[i] - 0.6, 2.4, 1.2);   // brass casing
+      else ctx.fillRect(ptX[i] - sz * 0.5, ptY[i] - sz * 0.5, sz, sz);
+    }
+  }
+  ctx.restore();
+}
+
 /* === 7. MASTER SCENE RENDERER === */
 const ENEMY_NAMES = ["SECTOR HENCHMAN", "CYBER-WOLF", "ARACHNID DRONE", "HEAVY BRUTE"];
 
@@ -920,10 +1027,13 @@ function renderScene() {
   ctx.fillRect(0, 0, W, H);
   if (!runActive || !player) return;
 
+  // v10 camera: screen shake, cinematic zoom and focus offset (glory kills / boss kills) from js/fx.js
+  const cam = (typeof fxCamera === "function") ? fxCamera() : null;
   ctx.save();
-  ctx.translate(W * 0.5, H * 0.5);
-  ctx.scale(opts.zoom, opts.zoom);
-  ctx.translate(-player.x, -player.y);
+  ctx.translate(W * 0.5 + (cam ? cam.sx : 0), H * 0.5 + (cam ? cam.sy : 0));
+  const camZoom = opts.zoom * (cam ? cam.zoom : 1);
+  ctx.scale(camZoom, camZoom);
+  ctx.translate(-(player.x + (cam ? cam.fx : 0)), -(player.y + (cam ? cam.fy : 0)));
 
   renderBiomeAndWorld();
 
@@ -938,6 +1048,8 @@ function renderScene() {
     ctx.save(); ctx.translate(lmbX[i], lmbY[i]); ctx.rotate(lmbRot[i]);
     ctx.fillStyle = lmbCol[i];
     if (lmbKind[i] === 2) { ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill(); }
+    else if (lmbKind[i] === 3) drawKnockedHelmet(ctx, lmbCol[i]);
+    else if (lmbKind[i] === 4) drawSpineTrophy(ctx);
     else ctx.fillRect(-4, -1.8, 8, 3.6);
     ctx.restore();
   }
@@ -967,10 +1079,12 @@ function renderScene() {
       ctx.strokeRect(-3.5, -4.5, 9, 9);
     }
 
-    ctx.fillStyle = (typeof corpHeadCol !== "undefined" && corpHeadCol[i]) ? corpHeadCol[i] : "#90a4ae";
-    ctx.beginPath();
-    ctx.arc(7.5, 0, 3.6, 0, Math.PI * 2);
-    ctx.fill();
+    // v9.01: deterministic dead head - helmet kept or knocked off is a pure function of corpSeed, eyes
+    // are static, faded and fixed in one direction (no blinking, no per-frame re-roll).
+    const cHead = (typeof corpHeadCol !== "undefined" && corpHeadCol[i]) ? corpHeadCol[i] : "#90a4ae";
+    ctx.save(); ctx.translate(7.5, 0); ctx.rotate(Math.PI * 0.5);
+    drawDeadHead(ctx, corpSeed[i], cHead, corpType[i] < 98 && corpseHelmetOff(corpSeed[i]), corpType[i], 0);
+    ctx.restore();
     ctx.restore();
   }
 
@@ -992,8 +1106,10 @@ function renderScene() {
           ctx.lineWidth = 0.9;
           ctx.strokeRect(-r * 0.65, -r * 0.85, r * 1.3, r * 0.85);
         }
-        ctx.fillStyle = (typeof slHeadCol !== "undefined" && slHeadCol[i]) ? slHeadCol[i] : slBodyCol[i];
-        ctx.beginPath(); ctx.arc(0, -r * 0.95, r * 0.42, 0, Math.PI * 2); ctx.fill();
+        const sHead = (typeof slHeadCol !== "undefined" && slHeadCol[i]) ? slHeadCol[i] : slBodyCol[i];
+        ctx.save(); ctx.translate(0, -r * 0.95);
+        drawDeadHead(ctx, slSeed[i], sHead, slHelmetOff[i] === 1, isVet ? 98 : 0, r * 0.42);   // locked to slSeed / slHelmetOff
+        ctx.restore();
       } else {
         ctx.fillRect(-r * 0.6, 0, r * 1.2, r * 0.65);
         ctx.fillStyle = "#263238";
@@ -1025,7 +1141,9 @@ function renderScene() {
     const ex = eX[i], ey = eY[i] - (isLevitating ? (eLevZ[i] || 0) : (isKneeling ? -5 : 0)), et = eType[i];
     const baseR = et === 99 ? 22 : (et === 3 ? 15 : 11);
 
-    if (et === 98 && eRivalCid[i] >= 0) {
+    if (eDummy[i] && typeof drawTrainingDummy === "function") {
+      drawTrainingDummy(ex, ey, baseR, i);
+    } else if (et === 98 && eRivalCid[i] >= 0) {
       const rFac = FACTIONS[CHAR_RAW[eRivalCid[i]][1]] || player.fac;
       drawHeroSprite(ex, ey, rFac, eRivalCid[i], runTime * 4, Math.atan2(player.y - ey, player.x - ex), 0, ctx, -1);
     } else {
@@ -1037,7 +1155,7 @@ function renderScene() {
         ctx.fillStyle = "#ffd600";
         ctx.beginPath(); ctx.arc(ex, ey - baseR * 0.55, baseR * 0.45, 0, Math.PI * 2); ctx.fill();
       } else {
-        ctx.fillStyle = et === 99 ? "#ff1744" : (eFormType[i] === 1 ? "#ffd166" : player.fac.c2);
+        ctx.fillStyle = et === 99 ? "#ff1744" : (eFormType[i] === 1 ? "#ffd166" : enemyCol2());
         const crawlOff = (eLegsLost[i] >= 2 || isKneeling) ? 4 : 0;
         if (!isKneeling) {
           if (eLegsLost[i] < 1) ctx.fillRect(ex - 4, ey + 4, 3, 6);
@@ -1075,6 +1193,8 @@ function renderScene() {
       drawSmolderingSliceLine(ctx, baseR * 0.68, eScarHeat[i], scarGlow);
       ctx.restore();
     }
+
+    if ((eEcho[i] || eStagger[i] > 0) && typeof drawEnemyStatusFx === "function") drawEnemyStatusFx(i, ex, ey, baseR);
 
     if (eHP[i] < eMax[i] || et >= 98) {
       const bw = et === 99 ? 36 : 20;
@@ -1249,15 +1369,17 @@ function renderScene() {
     } else if (st === 2 && !pEnemy[i]) {
       const rAng = Math.atan2(pVY[i], pVX[i]);
       ctx.save(); ctx.translate(pX[i], pY[i]); ctx.rotate(rAng);
-      for (let sm = 1; sm <= 3; sm++) {
-        ctx.fillStyle = `rgba(176, 190, 197, ${0.42 - sm * 0.11})`;
-        ctx.beginPath(); ctx.arc(-6 * sm, (Math.random() - 0.5) * 3, 2.2 + sm * 1.4, 0, Math.PI * 2); ctx.fill();
-      }
-      ctx.fillStyle = "#ff9100"; ctx.beginPath(); ctx.arc(-4.5, 0, 2.8 + Math.random() * 1.5, 0, Math.PI * 2); ctx.fill();
+      const flick = 2.9 + Math.sin(runTime * 61 + i * 1.7) * 0.9;
+      ctx.fillStyle = "#ff9100"; ctx.beginPath(); ctx.arc(-4.8, 0, flick, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fff59d"; ctx.beginPath(); ctx.arc(-4.2, 0, flick * 0.45, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#eceff1"; ctx.fillRect(-4, -2, 7.5, 4);
       ctx.fillStyle = "#ff1744";
       ctx.beginPath(); ctx.moveTo(3.5, -2.4); ctx.lineTo(7.5, 0); ctx.lineTo(3.5, 2.4); ctx.closePath(); ctx.fill();
       ctx.restore();
+    } else if (st === 9) {   // v10 squad rifle tracer
+      const sp = Math.hypot(pVX[i], pVY[i]) || 1;
+      ctx.strokeStyle = pSup[i] ? "#ffd166" : "#ffe082"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(pX[i] - pVX[i] / sp * 10, pY[i] - pVY[i] / sp * 10); ctx.lineTo(pX[i], pY[i]); ctx.stroke();
     } else if (st === 6) {
       ctx.strokeStyle = pSup[i] ? "#ffd166" : player.fac.c1; ctx.lineWidth = 2.4;
       ctx.beginPath(); ctx.arc(pX[i], pY[i], pRad[i], 0, Math.PI * 2); ctx.stroke();
@@ -1280,10 +1402,8 @@ function renderScene() {
     }
   }
 
-  ctx.fillStyle = "#ffd166";
-  for (let i = 0; i < MAX_PT; i++) {
-    if (ptAct[i]) ctx.fillRect(ptX[i] - 1.5, ptY[i] - 1.5, 3, 3);
-  }
+  drawParticles();
+  if (V10.onRenderWorld.length) v10Run(V10.onRenderWorld, ctx);
   ctx.textAlign = "center";
   for (let i = 0; i < MAX_D; i++) {
     if (!dAct[i]) continue;
@@ -1300,5 +1420,6 @@ function renderScene() {
     ctx.fillStyle = "rgba(255, 209, 102, 0.65)";
     ctx.beginPath(); ctx.arc(joy.ox + joy.dx * opts.joySize, joy.oy + joy.dy * opts.joySize, 14, 0, Math.PI * 2); ctx.fill();
   }
+  if (V10.onRenderScreen.length) v10Run(V10.onRenderScreen, ctx);
 }
 // EOF:js/render.js

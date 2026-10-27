@@ -47,9 +47,11 @@ function getChunk(cx, cy) {
     } else if (roll < 0.74) {
       type = 2; rad = 12 + rng() * 6; tall = false; // Faction Crystal / Beacon Decor
     } else if (roll < 0.88) {
-      type = 3; rad = 22 + rng() * 10; tall = false; // Thermal / Acid Hazard Zone
+      type = 3; rad = (22 + rng() * 10) * ((player && player.hazardRadMul) || 1); tall = false; // Thermal / Acid Hazard Zone
     } else if (roll < 0.96) {
       type = 4; rad = 15; tall = false; // Interactive Supply Loot Pod
+      // v10: ~1 in 5 pods away from spawn is a squad radio beacon (call in a fireteam, js/squad.js)
+      if (distFromStart > 300 && rng() < 0.2) { type = 7; rad = 14; }
     } else {
       type = (distFromStart > 700 && rng() < 0.45) ? 6 : 5; // 5=Hovercraft, 6=Combat Mech
       rad = 18; tall = false;
@@ -168,7 +170,7 @@ function findInteractTarget() {
         if (d < bestD) {
           bestD = d;
           const lbl = o.type === 4 ? `[OPEN ${(player.fac ? player.fac.loot : "SUPPLY POD").toUpperCase()}]`
-            : (o.type === 5 ? "[BOARD HOVERCRAFT]" : "[PILOT COMBAT MECH]");
+            : (o.type === 5 ? "[BOARD HOVERCRAFT]" : (o.type === 7 ? "[RADIO: CALL IN FIRETEAM]" : "[PILOT COMBAT MECH]"));
           best = { kind: "chunkObj", obj: o, x: o.x, y: o.y, label: lbl };
         }
       }
@@ -215,6 +217,8 @@ function triggerWorldInteract() {
       player.inVehicle = 1; player.vehicleHp = 120;
       spawnSpeech(player.x, player.y, "HOVERCRAFT SKIMMER ONLINE!", "#00e5ff", 1.8);
       sfx(220, 640, 0.2, "sawtooth");
+    } else if (o.type === 7) {
+      if (typeof squadCallFireteam === "function") squadCallFireteam(o.x, o.y, "beacon");
     } else if (o.type === 6) {
       player.inVehicle = 2; player.vehicleHp = 260;
       spawnSpeech(player.x, player.y, "HEAVY COMBAT MECH ENGAGED (+60% DMG)!", "#ffd166", 2.0);
@@ -230,17 +234,22 @@ function updateWorldObjects(simDt) {
   //    as soon as the player stepped into the next chunk). At most one hazard ticks per frame.
   if (!player.hazImmune && player.inVehicle === 0 && !player.hover) {
     const cx = Math.floor(player.x / CHUNK_SIZE), cy = Math.floor(player.y / CHUNK_SIZE);
-    let inHazard = false;
+    let inHazard = false, hz = null;
     for (let dy = -1; dy <= 1 && !inHazard; dy++) {
       for (let dx = -1; dx <= 1 && !inHazard; dx++) {
         const objs = getChunk(cx + dx, cy + dy);
         for (let i = 0; i < objs.length; i++) {
           const o = objs[i];
-          if (o.type === 3 && Math.hypot(player.x - o.x, player.y - o.y) < o.rad) { inHazard = true; break; }
+          if (o.type === 3 && Math.hypot(player.x - o.x, player.y - o.y) < o.rad) { inHazard = true; hz = o; break; }
         }
       }
     }
-    if (inHazard) player.hp = Math.max(1, player.hp - 4.5 * simDt);
+    // v10: the hazard's effect comes from the active adaptive biome (lava burns, sand pits slow,
+    // electrified puddles shock...). Fallback = the original 4.5 HP/s non-lethal burn.
+    if (inHazard) {
+      if (typeof biomeHazardTick === "function") biomeHazardTick(hz, simDt);
+      else player.hp = Math.max(1, player.hp - 4.5 * simDt);
+    }
   }
 
   // 2. Update Active Forts (Auto-Turret Fire & Enemy Pushback)

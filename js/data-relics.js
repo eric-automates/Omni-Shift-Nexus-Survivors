@@ -58,10 +58,26 @@ const RELICS_DB = [
   [49, "Nexus Singularity Core", "+15% All Damage, +15% Area & -10% Cooldown", "omni", 0.15]
 ];
 
+// v9.01 (Boss Relic Crash hardening): every relic row is now a proper object with .id / .name /
+// .desc / .key / .val. The rows stay real arrays, so legacy r[0]..r[4] reads and destructuring keep
+// working, while code that expects relic objects (r.name.toUpperCase() on boss kills) can no longer
+// hit "Cannot read properties of undefined". relicRow() accepts either shape.
+RELICS_DB.forEach(r => {
+  if (!Array.isArray(r)) return;
+  r.id = r[0]; r.name = r[1]; r.desc = r[2]; r.key = r[3]; r.val = r[4];
+});
+function relicRow(r) {
+  if (!r) return null;
+  if (Array.isArray(r)) return r;
+  const row = [r.id, r.name, r.desc, r.key, r.val];
+  row.id = r.id; row.name = r.name; row.desc = r.desc; row.key = r.key; row.val = r.val;
+  return row;
+}
+
 /* === 2. ALL 80 BESPOKE SIDE-PROFILE WEAPON SILHOUETTE SVGs (#00-#79) === */
 const WPN_SVG_56 = {
   0: (c1, c2) => `<line x1="7" y1="17" x2="21" y2="3" stroke="${c1}" stroke-width="4.2" stroke-linecap="round"/><line x1="7" y1="17" x2="21" y2="3" stroke="#fff" stroke-width="1.6"/><line x1="2.5" y1="21.5" x2="7.5" y2="16.5" stroke="#cfd8dc" stroke-width="3.4"/><circle cx="6.5" cy="17.5" r="1.5" fill="#ff1744"/>`,
-  1: (c1, c2) => `<rect x="3" y="11" width="11" height="5" rx="1" fill="#607d8b" stroke="${c2}" stroke-width="1"/><polygon points="14,10 22,7 17,12" fill="${c1}"/><polygon points="14,13 23,13 17,15" fill="${c1}"/><polygon points="14,16 22,19 17,14" fill="${c1}"/>`,
+  1: (c1, c2) => `<path d="M2.5,10 L16.5,10 L16.5,8.6 L22,8.6 L22,12.2 L16.5,12.2 L16.5,13.2 L9.5,13.2 L7.6,19.5 L3.8,19.5 L5.2,13.2 L2.5,13.2 Z" fill="#b0bec5" stroke="${c2}" stroke-width="0.9"/><rect x="7.5" y="6.6" width="6.5" height="2.2" rx="0.6" fill="#546e7a"/><line x1="22" y1="10.4" x2="24" y2="10.4" stroke="${c1}" stroke-width="1.8"/>`,  // v9.01: IB-94 Beskar Heavy Pistol
   2: (c1, c2) => `<rect x="4" y="11" width="17" height="3.2" fill="#263238" stroke="#cfd8dc" stroke-width="0.9"/><rect x="8" y="8" width="6" height="2.2" fill="${c2}"/><rect x="6" y="14" width="2.5" height="5" fill="#78909c"/><rect x="11" y="14" width="3" height="3" fill="${c1}"/>`,
   3: (c1, c2) => `<line x1="8" y1="16" x2="21" y2="3" stroke="#ff1744" stroke-width="4" stroke-linecap="round"/><line x1="8" y1="16" x2="21" y2="3" stroke="#fff" stroke-width="1.4"/><path d="M2,20 Q5,20 8,16" fill="none" stroke="#90a4ae" stroke-width="3.2"/><polyline points="6,11 11,7 9,4 15,2" fill="none" stroke="#00e5ff" stroke-width="1.4"/>`,
   4: (c1, c2) => `<rect x="2" y="11" width="12" height="3" fill="#cfd8dc" stroke="#1e88e5" stroke-width="1"/><polygon points="14,9 20,11 14,12" fill="${c2}"/><polygon points="14,13 20,14 14,16" fill="${c2}"/><circle cx="21" cy="12.5" r="2" fill="${c1}"/>`,

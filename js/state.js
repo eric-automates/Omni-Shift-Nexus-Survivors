@@ -19,12 +19,45 @@ const OPTS_KEY = "OMNISHIFT_OPTS_V1";
 let opts = {
   zoom: 1.0, dmgNums: true, flash: true, lowPart: false, hiCon: true,
   fps: true, vol: 0.45, amb: true, joySize: 44, ttDelay: 350, hudFlip: false,
-  persistCount: 100, doubleTapDash: true, timeScale: 1.0
+  persistCount: 100, doubleTapDash: true, timeScale: 1.0,
+  shake: true, perfHud: true, weather: true   // v10 game-feel options
 };
 
-// Temporal Nexus speed range (HUD buttons + Options menu share these limits).
-const TIME_SCALE_MIN = 0.1, TIME_SCALE_MAX = 3.0;
+// v9.01 Temporal Nexus step ladder (HUD "-" / "1.0x" / "+" buttons and the Options menu share it).
+// Negative rungs stream BACKWARD through the rewind ring buffer (js/rewind.js); forward rungs run the
+// simulation sub-stepped (js/sim.js updateSim). Only forward speeds are ever saved to options.
+const TIME_LADDER = [-5.0, -2.5, -1.0, -0.5, -0.25, -0.1, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5];
+const TIME_SCALE_MIN = -5.0, TIME_SCALE_MAX = 3.5, TIME_FWD_MIN = 0.1;
 let timeScale = 1.0;
+
+function snapToLadder(v, forwardOnly = false) {
+  let best = 1.0, bestD = 1e9;
+  for (let i = 0; i < TIME_LADDER.length; i++) {
+    const r = TIME_LADDER[i];
+    if (forwardOnly && r <= 0) continue;
+    const d = Math.abs(r - v);
+    if (d < bestD) { bestD = d; best = r; }
+  }
+  return best;
+}
+function fmtTimeScale(v) {
+  const a = Math.abs(v);
+  return ((a < 1 && Math.round(a * 100) % 10 !== 0) ? v.toFixed(2) : v.toFixed(1)) + "x";
+}
+
+/* === 1b. v10 MODULE HOOKS ===
+   New feature modules (fx, rewind, arsenal, squad, glory, biomes, campaign, proving) register here
+   instead of being wired into every core loop. A failing hook is reported once and skipped. */
+const V10 = { onRunStart: [], onRunReset: [], onStep: [], onKill: [], onRenderWorld: [], onRenderScreen: [], onFrame: [] };
+const v10ErrSeen = new Set();
+function v10Run(list, a, b, c, d) {
+  for (let i = 0; i < list.length; i++) {
+    try { list[i](a, b, c, d); } catch (e) {
+      const msg = (list[i].name || "hook") + ": " + (e && e.message);
+      if (!v10ErrSeen.has(msg)) { v10ErrSeen.add(msg); if (window.trackProgress) window.trackProgress("v10 hook error " + msg, true); }
+    }
+  }
+}
 
 // FIX: options were never written to storage although the Options screen says "SAVE & BACK".
 function loadOpts() {
@@ -38,13 +71,14 @@ function loadOpts() {
     });
     opts.zoom = Math.max(0.5, Math.min(2.0, opts.zoom || 1.0));
     opts.vol = Math.max(0, Math.min(1, opts.vol));
-    timeScale = Math.max(TIME_SCALE_MIN, Math.min(TIME_SCALE_MAX, opts.timeScale || 1.0));
+    // never boot into rewind; snap old free-form values (e.g. 2.2x) onto the ladder
+    timeScale = snapToLadder(Math.max(TIME_FWD_MIN, Math.min(TIME_SCALE_MAX, opts.timeScale || 1.0)), true);
     opts.timeScale = timeScale;
   } catch (e) {}
 }
 
 function saveOpts() {
-  opts.timeScale = timeScale;
+  opts.timeScale = timeScale > 0 ? timeScale : 1.0;
   try { localStorage.setItem(OPTS_KEY, JSON.stringify(opts)); } catch (e) {}
 }
 
@@ -62,7 +96,7 @@ let W = window.innerWidth, H = window.innerHeight;
 function resize() { W = cv.width = window.innerWidth; H = cv.height = window.innerHeight; }
 window.addEventListener("resize", resize); resize();
 
-const MAX_E = 360, MAX_P = 520, MAX_O = 500, MAX_D = 140, MAX_PT = 240,
+const MAX_E = 360, MAX_P = 520, MAX_O = 500, MAX_D = 140, MAX_PT = 1400,
       MAX_DRIP = 320, MAX_SH = 100, MAX_CORPSE = 220, MAX_LIMB = 400, MAX_MINION = 36;
 
 const eX = new Float32Array(MAX_E), eY = new Float32Array(MAX_E),
@@ -84,6 +118,12 @@ const eLegDmg = new Float32Array(MAX_E), eTailDmg = new Float32Array(MAX_E),
 // Levitation / Wingardium Leviosa Float-Away State
 const eLevitate = new Float32Array(MAX_E), eLevZ = new Float32Array(MAX_E),
       eLevVX = new Float32Array(MAX_E), eLevVY = new Float32Array(MAX_E);
+
+// v10: unique spawn id (rewind identity), rewind "temporal echo" flag (no second payout),
+// glory-kill stagger timer, and Proving Ground training-dummy flag.
+const eUid = new Uint32Array(MAX_E), eEcho = new Uint8Array(MAX_E),
+      eStagger = new Float32Array(MAX_E), eDummy = new Uint8Array(MAX_E);
+let enemyUidCounter = 1;
 
 // Allied Necromancer & Transfiguration Minion Pool (0=Swordsman, 1=Critter/Hound/Viper, 2=Bowman, 3=Knight, 4=Bone Golem)
 const mX = new Float32Array(MAX_MINION), mY = new Float32Array(MAX_MINION),
@@ -156,6 +196,14 @@ const dTxt = new Array(MAX_D).fill(""), dCol = new Array(MAX_D).fill("#ffffff");
 const ptX = new Float32Array(MAX_PT), ptY = new Float32Array(MAX_PT),
       ptVX = new Float32Array(MAX_PT), ptVY = new Float32Array(MAX_PT),
       ptLife = new Float32Array(MAX_PT), ptAct = new Uint8Array(MAX_PT);
+// v9.01 coloured particles: palette index, size, max life (for fades) and behaviour kind
+// (0 spark, 1 fire, 2 smoke, 3 brass casing, 4 ember, 5 dust). Allocation is a ring buffer, so an
+// emission never fails (the oldest particle is recycled) - missile trails are continuous.
+const PT_PALETTE = ["#ffd166", "#ffffff", "#fff59d", "#ffb300", "#ff6d00", "#ff1744", "#90a4ae", "#cfd8dc",
+                    "#d4a537", "#00e5ff", "#00e676", "#e040fb", "#a1887f", "#b71c1c", "#ffe082", "#546e7a"];
+const ptCol = new Uint8Array(MAX_PT), ptSize = new Float32Array(MAX_PT),
+      ptMax = new Float32Array(MAX_PT), ptKind = new Uint8Array(MAX_PT);
+let ptHead = 0;
 
 let runChunkDeltas = new Map();
 let activeForts = [], activeMines = [], movedBarricades = [], activeBarriers = [], activeWeaponDrops = [];
@@ -343,15 +391,31 @@ function respecHeroes() {
   return refund;
 }
 
+// v9.01: the "-" / "+" buttons now walk one rung of TIME_LADDER (+3.5x ... 1.0x ... -0.1x ... -5.0x)
+// instead of jumping in 0.5x steps; "1.0x" resets. delta only gives the direction (sign).
 function setTimeScale(delta, reset = false) {
-  // FIX: the HUD "+0.5x" button had no upper bound (16x after 30 taps), which made fast
-  // projectiles tunnel through enemies. Clamp to the same 0.1x–3.0x range as the Options menu.
-  const next = reset ? 1.0 : +(timeScale + delta).toFixed(1);
-  timeScale = Math.max(TIME_SCALE_MIN, Math.min(TIME_SCALE_MAX, next));
-  const lbl = document.getElementById("timeScaleLbl");
-  if (lbl) lbl.textContent = timeScale.toFixed(1) + "x";
-  sfx(300 + timeScale * 80, 420 + timeScale * 80, 0.05, "sine", 0.12);
+  const prev = timeScale;
+  let idx = TIME_LADDER.indexOf(snapToLadder(timeScale));
+  if (reset) idx = TIME_LADDER.indexOf(1.0);
+  else if (delta > 0) idx = Math.min(TIME_LADDER.length - 1, idx + 1);
+  else if (delta < 0) idx = Math.max(0, idx - 1);
+  applyTimeScale(TIME_LADDER[idx], prev);
+}
+function setTimeScaleExact(v) { applyTimeScale(snapToLadder(Math.max(TIME_SCALE_MIN, Math.min(TIME_SCALE_MAX, v))), timeScale); }
+function applyTimeScale(next, prev) {
+  timeScale = next;
+  if (typeof onTimeScaleChanged === "function") onTimeScaleChanged(prev, timeScale);
+  updateTimeLabel();
+  if (timeScale < 0) sfx(900 + timeScale * 60, 260, 0.09, "sawtooth", 0.08);
+  else sfx(300 + timeScale * 80, 420 + timeScale * 80, 0.05, "sine", 0.12);
   saveOpts();
+}
+function updateTimeLabel() {
+  const lbl = document.getElementById("timeScaleLbl");
+  if (!lbl) return;
+  const halted = (typeof rewindState !== "undefined") && rewindState.halted && timeScale < 0;
+  lbl.textContent = halted ? "0.0x ⏸ BUFFER START" : (timeScale < 0 ? "⏪ " + fmtTimeScale(timeScale) + " REWIND" : fmtTimeScale(timeScale));
+  lbl.style.color = timeScale < 0 ? "#ff80ab" : (timeScale > 1 ? "#ffd166" : (timeScale < 1 ? "#80deea" : ""));
 }
 
 function clearEnemyLimbState(idx, fadeDrips = true) {
@@ -406,7 +470,25 @@ function spawnCorpse(x, y, seed, type, legsLost, armsLost = 0, customCol = null,
   }
   corpAct[i] = 1;
   spawnDrip(x, y, -1, type >= 98 ? 8.0 : 6.0);
+  // v9.0/9.01 procedural heads: ~55% of henchmen lose their helmet/hood on death. The decision is a
+  // pure function of the corpse seed (corpseHelmetOff), so the head drawn every frame never flickers.
+  if (type < 98 && corpseHelmetOff(seed)) {
+    const ang = corpRot[i] + ((seed >>> 3) % 100) / 100 * 1.6 - 0.8;
+    const dist = 11 + ((seed >>> 9) % 7);
+    const li = lmbHead; lmbHead = (lmbHead + 1) % MAX_LIMB;
+    lmbX[li] = x + Math.cos(ang) * dist; lmbY[li] = y + Math.sin(ang) * dist;
+    lmbRot[li] = ((seed >>> 5) % 628) / 100; lmbKind[li] = 3;
+    lmbCol[li] = corpHeadCol[i]; lmbFade[li] = 1.0; lmbAct[li] = 1;
+  }
 }
+
+// v10 campaign: hostile faction palette for enemies (null = classic look mirroring the hero's faction).
+let hostileFac = null;
+function enemyCol2() { return hostileFac ? hostileFac.c2 : (player && player.fac ? player.fac.c2 : "#ff5252"); }
+function enemyCol1() { return hostileFac ? hostileFac.c1 : (player && player.fac ? player.fac.c1 : "#90a4ae"); }
+
+// Deterministic per-body face/helmet state (shared by corpses and bisected halves).
+function corpseHelmetOff(seed) { return (Math.imul(seed >>> 0, 2654435761) >>> 0) % 100 < 55; }
 
 function spawnWeaponDrop(x, y, wpnId) {
   if (typeof CHAR_RAW === "undefined" || !CHAR_RAW[wpnId]) return;
@@ -448,6 +530,9 @@ function purgeRunMemory() {
   if (typeof forcePushVis !== "undefined" && forcePushVis) forcePushVis.timer = 0;
   flashAlpha = 0; flameVisTimer = 0; muzzleFlashTimer = 0;
 
+  eUid.fill(0); eEcho.fill(0); eStagger.fill(0); eDummy.fill(0); ptHead = 0;
+  v10Run(V10.onRunReset);
+
   shWrite = 0; shCount = 0; activeCorpseCount = 0; player = null;
 }
 
@@ -472,16 +557,18 @@ function spawnSpeech(x, y, text, color = "#ffd166", dur = 2.4) {
   }
 }
 
-function spawnParticles(x, y, cnt = 5) {
+function spawnPt(x, y, vx, vy, life, size = 3, pal = 0, kind = 0) {
+  const i = ptHead; ptHead = (ptHead + 1) % MAX_PT;
+  ptX[i] = x; ptY[i] = y; ptVX[i] = vx; ptVY[i] = vy;
+  ptLife[i] = life; ptMax[i] = life; ptSize[i] = size; ptCol[i] = pal; ptKind[i] = kind; ptAct[i] = 1;
+  return i;
+}
+
+function spawnParticles(x, y, cnt = 5, pal = 0, size = 3, speedMul = 1) {
   if (opts.lowPart) cnt = Math.min(2, cnt);
   for (let k = 0; k < cnt; k++) {
-    for (let i = 0; i < MAX_PT; i++) {
-      if (!ptAct[i]) {
-        const a = Math.random() * Math.PI * 2, s = 40 + Math.random() * 90;
-        ptX[i] = x; ptY[i] = y; ptVX[i] = Math.cos(a) * s; ptVY[i] = Math.sin(a) * s;
-        ptLife[i] = 0.25 + Math.random() * 0.2; ptAct[i] = 1; break;
-      }
-    }
+    const a = Math.random() * Math.PI * 2, s = (40 + Math.random() * 90) * speedMul;
+    spawnPt(x, y, Math.cos(a) * s, Math.sin(a) * s, 0.25 + Math.random() * 0.2, size, pal, 0);
   }
 }
 
@@ -526,7 +613,10 @@ function spawnProj(x, y, vx, vy, dmg, life, rad, prc, style, sup, isEnemy = 0, w
       const muzzleOff = (spd > 1 && style !== 1 && style !== 6 && style !== 8) ? (isEnemy ? 16 : 20) : 0;
       pX[i] = x + (spd > 1 ? (vx / spd) * muzzleOff : 0);
       pY[i] = y + (spd > 1 ? (vy / spd) * muzzleOff : 0);
-      if (!isEnemy && muzzleOff > 0) muzzleFlashTimer = 0.055;
+      if (!isEnemy && muzzleOff > 0) {
+        muzzleFlashTimer = 0.055;
+        if (typeof fxOnPlayerShot === "function") fxOnPlayerShot(x, y, vx, vy, style, wpnId);
+      }
       pVX[i] = vx; pVY[i] = vy; pDmg[i] = dmg; pLife[i] = life;
       pRad[i] = rad; pPrc[i] = prc; pStyle[i] = style; pSup[i] = sup;
       pEnemy[i] = isEnemy; pHit[i] = 0; pBounce[i] = 0; pSnap[i] = 0; pDeflRolled[i] = 0;

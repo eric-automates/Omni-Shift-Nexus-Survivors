@@ -7,7 +7,7 @@
 /* === 1. 80 MULTIVERSE HEROES (#00-#79) === */
 const CHAR_RAW = [
   [0, 0, 0, "Aether-Blade Initiate", "Cyan Plasma Saber", "Twin-Sun Saber Mastery", "orbit", "Force Reflex", "+15% Speed, Form I->IV->V Saber Progression, Deflect & 100% Vacuum"],
-  [1, 0, 3, "Beskar Creed Tracker", "Whistling Micro-Darts", "Darksaber Phoenix Salvo", "missile", "Beskar Plating", "+4 Flat Armor & -20% Damage Taken"],
+  [1, 0, 3, "Beskar Creed Tracker", "IB-94 Beskar Heavy Pistol", "IB-94 Full-Charge Beskar Slugs", "beam", "Beskar Plating", "+4 Flat Armor & -20% Damage Taken"],
   [2, 0, 2, "Imperial White-Trooper", "E-11 Scatter Blaster", "Garrison Overwatch", "cone", "Suppressive Scatter", "+35% Fire Rate & +1 Projectile"],
   [3, 0, 8, "Crimson Sith Sovereign", "Crimson Sith Saber & Arc", "Unlimited Tempest Web", "chain", "Dark Hate Conduit", "100% Force Vacuum, Form IV->VII Sith Mastery & Kill Heal"],
   [4, 0, 4, "R2-Chirp Astro-Droid", "Electro-Prod & Oil Slick", "Hacked Turret Grid", "nova", "Overclocked Servos", "-18% All Weapon Cooldowns"],
@@ -314,7 +314,7 @@ function getHeroOutfits(cid) {
 /* === 5. ALL 80 BESPOKE 2-BUTTON UTILITY KITS (#00-#79) === */
 const UTILS_56 = [
   [["Saber Throw",6.5,"quadSpin","orbit","Hurls spinning lightsaber to impale & rip back"],["Force Repulse",10,"factionPulse","nova","Telekinetic wave blasts back surrounding foes"]],
-  [["Whistling Birds",8,"critBurst","missile","Launches seeking micro-munitions in all directions"],["Beskar Grapple",8.5,"grappleHook","grapple","Tethers & stuns the strongest nearby target"]],
+  [["Whistling Birds",120,"whistlingBirds","missile","Vambrace swarm: looping, homing micro-munitions wipe out EVERY non-boss enemy on screen (bosses & rivals take heavy damage). 120s cooldown"],["Beskar Grapple",8.5,"grappleHook","grapple","Tethers & stuns the strongest nearby target"]],
   [["Barrage Volley",6.5,"fanHammer","cone","Fires a rapid E-11 suppressive blaster fan"],["Thermal Detonator",11,"factionPulse","nova","Detonates a high-yield Imperial baradium charge"]],
   [["Force Storm",7.5,"critBurst","chain","Unleashes a 360-degree dark lightning web"],["Dark Siphon",11,"executeDash","beam","Crushes and executes weakened nearby enemies"]],
   [["Oil Igniter",7,"flameCone","flame","Sprays burning thruster oil in a forward cone"],["Arc Overload",9.5,"factionPulse","nova","Shocks and stuns all surrounding enemies"]],

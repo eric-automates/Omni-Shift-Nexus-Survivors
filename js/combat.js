@@ -7,7 +7,7 @@
 /* === 1. ALL 80 HEROES' LV.5 PRIMARY TRANSITIONS, EQUIP CALLOUTS & SECONDARY HARDWARE (#00-#79) === */
 const HERO_SIG_GEAR = [
   ["Bespin Master Lightsaber", "SKYWALKER SABER IGNITED!", "Force Telekinetic Push", 6, 1.3, 7.5],
-  ["Pure Beskar Spear & Darts", "BESKAR VISOR & WHISTLING BIRDS ARMED!", "Whistling Bird Micro-Salvo", 2, 1.5, 7.0],
+  ["IB-94 & Pure Beskar Spear", "IB-94 DRAWN. THIS IS THE WAY.", "Amban Phase-Pulse Shot", 4, 1.6, 7.0],
   ["DLT-19 Heavy Repeating Blaster", "IMPERIAL COMLINK & E-11 LOCKED!", "Thermal Detonator Toss", 2, 1.4, 8.0],
   ["Dual Senate Guard Sabers", "DARK SIDE LIGHTNING CHARGED!", "Force Choke & Chain Arc", 5, 1.5, 6.5],
   ["Dual Periscope Arc-Welder", "ASTROMECH SERVOS & THRUSTERS ONLINE!", "Burning Oil Slick & Zap", 6, 1.3, 6.0],
@@ -781,6 +781,7 @@ function startRun() {
 
   player.hp = player.maxHp;
   syncHeroSpellbook();
+  v10Run(V10.onRunStart, player);   // campaign modifiers, adaptive biome, squads, rewind buffer, fx
   spawnSpeech(256, 256, sig[1], "#00e676", 2.2);
   showScreen(null);
   document.getElementById("hud").classList.add("active");
@@ -803,14 +804,15 @@ function onSectorTitanDefeated(x, y) {
   if (!player || player.sectorCleared) return;
   player.sectorCleared = true;
   const stg = player.stg || STAGES[0];
-  const dm = Math.max(1, Math.round((stg.dmDrop || 1) * (1 + (player.bossDmMul || 0)) * getDmGainMul()));
+  const dm = Math.max(1, Math.round((stg.dmDrop || 1) * (1 + (player.bossDmMul || 0)) * getDmGainMul() * (player.dmNodeMul || 1)));
   meta.dmEarned += dm;
   player.dmStage = dm;
   if (!Array.isArray(meta.cleared)) meta.cleared = [];
-  if (!meta.cleared.includes(stg.id)) meta.cleared.push(stg.id);
+  const classic = !player.campaignNode;   // v10: Expedition sectors progress the campaign map, not the classic ladder
+  if (classic && !meta.cleared.includes(stg.id)) meta.cleared.push(stg.id);
   const nextId = stg.id + 1;
   player.unlockedStage = 0;
-  if (nextId <= STAGES.length && !meta.stages.includes(nextId)) {
+  if (classic && nextId <= STAGES.length && !meta.stages.includes(nextId)) {
     meta.stages.push(nextId);
     player.unlockedStage = nextId;
   }
@@ -819,6 +821,8 @@ function onSectorTitanDefeated(x, y) {
     ? `SECTOR CLEARED! STAGE ${nextId} UNLOCKED (+${dm} DM)`
     : (nextId > STAGES.length ? `FINAL SECTOR CLEARED! (+${dm} DM)` : `SECTOR CLEARED! (+${dm} DM)`);
   spawnSpeech(player.x, player.y - 34, msg, "#00e676", 4.5);
+  if (typeof campaignOnSectorCleared === "function") campaignOnSectorCleared(stg);
+  if (typeof fxBossDown === "function") fxBossDown(x, y);
   sfx(330, 990, 0.42, "triangle");
   if (opts.flash && typeof flashAlpha !== "undefined") flashAlpha = Math.max(flashAlpha, 0.35);
   if (typeof updateHUD === "function") updateHUD();
@@ -842,7 +846,12 @@ function endRun(reason = "death") {
     diffName: p.diff ? p.diff.name : "", time: runTime, lvl: p.lvl, kills: p.kills,
     weapons: p.weapons.length, relics: p.relics.length,
     killDM, bonusDM, mul, runDM, stageDM: p.dmStage || 0, totalDM: runDM + (p.dmStage || 0),
-    cleared: !!p.sectorCleared, unlockedStage: p.unlockedStage || 0, bossSpawned: !!p.bossSpawned
+    cleared: !!p.sectorCleared, unlockedStage: p.unlockedStage || 0, bossSpawned: !!p.bossSpawned,
+    // v10 stats (captured before the purge resets the modules)
+    glories: (typeof gloryState !== "undefined") ? gloryState.count : 0,
+    bestStreak: (typeof fxState !== "undefined") ? fxState.bestStreak : 0,
+    campaignLabel: (p.campaignNode && meta.campaign && meta.campaign.nodes && meta.campaign.nodes[p.campaignNode] && typeof campaignNodeLabel === "function")
+      ? campaignNodeLabel(meta.campaign.nodes[p.campaignNode]) : ""
   };
   saveMeta();
   purgeRunMemory();
@@ -914,7 +923,7 @@ function applyRelicEffect(r, sign = 1) {
 
 function grantRelic(forcedId = -1) {
   if (!player) return;
-  const avail = RELICS_DB.filter(r => !player.relics.some(pr => pr.id === r[0]));
+  const avail = RELICS_DB.filter(r => r && !player.relics.some(pr => pr.id === (r.id !== undefined ? r.id : r[0])));
   if (avail.length === 0) return;
   let rel;
   if (forcedId >= 0) {
@@ -928,11 +937,14 @@ function grantRelic(forcedId = -1) {
     evicted = player.relics.shift();
     applyRelicEffect(evicted, -1);               // FIX: give back the evicted relic's bonuses
   }
-  const r = { id: rel[0], name: rel[1], desc: rel[2], key: rel[3], val: rel[4] };
+  const row = (typeof relicRow === "function") ? relicRow(rel) : rel;
+  const r = { id: row.id !== undefined ? row.id : row[0], name: String(row.name || row[1] || "Relic"),
+              desc: String(row.desc || row[2] || ""), key: row.key || row[3], val: row.val !== undefined ? row.val : row[4] };
   applyRelicEffect(r, 1);
   player.relics.push(r);
 
-  spawnSpeech(player.x, player.y, "RELIC: " + rel[1].toUpperCase() + (evicted ? " (REPLACES " + evicted.name.toUpperCase() + ")" : ""), "#e040fb", 2.4);
+  const evName = evicted ? String(evicted.name || evicted[1] || "relic") : "";
+  spawnSpeech(player.x, player.y, "RELIC: " + r.name.toUpperCase() + (evicted ? " (REPLACES " + evName.toUpperCase() + ")" : ""), "#e040fb", 2.4);
   sfx(480, 980, 0.18, "triangle"); updateHUD();
 }
 
@@ -965,6 +977,7 @@ function allocEnemySlot(x, y, type, hpMul = 1.0, formType = 0, leaderIdx = -1) {
       if (typeof eScarHeat !== "undefined") eScarHeat[i] = 0;
       eFormType[i] = formType; eFormLeader[i] = leaderIdx;
       eType[i] = type; eRivalCid[i] = -1; eAct[i] = 1;
+      eUid[i] = enemyUidCounter++; eEcho[i] = 0; eStagger[i] = 0; eDummy[i] = 0;
       return i;
     }
   }
@@ -1026,7 +1039,7 @@ function fireWeapon(w) {
 
   let tx = player.x + Math.cos(player.aim) * 120, ty = player.y + Math.sin(player.aim) * 120, best = 1e9;
   for (let i = 0; i < MAX_E; i++) {
-    if (eAct[i] && isEnemyOnScreen(i)) {
+    if (eAct[i] && !(eStagger[i] > 0) && isEnemyOnScreen(i)) {
       const d = Math.hypot(eX[i] - player.x, eY[i] - player.y);
       if (d < best) { best = d; tx = eX[i]; ty = eY[i]; }
     }
@@ -1090,6 +1103,17 @@ function fireWeapon(w) {
     return;
   }
 
+  // v9.01: Mandalorian (#1) primary is the canonical IB-94 Beskar heavy blaster pistol: slow,
+  // heavy, high-pierce slugs (double-tap from Lv.4, an extra slug at Lv.10 / with +Projectiles).
+  if (w.id === 1) {
+    const taps = 1 + (w.lvl >= 4 ? 1 : 0) + (sup ? 1 : 0) + Math.min(1, player.projCnt);
+    for (let b = 0; b < taps; b++) {
+      const a = aimAng + (b - (taps - 1) / 2) * 0.035, spd = 600 * player.projSpd;
+      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 2.0, 0.8 * player.dur, 6, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, 1);
+    }
+    return;
+  }
+
   if (w.id === 54) {
     for (let b = 0; b < 3; b++) {
       const a = aimAng + (b - 1) * 0.045;
@@ -1137,6 +1161,12 @@ function triggerUtility(uIdx) {
 
   if (["leviosaFloat", "patronusStag", "avadaKedavra", "sectumSlash", "youShallNotPass", "piertotumKnights", "raiseDead", "summonHound", "timeRewind", "kneeDarts", "bobaDisintegrate"].includes(u.type)) {
     castArcaneSpell(u.type, true);
+    updateHUD();
+    return;
+  }
+
+  if (u.type === "whistlingBirds") {          // v9.01: Mandalorian active Skill 1 (js/arsenal.js)
+    if (typeof castWhistlingBirds === "function") castWhistlingBirds(u);
     updateHUD();
     return;
   }

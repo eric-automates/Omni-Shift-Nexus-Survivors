@@ -26,7 +26,8 @@ function ensurePlayerVisors() {
 }
 
 async function runDynamicEOFScan() {
-  const files = ["js/chaos.js", "js/data-factions.js", "js/data-heroes.js", "js/data-relics.js", "js/state.js", "js/world.js", "js/combat.js", "js/sim.js", "js/render.js", "js/ui.js"];
+  const files = ["js/chaos.js", "js/data-factions.js", "js/data-heroes.js", "js/data-relics.js", "js/state.js", "js/world.js", "js/combat.js", "js/sim.js", "js/render.js",
+                 "js/fx.js", "js/rewind.js", "js/arsenal.js", "js/squad.js", "js/glory.js", "js/biomes.js", "js/campaign.js", "js/proving.js", "js/ui.js"];
   const results = [];
   for (let i = 0; i < files.length; i++) {
     const f = files[i], marker = "// " + "EOF:" + f;
@@ -61,7 +62,11 @@ function checkLoadedScripts() {
     ["data-heroes.js", typeof CHAR_RAW !== "undefined"], ["data-relics.js", typeof RELICS_DB !== "undefined"],
     ["state.js", typeof loadMeta === "function"], ["world.js", typeof getDistBiome === "function"],
     ["combat.js", typeof startRun === "function"], ["sim.js", typeof updateSim === "function"],
-    ["render.js", typeof renderScene === "function"]
+    ["render.js", typeof renderScene === "function"],
+    ["fx.js", typeof fxTimeMul === "function"], ["rewind.js", typeof rewindPlayback === "function"],
+    ["arsenal.js", typeof castWhistlingBirds === "function"], ["squad.js", typeof squadMinionsSim === "function"],
+    ["glory.js", typeof gloryExecute === "function"], ["biomes.js", typeof biomeRenderGround === "function"],
+    ["campaign.js", typeof renderCampaign === "function"], ["proving.js", typeof startProvingGround === "function"]
   ];
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
   if (failed.length > 0) {
@@ -548,7 +553,7 @@ function updateHUD() {
     const bRing = getDistBiome(player.x, player.y);
     document.getElementById("hudStage").textContent = `${player.fac.worlds[player.stg.tier]}-${player.stg.id} • W${waveNum} • ${bRing.name.split(" ")[0]}`;
     document.getElementById("hudDM").textContent = `DM: ${availDM()}`;
-    document.getElementById("timeScaleLbl").textContent = timeScale.toFixed(1) + "x";
+    updateTimeLabel();   // v9.01 step ladder label (shows REWIND / BUFFER START states)
 
     const bHud = document.getElementById("bodyHud");
     if (bHud && player.limbs) {
@@ -817,7 +822,8 @@ function updateMenuUI() {
   const badge = typeof getHeroHouseBadge === "function" ? getHeroHouseBadge(c[0]) : null;
   document.getElementById("menuDM").textContent = `Dark Matter: ${availDM()} (Total: ${meta.dmEarned})`;
   document.getElementById("menuSelChar").textContent = `Hero: #${c[0]} ${c[3]}${badge ? " " + badge[0] : ""}`;
-  document.getElementById("menuSelStage").textContent = `Stage ${stg.id}: ${f.worlds[stg.tier]} ${stg.suffix}`;
+  const campNode = (typeof campaignSelectedNode === "function") ? campaignSelectedNode() : null;
+  document.getElementById("menuSelStage").textContent = campNode ? `🗺️ ${campaignNodeLabel(campNode)}` : `Stage ${stg.id}: ${f.worlds[stg.tier]} ${stg.suffix}`;
   document.getElementById("menuDiff").textContent = `Difficulty: ${df.name}`;
   const gc = document.getElementById("goChars"); if (gc) gc.textContent = `CHARACTER ROSTER (${CHAR_RAW.length})`;
 }
@@ -892,7 +898,7 @@ function renderStages() {
     const done = cleared.includes(s.id);
     d.className = "card " + (unl ? "unlocked" : "locked") + (sel ? " selected" : "");
     d.innerHTML = `<div class="card-title">Stage ${s.id}: ${wName} ${s.suffix}${done ? " ✓" : ""}</div><div class="card-sub">HP x${s.hpMul} • Titan Drop: ${s.dmDrop} DM${done ? " • CLEARED" : ""}</div><div class="card-desc">Hazard: ${s.hazard}${unl ? "" : `<br>🔒 Defeat the Stage ${s.id - 1} Sector Titan to unlock`}</div>`;
-    d.onclick = () => { if (!wasLongPress && !wasScrolled && unl) { meta.selStage = s.id; saveMeta(); renderStages(); } }; g.appendChild(d);
+    d.onclick = () => { if (!wasLongPress && !wasScrolled && unl) { meta.selStage = s.id; if (meta.campaign) meta.campaign.selNode = null; saveMeta(); renderStages(); } }; g.appendChild(d);
   });
 }
 
@@ -925,7 +931,10 @@ function renderOpts() {
       const tiers = [50, 100, 250, 500, 1000, 9999];
       opts.persistCount = tiers[(tiers.indexOf(opts.persistCount) + 1) % tiers.length] || 100;
     }],
-    ["Temporal Nexus Speed", timeScale.toFixed(1) + "x", () => { setTimeScale(0.5, timeScale >= 3.0); }],
+    ["Temporal Nexus Speed", fmtTimeScale(timeScale > 0 ? timeScale : 1), () => { setTimeScale(1, timeScale >= TIME_SCALE_MAX || timeScale <= 0); }],
+    ["Screen Shake & Hit-Stop", opts.shake !== false ? "ON" : "OFF", () => { opts.shake = opts.shake === false; }],
+    ["Run Telemetry Pill (FPS / Bodies)", opts.perfHud !== false ? "ON" : "OFF", () => { opts.perfHud = opts.perfHud === false; }],
+    ["Biome Weather FX", opts.weather !== false ? "ON" : "OFF", () => { opts.weather = opts.weather === false; }],
     ["Camera Zoom", opts.zoom.toFixed(2) + "x", () => { opts.zoom = opts.zoom >= 1.75 ? 0.5 : +(opts.zoom + 0.25).toFixed(2); }],
     ["Floating Damage / Speech", opts.dmgNums ? "ON" : "OFF", () => { opts.dmgNums = !opts.dmgNums; }],
     ["Screen Flash Effects", opts.flash ? "ON" : "OFF", () => { opts.flash = !opts.flash; }],
@@ -995,7 +1004,9 @@ if (typeof cv !== "undefined") {
 document.getElementById("goPlay").onclick = () => { if (checkLoadedScripts()) { if (window.trackProgress) window.trackProgress("Deploying Hero #" + meta.selChar); startRun(); } };
 document.getElementById("goDiff").onclick = () => { if (checkLoadedScripts()) { meta.diff = (meta.diff + 1) % 5; saveMeta(); sfx(340, 520, 0.08, "triangle"); } };
 document.getElementById("goChars").onclick = () => { if (checkLoadedScripts()) { renderChars(); showScreen("scrChars"); } };
-document.getElementById("goStages").onclick = () => { if (checkLoadedScripts()) { renderStages(); showScreen("scrStages"); } };
+document.getElementById("goStages").onclick = () => { if (checkLoadedScripts()) { showScreen("scrCampaign"); renderCampaign(true); } };   // v10 Expedition map
+document.getElementById("goProving").onclick = () => { if (checkLoadedScripts()) startProvingGround(); };                                   // v10 Debug All
+campaignInitUI();
 document.getElementById("goMeta").onclick = () => { if (checkLoadedScripts()) { renderMeta(); showScreen("scrMeta"); } };
 document.getElementById("goCodex").onclick = () => { if (checkLoadedScripts()) { renderCodex(); showScreen("scrCodex"); } };
 document.getElementById("goOpts").onclick = () => { if (checkLoadedScripts()) { renderOpts(); showScreen("scrOpts"); } };
@@ -1049,14 +1060,15 @@ function showRunSummary(sm) {
   const titles = { death: "☠ KIA — RUN OVER", quit: "⏏ RUN ENDED — EXTRACTED" };
   document.getElementById("sumTitle").textContent = (sm.cleared ? "★ SECTOR CLEARED • " : "") + (titles[sm.reason] || "RUN OVER");
   let subTxt;
-  if (sm.cleared) subTxt = sm.unlockedStage ? `Stage ${sm.unlockedStage} is now unlocked on the Sector Map.` : (sm.stageId >= STAGES.length ? "Final sector cleared — the multiverse is yours." : "Sector cleared again.");
+  if (sm.cleared && sm.campaignLabel) subTxt = "District secured: new routes are charted on the Galactic Expedition Map.";
+  else if (sm.cleared) subTxt = sm.unlockedStage ? `Stage ${sm.unlockedStage} is now unlocked on the Sector Map.` : (sm.stageId >= STAGES.length ? "Final sector cleared — the multiverse is yours." : "Sector cleared again.");
   else subTxt = sm.bossSpawned ? "The Sector Titan is still out there — defeat it to clear this sector." : "Survive to 2:00 to summon the Sector Titan, then defeat it to clear the sector.";
   document.getElementById("sumSub").textContent = subTxt;
   const row = (label, val, col = "#e0f2f1") => `<div style="display:flex;justify-content:space-between;gap:8px"><span style="color:#90a4ae">${label}</span><b style="color:${col}">${val}</b></div>`;
   const mulTxt = sm.mul > 1.0001 ? ` × ${sm.mul.toFixed(2)} greed` : "";
   document.getElementById("sumBox").innerHTML = `
-    <div class="health-row">${row("Hero", sm.hero)}${row("Sector", `Stage ${sm.stageId}: ${sm.stageName}`)}${row("Difficulty", sm.diffName)}</div>
-    <div class="health-row">${row("Time survived", fmtRunClock(sm.time))}${row("Nexus level", sm.lvl)}${row("Kills", sm.kills)}${row("Arsenal", `${sm.weapons} weapon(s) • ${sm.relics} relic(s)`)}</div>
+    <div class="health-row">${row("Hero", sm.hero)}${row("Sector", sm.campaignLabel ? "🗺️ " + sm.campaignLabel : `Stage ${sm.stageId}: ${sm.stageName}`)}${row("Difficulty", sm.diffName)}</div>
+    <div class="health-row">${row("Time survived", fmtRunClock(sm.time))}${row("Nexus level", sm.lvl)}${row("Kills", sm.kills)}${row("Glory kills · best streak", `${sm.glories || 0} ☠ · x${sm.bestStreak || 0}`, "#ff9100")}${row("Arsenal", `${sm.weapons} weapon(s) • ${sm.relics} relic(s)`)}</div>
     <div class="health-row">
       ${row("Kills ÷ 18", "+" + sm.killDM + " DM")}
       ${row("Run bonuses", "+" + sm.bonusDM + " DM")}
@@ -1069,9 +1081,9 @@ function showRunSummary(sm) {
   const nextBtn = document.getElementById("btnSumNext");
   const nextId = sm.stageId + 1;
   if (nextBtn) {
-    const canNext = nextId <= STAGES.length && meta.stages.includes(nextId);
+    const canNext = sm.campaignLabel ? true : (nextId <= STAGES.length && meta.stages.includes(nextId));
     nextBtn.style.display = canNext ? "inline-block" : "none";
-    nextBtn.textContent = `NEXT SECTOR (STAGE ${nextId}) ▶`;
+    nextBtn.textContent = sm.campaignLabel ? "EXPEDITION MAP ▶" : `NEXT SECTOR (STAGE ${nextId}) ▶`;
   }
   updateMenuUI();
   showScreen("scrSummary");
@@ -1081,6 +1093,7 @@ if (document.getElementById("btnSumAgain")) {
   document.getElementById("btnSumAgain").onclick = () => { if (checkLoadedScripts()) startRun(); };
   document.getElementById("btnSumNext").onclick = () => {
     if (!lastRunSummary || !checkLoadedScripts()) return;
+    if (lastRunSummary.campaignLabel) { showScreen("scrCampaign"); renderCampaign(true); return; }   // v10 Expedition runs
     const nextId = lastRunSummary.stageId + 1;
     if (meta.stages.includes(nextId)) { meta.selStage = nextId; saveMeta(); }
     startRun();

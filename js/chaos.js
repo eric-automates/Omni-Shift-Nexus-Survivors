@@ -930,24 +930,26 @@ function renderGenreFilterList() {
   }
 }
 
+// v9.01: Music / Debug buttons sit on the bottom: 30px row and the Now-Playing toast on bottom: 62px, so neither
+// ever covers the bottom-right #perfHud run telemetry pill (bottom: 4px, js/fx.js).
 function mountNexusMusicPlayer() {
   if (document.getElementById("nexus-music-toast")) return;
   window._inHudUpdate = true;
   try {
     const toast = document.createElement("div");
     toast.id = "nexus-music-toast";
-    toast.style.cssText = "position:fixed;bottom:26px;right:8px;z-index:999998;background:rgba(6,14,26,0.92);border:1px solid #00e5ff;border-radius:6px;padding:5px 10px;font-family:monospace;font-size:10.5px;color:#fff;pointer-events:none;opacity:0;transform:translateY(8px);transition:opacity 0.45s ease,transform 0.45s ease;box-shadow:0 2px 10px rgba(0,0,0,0.6);max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+    toast.style.cssText = "position:fixed;bottom:62px;right:8px;z-index:999998;background:rgba(6,14,26,0.92);border:1px solid #00e5ff;border-radius:6px;padding:5px 10px;font-family:monospace;font-size:10.5px;color:#fff;pointer-events:none;opacity:0;transform:translateY(8px);transition:opacity 0.45s ease,transform 0.45s ease;box-shadow:0 2px 10px rgba(0,0,0,0.6);max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
     document.body.appendChild(toast);
 
     const mBtn = document.createElement("button");
     mBtn.id = "nexus-music-toggle";
     mBtn.innerText = "🎵 Music";
-    mBtn.style.cssText = "position:fixed;bottom:4px;left:78px;z-index:1000000;padding:4px 10px;background:#1a2636;color:#ffd166;border:1px solid #ffd16688;border-radius:4px;font-size:11px;font-family:monospace;";
+    mBtn.style.cssText = "position:fixed;bottom:30px;left:78px;z-index:1000000;padding:4px 10px;background:#1a2636;color:#ffd166;border:1px solid #ffd16688;border-radius:4px;font-size:11px;font-family:monospace;";
     document.body.appendChild(mBtn);
 
     const panel = document.createElement("div");
     panel.id = "nexus-music-panel";
-    panel.style.cssText = "position:fixed;bottom:38px;right:6px;width:272px;background:rgba(6,12,22,0.96);border:1px solid #00e5ff;border-radius:8px;padding:8px;z-index:1000000;display:none;flex-direction:column;gap:6px;font-family:monospace;color:#e0f7fa;box-shadow:0 4px 16px rgba(0,0,0,0.75);";
+    panel.style.cssText = "position:fixed;bottom:92px;right:6px;width:272px;background:rgba(6,12,22,0.96);border:1px solid #00e5ff;border-radius:8px;padding:8px;z-index:1000000;display:none;flex-direction:column;gap:6px;font-family:monospace;color:#e0f7fa;box-shadow:0 4px 16px rgba(0,0,0,0.75);";
     panel.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1e324a;padding-bottom:4px">
         <span id="nexus-Player-Title" style="font-size:10.5px;font-weight:bold;color:#ffd166;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:195px">Auto-Shuffle Ready</span>
