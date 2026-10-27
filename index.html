@@ -7,17 +7,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>OMNI-SHIFT: NEXUS SURVIVORS</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=fix-2026-10-27">
 <!-- PRE-BOOT BULLETPROOF DOM GUARD & LIVE DEBUGGER -->
 <script>
 (function() {
   // 1. Bulletproof Node.prototype.removeChild Guard (Eliminates NotFoundError permanently)
+  // Keeps the original no-crash behaviour, but no longer hides the problem completely:
+  // mismatched removals are reported (rate-limited) in the DevTools console.
   const origRemoveChild = Node.prototype.removeChild;
+  let removeChildWarns = 0;
+  const warnRemoveChild = (msg) => {
+    if (removeChildWarns++ < 20) console.warn("[removeChild guard] " + msg, new Error().stack);
+  };
   Node.prototype.removeChild = function(child) {
     try {
-      if (!child || child.parentNode !== this) return child;
+      if (!child || child.parentNode !== this) { warnRemoveChild("node is not a child of this parent - ignored"); return child; }
       return origRemoveChild.call(this, child);
     } catch (e) {
+      warnRemoveChild("removeChild threw: " + (e && e.message));
       return child;
     }
   };
@@ -78,7 +85,7 @@
   };
 
   window.addEventListener("error", function(ev) {
-    const f = ev.filename ? ev.filename.split("/").pop() : "script";
+    const f = ev.filename ? ev.filename.split("/").pop().split("?")[0] : "script";
     const msg = `${f} (Line ${ev.lineno}:${ev.colno || 0}): ${ev.message}`;
     window._bootErrors.push(msg);
     const stackLine = (ev.error && ev.error.stack) ? ev.error.stack.split("\n").slice(0, 3).join(" → ") : "";
@@ -217,7 +224,7 @@
     <h2>80 MULTIVERSE HEROES & LEGENDS (Swipe Anywhere to Scroll • Hold 350ms to Inspect & Customize)</h2>
     <div class="bar">
       <div class="stat-pill" id="charDM">Available DM: 0</div>
-      <button class="btn warn" id="btnRespecChars">RESPEC (REFUND & LOCK ALL)</button>
+      <button class="btn warn" id="btnRespecChars">RESPEC HEROES (REFUND & LOCK)</button>
       <button class="btn" data-back="scrMain">BACK</button>
     </div>
     <div id="charGrid" class="grid"></div>
@@ -226,6 +233,7 @@
   <!-- STAGE SELECT -->
   <div id="scrStages" class="screen">
     <h2>50 PROCEDURAL SECTORS (Morphed by Hero Faction)</h2>
+    <div class="sub">Survive to 2:00 to summon the Sector Titan. Defeat it to clear the sector, bank its Dark Matter drop and unlock the next stage.</div>
     <div class="bar"><button class="btn" data-back="scrMain">BACK</button></div>
     <div id="stageGrid" class="grid"></div>
   </div>
@@ -318,13 +326,25 @@
     <div id="lvlGrid" style="display:flex;flex-direction:column;gap:6px;max-width:320px;margin:4px auto;width:100%"></div>
     <div class="bar" id="pauseBar" style="display:none">
       <button class="btn" id="btnResume">RESUME RUN</button>
-      <button class="btn warn" id="btnQuitRun">END RUN (PURGE RUN RAM)</button>
+      <button class="btn warn" id="btnQuitRun">END RUN (BANK DM & PURGE RUN RAM)</button>
     </div>
     <div id="rangeBox" style="max-width:330px;margin:4px auto 0 auto;width:100%;background:#08101c;border:1px solid #263850;border-radius:8px;padding:6px;display:flex;flex-direction:column;align-items:center;gap:4px">
       <div style="font-size:0.68rem;color:#ffd166;font-weight:700;letter-spacing:0.5px">BALLISTIC & MELEE RANGE TELEMETRY (LAST 100 ATTACKS)</div>
       <div id="rangeTabs" style="display:flex;gap:3px;flex-wrap:wrap;justify-content:center"></div>
       <div id="rangeStats" style="font-size:0.62rem;color:#80deea;text-align:center">Acc: 100% | T-Zone/Heart: 0% | Ranged(⊕) vs Melee(/)</div>
       <canvas id="rangeCv" width="280" height="190" style="position:relative;width:280px;height:190px;background:#101824;border:1px solid #37474f;border-radius:6px"></canvas>
+    </div>
+  </div>
+
+  <!-- END-OF-RUN SUMMARY (shown after death or END RUN) -->
+  <div id="scrSummary" class="screen">
+    <h2 id="sumTitle">RUN OVER</h2>
+    <div class="sub" id="sumSub"></div>
+    <div id="sumBox" style="max-width:340px;margin:auto;width:100%;display:flex;flex-direction:column;gap:6px"></div>
+    <div class="bar">
+      <button class="btn gold" id="btnSumAgain">DEPLOY AGAIN</button>
+      <button class="btn" id="btnSumNext" style="display:none">NEXT SECTOR ▶</button>
+      <button class="btn" id="btnSumMenu">MAIN MENU</button>
     </div>
   </div>
 </div>
@@ -349,17 +369,17 @@
   </div>
 </div>
 
-<!-- ORDERED MODULAR SCRIPT LOADING -->
-<script src="js/chaos.js" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
-<script src="js/data-factions.js" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
-<script src="js/data-heroes.js" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
-<script src="js/data-relics.js" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
-<script src="js/state.js" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
-<script src="js/world.js" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
-<script src="js/combat.js" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
-<script src="js/sim.js" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
-<script src="js/render.js" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
-<script src="js/ui.js" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
+<!-- ORDERED MODULAR SCRIPT LOADING (?v= busts stale GitHub Pages caches after an upload; bump it on every release) -->
+<script src="js/chaos.js?v=fix-2026-10-27" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
+<script src="js/data-factions.js?v=fix-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
+<script src="js/data-heroes.js?v=fix-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
+<script src="js/data-relics.js?v=fix-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
+<script src="js/state.js?v=fix-2026-10-27" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
+<script src="js/world.js?v=fix-2026-10-27" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
+<script src="js/combat.js?v=fix-2026-10-27" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
+<script src="js/sim.js?v=fix-2026-10-27" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
+<script src="js/render.js?v=fix-2026-10-27" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
+<script src="js/ui.js?v=fix-2026-10-27" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
 </body>
 </html>
 <!-- EOF:index.html -->
