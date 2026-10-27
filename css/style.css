@@ -366,3 +366,55 @@ h2 {
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.85);
 }
 /* EOF:css/style.css */
+
+/* === v9.01 / v10 ADDITIONS: run telemetry pill, squad radial wheel, glory EXECUTE, Proving Ground, Expedition map === */
+#perfHud { position: fixed; bottom: 4px; right: 6px; z-index: 999997; display: none; padding: 2px 8px; border-radius: 10px;
+  background: rgba(4, 10, 18, 0.88); border: 1px solid rgba(0, 229, 255, 0.4); font: 600 10px/1.4 monospace; color: #00e676;
+  pointer-events: none; white-space: nowrap; }
+#squadBtn { position: fixed; right: 10px; bottom: 150px; z-index: 50; width: 58px; height: 58px; border-radius: 50%; display: none;
+  align-items: center; justify-content: center; flex-direction: column; font-size: 22px; background: rgba(12, 30, 20, 0.9);
+  border: 2px solid #c5e1a5; color: #fff; box-shadow: 0 0 12px rgba(197, 225, 165, 0.35); touch-action: none; padding: 0; }
+#squadBtn.flip { right: auto; left: 10px; }
+#squadBtn span { font: 700 9px monospace; color: #c5e1a5; margin-top: -2px; }
+#squadWheel { position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.35); touch-action: none; }
+#squadWheel.open { display: flex; }
+#squadWheel .sqw path { fill: rgba(10, 24, 18, 0.88); stroke: #c5e1a5; stroke-width: 1.5; cursor: pointer; }
+#squadWheel .sqw.cur path { fill: rgba(30, 70, 30, 0.95); }
+#squadWheel .sqw.hl path, #squadWheel .sqw:hover path { fill: rgba(197, 225, 165, 0.38); stroke: #fff; }
+#squadWheel text { fill: #fff; text-anchor: middle; pointer-events: none; }
+#squadWheel .ico { font-size: 22px; }
+#squadWheel .lbl { font: 700 9px monospace; fill: #c5e1a5; }
+#squadWheel .hub { fill: rgba(0, 0, 0, 0.8); stroke: #c5e1a5; }
+#squadWheel .hubtxt { font: 700 10px monospace; fill: #ffd166; }
+#gloryBtn { position: fixed; left: 50%; bottom: 175px; transform: translateX(-50%); z-index: 55; display: none; padding: 10px 22px;
+  border-radius: 24px; background: linear-gradient(#ff6d00, #b71c1c); color: #fff; font: 900 15px sans-serif; letter-spacing: 1px;
+  border: 2px solid #ffd180; box-shadow: 0 0 18px rgba(255, 109, 0, 0.7); animation: gloryPulse 0.6s ease-in-out infinite alternate; touch-action: none; }
+@keyframes gloryPulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.08); } }
+#provingPanel { position: fixed; top: 6px; right: 6px; z-index: 999990; width: min(330px, calc(100vw - 12px)); max-height: calc(100vh - 80px);
+  overflow-y: auto; background: rgba(4, 10, 20, 0.94); border: 1px solid #00e5ff; border-radius: 8px; padding: 8px;
+  font: 11px/1.35 monospace; color: #e0f7fa; display: none; }
+#provingPanel .pg-head { font-weight: 800; color: #ffd166; display: flex; justify-content: space-between; margin-bottom: 4px; }
+#provingPanel .pg-bar { height: 4px; background: #102030; border-radius: 2px; margin-bottom: 6px; overflow: hidden; }
+#provingPanel .pg-bar i { display: block; height: 100%; background: #00e676; transition: width 0.25s; }
+#provingPanel .pg-row { padding: 2px 0; border-bottom: 1px solid #10202e; }
+#provingPanel .pg-row small { display: block; color: #80deea; font-size: 9.5px; margin-left: 22px; }
+#provingPanel .pg-row.cur { color: #ffd166; }
+#provingPanel .pg-row.bad { color: #ff8a80; }
+#provingPanel .pg-btns { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
+.camp-info { margin: 4px auto 8px; max-width: 440px; width: 100%; position: sticky; top: -10px; z-index: 5; box-shadow: 0 6px 14px rgba(0,0,0,0.6); }
+#campMap { width: 100%; padding-bottom: 40px; }
+#campMap .camp-edge { stroke: #37474f; stroke-width: 2; }
+#campMap .camp-edge.on { stroke: #00e676; stroke-width: 3; }
+#campMap .camp-node { pointer-events: all; }
+#campMap .camp-node circle { fill: #0c1624; stroke-width: 3; cursor: pointer; }
+#campMap .camp-node.fog circle { fill: #0a0f16; stroke-dasharray: 4 3; opacity: 0.6; }
+#campMap .camp-node.known circle { opacity: 0.75; }
+#campMap .camp-node.cleared circle { fill: #0d3326; }
+#campMap .camp-node.avail circle { fill: #33260a; animation: campPulse 1s ease-in-out infinite alternate; }
+#campMap .camp-node.sel circle { stroke: #ffd166 !important; stroke-width: 4; }
+@keyframes campPulse { from { opacity: 0.85; } to { opacity: 1; filter: drop-shadow(0 0 6px #ffd166); } }
+#campMap .camp-ico { text-anchor: middle; font-size: 15px; fill: #fff; pointer-events: none; }
+#campMap .camp-lbl { text-anchor: middle; font: 700 8px monospace; fill: #b0bec5; pointer-events: none; }
+#campMap .camp-col { font: 700 9px monospace; fill: #546e7a; }
+/* the generic ".card * { pointer-events: none }" scroll rule must not swallow the Expedition panel buttons */
+#campInfo button { pointer-events: auto; touch-action: manipulation !important; }
