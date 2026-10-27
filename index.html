@@ -7,7 +7,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>OMNI-SHIFT: NEXUS SURVIVORS</title>
-<link rel="stylesheet" href="css/style.css?v=v10-2026-10-27">
+<link rel="stylesheet" href="css/style.css?v=v11-2026-10-27">
 <!-- PRE-BOOT BULLETPROOF DOM GUARD & LIVE DEBUGGER -->
 <script>
 (function() {
@@ -294,6 +294,15 @@
     <div style="max-width:355px;margin:4px auto;display:flex;flex-direction:column;gap:8px;width:100%">
 
       <div class="hud-guide-box">
+        <div class="guide-title">NEW IN v11 · LIGHTSABER FORMS & MUSIC</div>
+        <div class="card-desc" style="line-height:1.45">
+          <b style="color:#00e5ff">⚔️ Lightsaber Forms</b> — blades no longer spin: every saber fights with real strikes (guard → wind-up → cut → follow-through) aimed at an actual enemy, chaining from foe to foe. The seven canon Forms each move differently: <b>I Shii-Cho</b> wide sweeps (Sarlacc Sweep when surrounded) · <b>II Makashi</b> one-handed lunges · <b>III Soresu</b> tight parries + ripostes · <b>IV Ataru</b> leaping strikes, flips, saber swarms · <b>V Shien/Djem So</b> bolts sent back at the shooter, Falling Avalanche overhead chops · <b>VI Niman</b> Pushing Slash & Draw Closer · <b>VII Juyo/Vaapad</b> erratic staccato flurries.<br>
+          <b style="color:#ffd166">📈 Film-accurate progression</b> — each saber hero starts in an early-career Form and unlocks the next as the weapon levels: Luke goes A New Hope Shii-Cho → Dagobah Ataru → Cloud City Djem So → Return of the Jedi Djem So (Lv.7, prime). Vader starts as Padawan Anakin; Maul ignites his second blade at the Duel of the Fates (Lv.3); Mace reaches Vaapad, Yoda his Senate-duel Ataru, Sidious Juyo; Grievous draws 2 sabers, then 4 (one per free hand), then the Utapau buzzsaw. The level-up card previews the next Form; the HUD shows the current one. Sabers ignite with a snap-hiss when enemies close in and clip back onto the belt when the area is clear.<br>
+          <b style="color:#c5e1a5">🎵 20-track soundtrack</b> — 17 new royalty-free tracks (synthwave, retrowave, darksynth, cyberpunk, electro, DnB, jungle, breakbeat, dubstep, techno, beats, orchestral, cinematic, metal) in the 🎵 player; filter by genre there. The now-playing pop-up credits each artist; full credits: music/MUSIC_CREDITS.md.
+        </div>
+      </div>
+
+      <div class="hud-guide-box">
         <div class="guide-title">NEW IN v10 · HOW TO USE</div>
         <div class="card-desc" style="line-height:1.45">
           <b style="color:#ff80ab">⏪ Temporal ladder</b> — HUD <b>−</b> / <b>1.0x</b> / <b>+</b> step through 3.5x … 0.1x, then into REWIND (−0.1x … −5.0x). The last ~40 s rewind (enemies & corpses come back, bolts fly backwards); your XP, levels, weapons, relics and Dark Matter are kept. Re-killed "echo" enemies pay nothing. Press + or 1.0x to resume.<br>
@@ -396,24 +405,25 @@
 </div>
 
 <!-- ORDERED MODULAR SCRIPT LOADING (?v= busts stale GitHub Pages caches after an upload; bump it on every release) -->
-<script src="js/chaos.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
-<script src="js/data-factions.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
-<script src="js/data-heroes.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
-<script src="js/data-relics.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
-<script src="js/state.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
-<script src="js/world.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
-<script src="js/combat.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
-<script src="js/sim.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
-<script src="js/render.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
-<script src="js/fx.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/fx.js', true)"></script>
-<script src="js/rewind.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/rewind.js', true)"></script>
-<script src="js/arsenal.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/arsenal.js', true)"></script>
-<script src="js/squad.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/squad.js', true)"></script>
-<script src="js/glory.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/glory.js', true)"></script>
-<script src="js/biomes.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/biomes.js', true)"></script>
-<script src="js/campaign.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/campaign.js', true)"></script>
-<script src="js/proving.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/proving.js', true)"></script>
-<script src="js/ui.js?v=v10-2026-10-27" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
+<script src="js/chaos.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
+<script src="js/data-factions.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
+<script src="js/data-heroes.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
+<script src="js/data-relics.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
+<script src="js/state.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
+<script src="js/world.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
+<script src="js/combat.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
+<script src="js/sim.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
+<script src="js/render.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
+<script src="js/fx.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/fx.js', true)"></script>
+<script src="js/rewind.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/rewind.js', true)"></script>
+<script src="js/arsenal.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/arsenal.js', true)"></script>
+<script src="js/squad.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/squad.js', true)"></script>
+<script src="js/glory.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/glory.js', true)"></script>
+<script src="js/biomes.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/biomes.js', true)"></script>
+<script src="js/campaign.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/campaign.js', true)"></script>
+<script src="js/proving.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/proving.js', true)"></script>
+<script src="js/saberforms.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/saberforms.js', true)"></script>
+<script src="js/ui.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
 </body>
 </html>
 <!-- EOF:index.html -->
