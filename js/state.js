@@ -11,17 +11,42 @@ const DEFAULT_STARTERS = (typeof STARTER_HEROES_BY_FACTION !== "undefined")
   : [0, 8, 13, 19, 22, 31, 34, 41, 45, 48, 56];
 
 let meta = {
-  dmEarned: 0, dmSpent: 0, chars: [...DEFAULT_STARTERS], stages: [1],
+  dmEarned: 0, dmSpent: 0, chars: [...DEFAULT_STARTERS], stages: [1], cleared: [],
   ranks: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], selChar: 0, selStage: 1, diff: 1, outfits: {}
 };
 
+const OPTS_KEY = "OMNISHIFT_OPTS_V1";
 let opts = {
   zoom: 1.0, dmgNums: true, flash: true, lowPart: false, hiCon: true,
   fps: true, vol: 0.45, amb: true, joySize: 44, ttDelay: 350, hudFlip: false,
-  persistCount: 100, doubleTapDash: true
+  persistCount: 100, doubleTapDash: true, timeScale: 1.0
 };
 
+// Temporal Nexus speed range (HUD buttons + Options menu share these limits).
+const TIME_SCALE_MIN = 0.1, TIME_SCALE_MAX = 3.0;
 let timeScale = 1.0;
+
+// FIX: options were never written to storage although the Options screen says "SAVE & BACK".
+function loadOpts() {
+  try {
+    const raw = localStorage.getItem(OPTS_KEY);
+    if (!raw) return;
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== "object") return;
+    Object.keys(opts).forEach(k => {
+      if (k in saved && typeof saved[k] === typeof opts[k]) opts[k] = saved[k];
+    });
+    opts.zoom = Math.max(0.5, Math.min(2.0, opts.zoom || 1.0));
+    opts.vol = Math.max(0, Math.min(1, opts.vol));
+    timeScale = Math.max(TIME_SCALE_MIN, Math.min(TIME_SCALE_MAX, opts.timeScale || 1.0));
+    opts.timeScale = timeScale;
+  } catch (e) {}
+}
+
+function saveOpts() {
+  opts.timeScale = timeScale;
+  try { localStorage.setItem(OPTS_KEY, JSON.stringify(opts)); } catch (e) {}
+}
 
 function ensureStarterChars() {
   if (!Array.isArray(meta.chars)) meta.chars = [0];
@@ -110,6 +135,15 @@ const pX = new Float32Array(MAX_P), pY = new Float32Array(MAX_P),
       pEnemy = new Uint8Array(MAX_P), pHit = new Uint8Array(MAX_P),
       pBounce = new Uint8Array(MAX_P), pWpnId = new Int16Array(MAX_P),
       pSnap = new Uint8Array(MAX_P), pAct = new Uint8Array(MAX_P);
+
+// FIX: per-projectile hit memory. pHit[i] is the ring-buffer write head; pHitIdx/pHitT store
+// which enemy slots this projectile already struck (and when), so pierce is spent across
+// DIFFERENT enemies instead of re-hitting the same enemy every frame.
+const PROJ_HIT_SLOTS = 8;
+const pHitIdx = new Int16Array(MAX_P * PROJ_HIT_SLOTS).fill(-1);
+const pHitT = new Float32Array(MAX_P * PROJ_HIT_SLOTS);
+// FIX: saber deflection is rolled ONCE per incoming enemy bolt (was re-rolled every frame).
+const pDeflRolled = new Uint8Array(MAX_P);
 
 const oX = new Float32Array(MAX_O), oY = new Float32Array(MAX_O),
       oVal = new Float32Array(MAX_O), oHome = new Uint8Array(MAX_O), oAct = new Uint8Array(MAX_O);
@@ -212,7 +246,14 @@ function loadMeta() {
       if (!meta.outfits || typeof meta.outfits !== "object") meta.outfits = {};
     }
   } catch (e) {}
+  if (!Array.isArray(meta.stages) || meta.stages.length === 0) meta.stages = [1];
+  if (!meta.stages.includes(1)) meta.stages.unshift(1);
+  if (!Array.isArray(meta.cleared)) meta.cleared = [];
+  if (!meta.stages.includes(meta.selStage)) meta.selStage = 1;
+  // Older saves could hold fractional DM (the "+30% boss DM" relic used to add a raw 0.3 DM).
+  meta.dmEarned = Math.round(+meta.dmEarned || 0); meta.dmSpent = Math.round(+meta.dmSpent || 0);
   ensureStarterChars();
+  loadOpts();
 }
 
 function saveMeta() {
@@ -284,11 +325,33 @@ function respecAll() {
   sfx(280, 680, 0.22, "triangle");
 }
 
+// FIX: the Character-screen respec button used to call respecAll(), which also wiped every
+// Dark Matter Shop upgrade. This one refunds and re-locks purchased heroes only.
+function respecHeroes() {
+  let refund = 0;
+  const keep = [...DEFAULT_STARTERS];
+  meta.chars.forEach(cid => {
+    const c = (typeof CHAR_RAW !== "undefined") ? CHAR_RAW[cid] : null;
+    if (!c || keep.includes(cid)) return;
+    refund += c[2] || 0;
+  });
+  meta.dmSpent = Math.max(0, meta.dmSpent - refund);
+  meta.chars = keep;
+  if (!meta.chars.includes(meta.selChar)) meta.selChar = 0;
+  saveMeta();
+  sfx(280, 680, 0.22, "triangle");
+  return refund;
+}
+
 function setTimeScale(delta, reset = false) {
-  timeScale = reset ? 1.0 : Math.max(0.1, +(timeScale + delta).toFixed(1));
+  // FIX: the HUD "+0.5x" button had no upper bound (16x after 30 taps), which made fast
+  // projectiles tunnel through enemies. Clamp to the same 0.1x–3.0x range as the Options menu.
+  const next = reset ? 1.0 : +(timeScale + delta).toFixed(1);
+  timeScale = Math.max(TIME_SCALE_MIN, Math.min(TIME_SCALE_MAX, next));
   const lbl = document.getElementById("timeScaleLbl");
   if (lbl) lbl.textContent = timeScale.toFixed(1) + "x";
   sfx(300 + timeScale * 80, 420 + timeScale * 80, 0.05, "sine", 0.12);
+  saveOpts();
 }
 
 function clearEnemyLimbState(idx, fadeDrips = true) {
@@ -368,6 +431,23 @@ function purgeRunMemory() {
   eBleed.fill(0); eBleedRate.fill(0); eLevitate.fill(0); eLevZ.fill(0);
   mAct.fill(0); drAct.fill(0); corpAct.fill(0); corpRivalCid.fill(-1); lmbAct.fill(0);
   pAct.fill(0); pHit.fill(0); pBounce.fill(0); pSnap.fill(0); oAct.fill(0); oHome.fill(0); dAct.fill(0); ptAct.fill(0);
+  pHitIdx.fill(-1); pDeflRolled.fill(0);
+  eStun.fill(0); eSlow.fill(0); eShred.fill(0); eGrapple.fill(0); eLevVX.fill(0); eLevVY.fill(0);
+
+  // FIX: these pools live in js/sim.js / js/combat.js and were never cleared, so bisected
+  // halves, blast rings, slice scars and a mid-flight thrown blade carried over into the next
+  // run (they piled up around the (256, 256) spawn point).
+  if (typeof slAct !== "undefined") slAct.fill(0);
+  if (typeof blAct !== "undefined") blAct.fill(0);
+  if (typeof eScarHeat !== "undefined") {
+    eScarHeat.fill(0); eScarAng.fill(0); eScarOffY.fill(0); eScarHitCD.fill(0); eKneel.fill(0);
+  }
+  if (typeof thrownBlade !== "undefined" && thrownBlade) {
+    thrownBlade.active = false; thrownBlade.stage = 0; thrownBlade.timer = 0; thrownBlade.targetIdx = -1;
+  }
+  if (typeof forcePushVis !== "undefined" && forcePushVis) forcePushVis.timer = 0;
+  flashAlpha = 0; flameVisTimer = 0; muzzleFlashTimer = 0;
+
   shWrite = 0; shCount = 0; activeCorpseCount = 0; player = null;
 }
 
@@ -449,7 +529,8 @@ function spawnProj(x, y, vx, vy, dmg, life, rad, prc, style, sup, isEnemy = 0, w
       if (!isEnemy && muzzleOff > 0) muzzleFlashTimer = 0.055;
       pVX[i] = vx; pVY[i] = vy; pDmg[i] = dmg; pLife[i] = life;
       pRad[i] = rad; pPrc[i] = prc; pStyle[i] = style; pSup[i] = sup;
-      pEnemy[i] = isEnemy; pHit[i] = 0; pBounce[i] = 0; pSnap[i] = 0;
+      pEnemy[i] = isEnemy; pHit[i] = 0; pBounce[i] = 0; pSnap[i] = 0; pDeflRolled[i] = 0;
+      pHitIdx.fill(-1, i * PROJ_HIT_SLOTS, (i + 1) * PROJ_HIT_SLOTS);
       pWpnId[i] = wpnId >= 0 ? wpnId : (player ? player.cid : 0);
       pAct[i] = 1; return;
     }

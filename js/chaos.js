@@ -85,9 +85,22 @@ function hashChunk(cx, cy) {
 /* === 2. MOVIE-ACCURATE WEB AUDIO SYNTHESIZER (Noise Buffers + Biquad Filters + Spell & Dash FX) === */
 let actx = null, noiseBuf = null, themeTimer = 0, themeStep = 0;
 
+// FIX: the AudioContext used to be created on page load (menu theme), before any user gesture,
+// which browsers block with an autoplay-policy warning. Wait for the first interaction instead.
+let audioUnlocked = false;
+(function armAudioUnlock() {
+  const unlock = () => {
+    audioUnlocked = true;
+    ["pointerdown", "keydown", "touchstart"].forEach(t => window.removeEventListener(t, unlock, true));
+    try { if (actx && actx.state === "suspended") actx.resume(); } catch (e) {}
+  };
+  ["pointerdown", "keydown", "touchstart"].forEach(t => window.addEventListener(t, unlock, true));
+})();
+
 function ensureAudio() {
   const vol = (typeof opts !== "undefined" && typeof opts.vol === "number") ? opts.vol : 0.45;
   if (vol <= 0.01) return null;
+  if (!audioUnlocked && !actx) return null;
   if (!actx) {
     actx = new (window.AudioContext || window.webkitAudioContext)();
     const sr = actx.sampleRate;
@@ -551,6 +564,7 @@ async function checkFileExists(url) {
   try {
     const res = await fetch(url, { method: "HEAD" });
     if (res.ok) return true;
+    if (res.status === 404 || res.status === 410) return false;   // FIX: don't re-request a known-missing file
   } catch (e) {}
   try {
     const res2 = await fetch(url, { headers: { Range: "bytes=0-1" } });
@@ -565,6 +579,7 @@ async function discoverMusicFiles() {
   isDiscoveringMusic = true;
   const foundMap = new Map();
 
+  let highestListed = 0;
   for (let i = 0; i < CUSTOM_TRACK_LIST.length; i++) {
     const raw = CUSTOM_TRACK_LIST[i].trim();
     if (!raw) continue;
@@ -572,10 +587,13 @@ async function discoverMusicFiles() {
     if (await checkFileExists(url)) {
       const meta = parseTrackMetadata(url, i + 1);
       foundMap.set(meta.num + "_" + meta.fileName, meta);
+      highestListed = Math.max(highestListed, meta.num || 0);
     }
   }
 
-  for (let i = 1; i <= 500; i++) {
+  // FIX: start probing after the numbers CUSTOM_TRACK_LIST already covers. Slot 1 used to be probed
+  // with 11 name variants (22 requests, all 404) even though track_1_... was in the list.
+  for (let i = highestListed + 1; i <= 500; i++) {
     let matchedInSlot = false;
     const plainUrl = `music/track_${i}.mp3`;
     if (await checkFileExists(plainUrl)) {
@@ -642,10 +660,9 @@ function rebuildShuffleQueue() {
 
 async function getNextTrackMeta() {
   if (!playlistInitialized) await discoverMusicFiles();
-  if (activeQueue.length === 0) {
-    await discoverMusicFiles();
-    rebuildShuffleQueue();
-  }
+  // FIX: re-shuffle the known tracks when the queue runs dry. Discovery (and its burst of 404
+  // probes) used to re-run every time the 3-track queue emptied.
+  if (activeQueue.length === 0) rebuildShuffleQueue();
   return activeQueue.shift() || MASTER_TRACKS[0] || null;
 }
 

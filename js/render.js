@@ -789,11 +789,19 @@ function renderBiomeAndWorld() {
     for (let i = 0; i < activeForts.length; i++) {
       const ft = activeForts[i];
       ctx.save(); ctx.translate(ft.x, ft.y);
+      // Fade out during the last 5 s of the fort's lifetime.
+      ctx.globalAlpha = typeof ft.life === "number" ? Math.max(0.25, Math.min(1, ft.life / 5)) : 1;
       ctx.strokeStyle = "#00e676"; ctx.lineWidth = 3.0;
       ctx.strokeRect(-ft.rad * 0.7, -ft.rad * 0.7, ft.rad * 1.4, ft.rad * 1.4);
       ctx.fillStyle = "rgba(0, 230, 118, 0.12)";
       ctx.fillRect(-ft.rad * 0.7, -ft.rad * 0.7, ft.rad * 1.4, ft.rad * 1.4);
       ctx.fillStyle = "#ffd166"; ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI * 2); ctx.fill();
+      if (ft.maxHp) {
+        const bw = ft.rad * 1.4, frac = Math.max(0, Math.min(1, ft.hp / ft.maxHp));
+        ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(-bw / 2, -ft.rad * 0.7 - 8, bw, 4);
+        ctx.fillStyle = frac > 0.5 ? "#00e676" : (frac > 0.25 ? "#ffd166" : "#ff5252");
+        ctx.fillRect(-bw / 2, -ft.rad * 0.7 - 8, bw * frac, 4);
+      }
       ctx.restore();
     }
   }

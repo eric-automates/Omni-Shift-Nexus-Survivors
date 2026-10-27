@@ -371,13 +371,17 @@ function triggerLevelUp() {
   if (window.trackProgress) window.trackProgress("Level Up Modal Opened: Lv." + player.lvl);
   ensurePlayerVisors();
   runPaused = true; sfx(330, 880, 0.22, "triangle");
-  document.getElementById("lvlTitle").textContent = "NEXUS LEVEL " + player.lvl + " — PICK 1 OF 3";
+  // FIX: several level-ups can be queued; show which level this pick belongs to and how many remain.
+  const pend = Math.max(1, player.pendingLevelUps || 1);
+  const pickLvl = player.lvl - pend + 1;
+  document.getElementById("lvlTitle").textContent = "NEXUS LEVEL " + pickLvl + " — PICK 1 OF 3" + (pend > 1 ? ` (+${pend - 1} MORE)` : "");
   document.getElementById("pauseBar").style.display = "none";
   const grid = document.getElementById("lvlGrid"); grid.innerHTML = "";
 
   const curVac = typeof player.orbVacuumRate === "number" ? player.orbVacuumRate : 0;
   const guaranteedSuper = [], pool = [];
-  player.weapons.forEach(w => {
+  // FIX: weapons switched OFF on the belt are no longer offered as upgrade cards (spec v9.0 §3.3).
+  player.weapons.filter(w => w.enabled !== false).forEach(w => {
     if (w.lvl === 9) guaranteedSuper.push({ type: "wup", w, isSuper: true });
     else if (w.lvl < 9) pool.push({ type: "wup", w, isSuper: false });
   });
@@ -387,9 +391,15 @@ function triggerLevelUp() {
     pool.push({ type: "sigup", nextLvl: curSigLvl + 1 });
   }
 
+  // FIX: the 4 random "NEW WEAPON" rolls could pick the same weapon twice (duplicate cards).
+  const offeredNew = new Set();
   for (let k = 0; k < 4; k++) {
     const rc = CHAR_RAW[Math.floor(Math.random() * CHAR_RAW.length)];
-    if (!player.weapons.some(w => w.id === rc[0]) && player.weapons.length < 6) pool.push({ type: "wnew", c: rc });
+    if (offeredNew.has(rc[0])) continue;
+    if (!player.weapons.some(w => w.id === rc[0]) && player.weapons.length < (typeof MAX_WEAPONS !== "undefined" ? MAX_WEAPONS : 6)) {
+      offeredNew.add(rc[0]);
+      pool.push({ type: "wnew", c: rc });
+    }
   }
   PASSIVES.forEach((p, idx) => {
     if (idx === 5 && curVac >= 1.0) return;
@@ -406,9 +416,12 @@ function triggerLevelUp() {
   if (curVac < 1.0 && typeof vacuumDistantOrbs === "function") pool.push({ type: Math.random() < 0.22 ? "vac100" : "vac35" });
 
   pool.sort(() => Math.random() - 0.5);
+  const hand = [...guaranteedSuper, ...pool].slice(0, 3);
+  // Safety net: a fully maxed build used to get an EMPTY card list (no way to close the modal).
+  if (hand.length === 0) hand.push({ type: "heal" });
   window._inHudUpdate = true;
   try {
-    [...guaranteedSuper, ...pool].slice(0, 3).forEach(ch => {
+    hand.forEach(ch => {
       const card = document.createElement("div");
       let title = "", sub = "", desc = "", ico = "";
       if (ch.type === "wup") {
@@ -455,6 +468,11 @@ function triggerLevelUp() {
         title = "★ OMEGA SINGULARITY VACUUM (100% ORBS)"; sub = "RARE TOTAL ORB ABSORPTION MATRIX";
         desc = "100% of all distant & future orbs across the sector automatically fly to you!";
         ico = makeSVG("nova", "#ffd166", "#00ff88");
+      } else if (ch.type === "heal") {
+        card.className = "card unlocked";
+        title = "NEXUS OVERFLOW: FIELD RESTORE"; sub = "Every upgrade is maxed";
+        desc = "Restores 40% Max HP and fully repairs all limbs.";
+        ico = makeSVG("pas", "#00e676", "#ffd166");
       } else {
         card.className = "card unlocked";
         title = `${ch.p[0]} (Lv.${ch.lvl}/5)`; sub = "Passive Matrix Slot"; desc = ch.p[1];
@@ -496,9 +514,14 @@ function triggerLevelUp() {
           player.orbVacuumRate = Math.min(1.0, +(curVac + 0.35).toFixed(2)); vacuumDistantOrbs(0.35);
         } else if (ch.type === "vac100") {
           player.orbVacuumRate = 1.0; vacuumDistantOrbs(1.0);
+        } else if (ch.type === "heal") {
+          player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.4); player.limbs.fill(100);
         } else applyPassive(ch.idx);
-        runPaused = false; showScreen(null);
         if (typeof syncHeroSpellbook === "function") syncHeroSpellbook();
+        // FIX: consume one queued level-up; if more are waiting, deal a fresh hand immediately.
+        player.pendingLevelUps = Math.max(0, (player.pendingLevelUps || 1) - 1);
+        if (player.pendingLevelUps > 0) { updateHUD(); triggerLevelUp(); return; }
+        runPaused = false; showScreen(null);
         updateHUD();
       };
       grid.appendChild(card);
@@ -620,7 +643,9 @@ function updateHUD() {
       const stanceTxt = player.activeStanceName ? player.activeStanceName.split(" (")[0] : "";
       if (player.hasSaber) {
         sHud.style.display = "inline-block";
-        sHud.textContent = `${stanceTxt ? stanceTxt + " • " : ""}Reflect: ${Math.floor(player.saberMastery)}%`;
+        // FIX: this used to print saberMastery (e.g. 15%) while the real per-bolt chance was 0.35 + 0.65 * mastery.
+        const reflectPct = typeof getSaberDeflectChance === "function" ? Math.round(getSaberDeflectChance() * 100) : Math.floor(player.saberMastery);
+        sHud.textContent = `${stanceTxt ? stanceTxt + " • " : ""}Reflect: ${reflectPct}%`;
       } else if (stanceTxt) {
         sHud.style.display = "inline-block";
         sHud.textContent = `Stance: ${stanceTxt}`;
@@ -634,7 +659,12 @@ function updateHUD() {
 
     const wBox = document.getElementById("wpnSlots");
     if (wBox) {
-      if (wBox.children.length !== player.weapons.length) wBox.innerHTML = "";
+      // Rebuild when the weapon list (or the run) changes so slot handlers never point at stale objects.
+      const wListKey = player.weapons.map(w => w.id).join(",") + "|" + runSeed;
+      if (wBox.children.length !== player.weapons.length || wBox.getAttribute("data-wlist") !== wListKey) {
+        wBox.innerHTML = "";
+        wBox.setAttribute("data-wlist", wListKey);
+      }
       player.weapons.forEach((w, wIdx) => {
         let d = wBox.children[wIdx];
         if (!d) {
@@ -660,7 +690,9 @@ function updateHUD() {
     }
 
     const pBox = document.getElementById("pasSlots");
-    if (pBox && pBox.children.length !== player.passives.length) {
+    const pListKey = player.passives.map(p => p.id).join(",") + "|" + runSeed;
+    if (pBox && (pBox.children.length !== player.passives.length || pBox.getAttribute("data-plist") !== pListKey)) {
+      pBox.setAttribute("data-plist", pListKey);
       pBox.innerHTML = "";
       player.passives.forEach(p => {
         const d = document.createElement("div"); d.className = "slot pas";
@@ -675,7 +707,10 @@ function updateHUD() {
     }
 
     const rBox = document.getElementById("relicSlots");
-    if (rBox && rBox.children.length !== player.relics.length) {
+    // FIX: rebuild when the relic SET changes (a replaced relic keeps the count the same).
+    const relicKey = player.relics.map(r => r.id).join(",");
+    if (rBox && rBox.getAttribute("data-relics") !== relicKey) {
+      rBox.setAttribute("data-relics", relicKey);
       rBox.innerHTML = "";
       player.relics.forEach(r => {
         const d = document.createElement("div"); d.className = "slot relic";
@@ -851,10 +886,12 @@ function renderChars() {
 
 function renderStages() {
   const f = FACTIONS[(CHAR_RAW[meta.selChar] || CHAR_RAW[0])[1]] || FACTIONS[0], g = document.getElementById("stageGrid"); g.innerHTML = "";
+  const cleared = Array.isArray(meta.cleared) ? meta.cleared : [];
   STAGES.forEach(s => {
     const unl = meta.stages.includes(s.id), sel = meta.selStage === s.id, wName = f.worlds[s.tier], d = document.createElement("div");
+    const done = cleared.includes(s.id);
     d.className = "card " + (unl ? "unlocked" : "locked") + (sel ? " selected" : "");
-    d.innerHTML = `<div class="card-title">Stage ${s.id}: ${wName} ${s.suffix}</div><div class="card-sub">HP x${s.hpMul} • Drop: ${s.dmDrop} DM</div><div class="card-desc">Hazard: ${s.hazard}</div>`;
+    d.innerHTML = `<div class="card-title">Stage ${s.id}: ${wName} ${s.suffix}${done ? " ✓" : ""}</div><div class="card-sub">HP x${s.hpMul} • Titan Drop: ${s.dmDrop} DM${done ? " • CLEARED" : ""}</div><div class="card-desc">Hazard: ${s.hazard}${unl ? "" : `<br>🔒 Defeat the Stage ${s.id - 1} Sector Titan to unlock`}</div>`;
     d.onclick = () => { if (!wasLongPress && !wasScrolled && unl) { meta.selStage = s.id; saveMeta(); renderStages(); } }; g.appendChild(d);
   });
 }
@@ -897,7 +934,7 @@ function renderOpts() {
   ];
   rows.forEach(r => {
     const btn = document.createElement("button"); btn.className = "btn"; btn.textContent = `${r[0]}: ${r[1]}`;
-    btn.onclick = () => { r[2](); renderOpts(); }; box.appendChild(btn);
+    btn.onclick = () => { r[2](); if (typeof saveOpts === "function") saveOpts(); renderOpts(); }; box.appendChild(btn);
   });
 }
 
@@ -935,14 +972,24 @@ if (typeof cv !== "undefined") {
       lastCanvasTapY = cy;
     }
 
-    joy.act = true; joy.ox = cx; joy.oy = cy; joy.dx = 0; joy.dy = 0;
+    // FIX: the stick is owned by ONE pointer. A second finger touching the canvas used to re-center
+    // it, and lifting ANY finger (e.g. tapping DASH) released it mid-drag.
+    if (joy.act && e.pointerId !== joy.id) return;
+    joy.act = true; joy.id = e.pointerId; joy.ox = cx; joy.oy = cy; joy.dx = 0; joy.dy = 0;
   });
   cv.addEventListener("pointermove", e => {
-    if (!joy.act) return;
+    if (!joy.act || e.pointerId !== joy.id) return;
     const vx = e.clientX - joy.ox, vy = e.clientY - joy.oy, m = Math.hypot(vx, vy) || 1, c = Math.min(1, m / opts.joySize);
     joy.dx = (vx / m) * c; joy.dy = (vy / m) * c;
   });
-  window.addEventListener("pointerup", () => { joy.act = false; joy.dx = 0; joy.dy = 0; });
+  const releaseJoy = () => { joy.act = false; joy.id = -1; joy.dx = 0; joy.dy = 0; };
+  const onPointerEnd = e => { if (joy.act && e.pointerId === joy.id) releaseJoy(); };
+  window.addEventListener("pointerup", onPointerEnd);
+  window.addEventListener("pointercancel", onPointerEnd);
+  // Safety net: if the owning pointer's "up" was ever lost, release once no fingers remain.
+  window.addEventListener("touchend", e => { if (e.touches && e.touches.length === 0) releaseJoy(); });
+  window.addEventListener("touchcancel", e => { if (e.touches && e.touches.length === 0) releaseJoy(); });
+  window.addEventListener("blur", releaseJoy);
 }
 
 document.getElementById("goPlay").onclick = () => { if (checkLoadedScripts()) { if (window.trackProgress) window.trackProgress("Deploying Hero #" + meta.selChar); startRun(); } };
@@ -954,14 +1001,15 @@ document.getElementById("goCodex").onclick = () => { if (checkLoadedScripts()) {
 document.getElementById("goOpts").onclick = () => { if (checkLoadedScripts()) { renderOpts(); showScreen("scrOpts"); } };
 document.getElementById("goHealth").onclick = () => { if (checkLoadedScripts()) { renderHealth(); showScreen("scrHealth"); } };
 document.getElementById("goHelp").onclick = () => showScreen("scrHelp");
-document.getElementById("btnRespecChars").onclick = () => { respecAll(); renderChars(); };
+// FIX: the Character-screen respec used respecAll(), which also wiped every Shop upgrade.
+document.getElementById("btnRespecChars").onclick = () => { if (typeof respecHeroes === "function") respecHeroes(); else respecAll(); renderChars(); };
 document.getElementById("btnRespecAll").onclick = () => { respecAll(); renderMeta(); };
 document.getElementById("btnTimeDown").onclick = () => setTimeScale(-0.5, false);
 document.getElementById("btnTimeReset").onclick = () => setTimeScale(0, true);
 document.getElementById("btnTimeUp").onclick = () => setTimeScale(0.5, false);
 document.getElementById("btnInteract").onclick = () => { if (typeof triggerWorldInteract === "function") triggerWorldInteract(); };
-document.getElementById("btnZoomIn").onclick = () => { opts.zoom = Math.min(2.0, +(opts.zoom + 0.2).toFixed(2)); };
-document.getElementById("btnZoomOut").onclick = () => { opts.zoom = Math.max(0.5, +(opts.zoom - 0.2).toFixed(2)); };
+document.getElementById("btnZoomIn").onclick = () => { opts.zoom = Math.min(2.0, +(opts.zoom + 0.2).toFixed(2)); if (typeof saveOpts === "function") saveOpts(); };
+document.getElementById("btnZoomOut").onclick = () => { opts.zoom = Math.max(0.5, +(opts.zoom - 0.2).toFixed(2)); if (typeof saveOpts === "function") saveOpts(); };
 document.getElementById("btnPause").onclick = (e) => {
   e.stopPropagation();
   if (!runActive) return;
@@ -979,11 +1027,66 @@ document.getElementById("btnResume").onclick = (e) => {
 };
 document.getElementById("btnQuitRun").onclick = (e) => {
   e.stopPropagation();
+  // FIX: quitting used to purge the run and bank 0 DM. It now pays out like any other run end.
+  if (runActive && player && typeof endRun === "function") { endRun("quit"); return; }
   purgeRunMemory();
   document.getElementById("pauseBar").style.display = "none";
   document.getElementById("hud").classList.remove("active");
   showScreen("scrMain");
 };
+
+/* === 7. END-OF-RUN SUMMARY (new: runs used to dump you straight back to the main menu) === */
+let lastRunSummary = null;
+function fmtRunClock(sec) {
+  const s = Math.max(0, Math.floor(sec || 0));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function showRunSummary(sm) {
+  lastRunSummary = sm;
+  const scr = document.getElementById("scrSummary");
+  if (!scr) { showScreen("scrMain"); updateMenuUI(); return; }
+  const titles = { death: "☠ KIA — RUN OVER", quit: "⏏ RUN ENDED — EXTRACTED" };
+  document.getElementById("sumTitle").textContent = (sm.cleared ? "★ SECTOR CLEARED • " : "") + (titles[sm.reason] || "RUN OVER");
+  let subTxt;
+  if (sm.cleared) subTxt = sm.unlockedStage ? `Stage ${sm.unlockedStage} is now unlocked on the Sector Map.` : (sm.stageId >= STAGES.length ? "Final sector cleared — the multiverse is yours." : "Sector cleared again.");
+  else subTxt = sm.bossSpawned ? "The Sector Titan is still out there — defeat it to clear this sector." : "Survive to 2:00 to summon the Sector Titan, then defeat it to clear the sector.";
+  document.getElementById("sumSub").textContent = subTxt;
+  const row = (label, val, col = "#e0f2f1") => `<div style="display:flex;justify-content:space-between;gap:8px"><span style="color:#90a4ae">${label}</span><b style="color:${col}">${val}</b></div>`;
+  const mulTxt = sm.mul > 1.0001 ? ` × ${sm.mul.toFixed(2)} greed` : "";
+  document.getElementById("sumBox").innerHTML = `
+    <div class="health-row">${row("Hero", sm.hero)}${row("Sector", `Stage ${sm.stageId}: ${sm.stageName}`)}${row("Difficulty", sm.diffName)}</div>
+    <div class="health-row">${row("Time survived", fmtRunClock(sm.time))}${row("Nexus level", sm.lvl)}${row("Kills", sm.kills)}${row("Arsenal", `${sm.weapons} weapon(s) • ${sm.relics} relic(s)`)}</div>
+    <div class="health-row">
+      ${row("Kills ÷ 18", "+" + sm.killDM + " DM")}
+      ${row("Run bonuses", "+" + sm.bonusDM + " DM")}
+      ${row("Run payout" + mulTxt, "+" + sm.runDM + " DM")}
+      ${row("Sector Titan drop", sm.stageDM ? "+" + sm.stageDM + " DM (banked at kill)" : "—", sm.stageDM ? "#00e676" : "#90a4ae")}
+      <div style="border-top:1px solid #263850;margin:5px 0 3px"></div>
+      ${row("TOTAL EARNED", "+" + sm.totalDM + " DM", "#ffd166")}
+      ${row("Dark Matter available", availDM() + " DM", "#ffd166")}
+    </div>`;
+  const nextBtn = document.getElementById("btnSumNext");
+  const nextId = sm.stageId + 1;
+  if (nextBtn) {
+    const canNext = nextId <= STAGES.length && meta.stages.includes(nextId);
+    nextBtn.style.display = canNext ? "inline-block" : "none";
+    nextBtn.textContent = `NEXT SECTOR (STAGE ${nextId}) ▶`;
+  }
+  updateMenuUI();
+  showScreen("scrSummary");
+}
+
+if (document.getElementById("btnSumAgain")) {
+  document.getElementById("btnSumAgain").onclick = () => { if (checkLoadedScripts()) startRun(); };
+  document.getElementById("btnSumNext").onclick = () => {
+    if (!lastRunSummary || !checkLoadedScripts()) return;
+    const nextId = lastRunSummary.stageId + 1;
+    if (meta.stages.includes(nextId)) { meta.selStage = nextId; saveMeta(); }
+    startRun();
+  };
+  document.getElementById("btnSumMenu").onclick = () => { updateMenuUI(); showScreen("scrMain"); };
+}
 
 let lastTS = performance.now();
 function loop(ts) {

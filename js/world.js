@@ -59,16 +59,29 @@ function getChunk(cx, cy) {
       ? ChaosMath.polyPoints(objSeed, rad, type === 0 ? 6 : (type === 2 ? 5 : 7), 0.18, 0)
       : null;
 
+    const objId = key + "_" + i;
     objs.push({
-      id: key + "_" + i,
+      id: objId,
       x: ox, y: oy, rad, type, tall,
-      used: false, seed: objSeed, poly
+      // FIX: looted pods / boarded vehicles are remembered per run (runChunkDeltas), so they no
+      // longer respawn when this chunk is regenerated after a cache eviction.
+      used: (typeof runChunkDeltas !== "undefined") && runChunkDeltas.has(objId), seed: objSeed, poly
     });
   }
 
-  if (worldChunkCache.size > 180) worldChunkCache.clear();
+  // FIX: evict the oldest chunks instead of wiping the whole cache (which also wiped "used" flags).
+  if (worldChunkCache.size > 180) {
+    let n = worldChunkCache.size - 140;
+    for (const k of worldChunkCache.keys()) { if (n-- <= 0) break; worldChunkCache.delete(k); }
+  }
   worldChunkCache.set(key, { seed: runSeed, objs });
   return objs;
+}
+
+function markWorldObjUsed(o) {
+  if (!o) return;
+  o.used = true;
+  if (o.id && typeof runChunkDeltas !== "undefined") runChunkDeltas.set(o.id, true);
 }
 
 function getNearbyObstacles(x, y, radius = 320) {
@@ -116,15 +129,23 @@ function isPointBlockedByObstacle(x, y, ignoreLow = false) {
   return false;
 }
 
+// FIX: forts were pushed into activeForts and never removed (their hp field was unused), so they
+// piled up forever (heroes #6, #8, #53). Forts now have a lifetime, take damage from enemies
+// pressing on the walls, and at most MAX_FORTS stand at once (oldest collapses first).
+const MAX_FORTS = 3, FORT_LIFE = 35, FORT_HP = 400, MAX_MINES = 24, MINE_LIFE = 60;
+
 function deployLastStandFort(x, y) {
+  const durMul = player ? Math.max(0.5, player.dur || 1) : 1;
   if (typeof activeForts !== "undefined") {
-    activeForts.push({ x, y, rad: 64, hp: 400, fireCD: 0.5 });
+    while (activeForts.length >= MAX_FORTS) activeForts.shift();
+    activeForts.push({ x, y, rad: 64, hp: FORT_HP, maxHp: FORT_HP, fireCD: 0.5, life: FORT_LIFE * durMul, maxLife: FORT_LIFE * durMul });
   }
   if (typeof activeMines !== "undefined") {
     for (let k = 0; k < 6; k++) {
       const a = (Math.PI * 2 * k) / 6;
-      activeMines.push({ x: x + Math.cos(a) * 82, y: y + Math.sin(a) * 82, rad: 12, dmg: 180 * (player ? player.might : 1) });
+      activeMines.push({ x: x + Math.cos(a) * 82, y: y + Math.sin(a) * 82, rad: 12, dmg: 180 * (player ? player.might : 1), life: MINE_LIFE * durMul });
     }
+    if (activeMines.length > MAX_MINES) activeMines.splice(0, activeMines.length - MAX_MINES);
   }
   spawnSpeech(x, y, "FORTIFIED BUNKER & CLAYMORES DEPLOYED!", "#00e676", 2.2);
   sfx(180, 520, 0.22, "square", 0.22);
@@ -175,7 +196,7 @@ function triggerWorldInteract() {
     return;
   }
   if (tgt.kind === "warpChest") {
-    tgt.obj.used = true;
+    markWorldObjUsed(tgt.obj);
     if (typeof grantRelic === "function") grantRelic();
     player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.35);
     updateHUD();
@@ -183,7 +204,7 @@ function triggerWorldInteract() {
   }
   if (tgt.kind === "chunkObj") {
     const o = tgt.obj;
-    o.used = true;
+    markWorldObjUsed(o);
     if (o.type === 4) {
       player.hp = Math.min(player.maxHp, player.hp + 30);
       for (let k = 0; k < 5; k++) spawnOrb(o.x + (Math.random() - 0.5) * 24, o.y + (Math.random() - 0.5) * 24, 6 + waveNum * 1.5);
@@ -205,22 +226,35 @@ function triggerWorldInteract() {
 
 function updateWorldObjects(simDt) {
   if (!player) return;
-  // 1. Update Hazard Zones in current chunk
-  const cx = Math.floor(player.x / CHUNK_SIZE), cy = Math.floor(player.y / CHUNK_SIZE);
-  const objs = getChunk(cx, cy);
-  for (let i = 0; i < objs.length; i++) {
-    const o = objs[i];
-    if (o.type === 3 && !player.hazImmune && player.inVehicle === 0 && !player.hover) {
-      if (Math.hypot(player.x - o.x, player.y - o.y) < o.rad) {
-        player.hp = Math.max(1, player.hp - 4.5 * simDt);
+  // 1. Update Hazard Zones (FIX: neighbouring chunks too - a hazard near a border used to be ignored
+  //    as soon as the player stepped into the next chunk). At most one hazard ticks per frame.
+  if (!player.hazImmune && player.inVehicle === 0 && !player.hover) {
+    const cx = Math.floor(player.x / CHUNK_SIZE), cy = Math.floor(player.y / CHUNK_SIZE);
+    let inHazard = false;
+    for (let dy = -1; dy <= 1 && !inHazard; dy++) {
+      for (let dx = -1; dx <= 1 && !inHazard; dx++) {
+        const objs = getChunk(cx + dx, cy + dy);
+        for (let i = 0; i < objs.length; i++) {
+          const o = objs[i];
+          if (o.type === 3 && Math.hypot(player.x - o.x, player.y - o.y) < o.rad) { inHazard = true; break; }
+        }
       }
     }
+    if (inHazard) player.hp = Math.max(1, player.hp - 4.5 * simDt);
   }
 
   // 2. Update Active Forts (Auto-Turret Fire & Enemy Pushback)
   if (typeof activeForts !== "undefined") {
     for (let f = activeForts.length - 1; f >= 0; f--) {
       const ft = activeForts[f];
+      if (typeof ft.life !== "number") { ft.life = FORT_LIFE; ft.maxLife = FORT_LIFE; }
+      ft.life -= simDt;
+      if (ft.life <= 0 || ft.hp <= 0) {
+        spawnParticles(ft.x, ft.y, 10);
+        spawnSpeech(ft.x, ft.y, ft.hp <= 0 ? "BUNKER DESTROYED!" : "BUNKER DECOMMISSIONED", "#90a4ae", 1.4);
+        activeForts.splice(f, 1);
+        continue;
+      }
       ft.fireCD -= simDt;
       if (ft.fireCD <= 0) {
         ft.fireCD = 0.55;
@@ -242,6 +276,7 @@ function updateWorldObjects(simDt) {
         if (d < ft.rad + 10 && d > 1) {
           eX[j] += ((eX[j] - ft.x) / d) * 85 * simDt;
           eY[j] += ((eY[j] - ft.y) / d) * 85 * simDt;
+          ft.hp -= (eType[j] === 99 ? 24 : (eType[j] === 98 ? 14 : 6)) * simDt; // enemies batter the walls
         }
       }
     }
@@ -251,6 +286,10 @@ function updateWorldObjects(simDt) {
   if (typeof activeMines !== "undefined") {
     for (let m = activeMines.length - 1; m >= 0; m--) {
       const mn = activeMines[m];
+      if (typeof mn.life === "number") {
+        mn.life -= simDt;
+        if (mn.life <= 0) { activeMines.splice(m, 1); continue; }
+      }
       let triggered = false;
       for (let j = 0; j < MAX_E; j++) {
         if (eAct[j] && Math.hypot(eX[j] - mn.x, eY[j] - mn.y) < mn.rad + 14) {

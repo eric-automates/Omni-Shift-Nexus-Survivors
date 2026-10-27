@@ -687,6 +687,7 @@ function startRun() {
     maxRelics: ([7, 10, 35, 69, 73, 75, 79].includes(cid)) ? 4 : 3,
     relics: [], utils: getHeroUtils(cid), spellbook: [],
     xp: 0, nextXp: 10, lvl: 1, kills: 0, dmRun: 0, bossSpawned: false,
+    pendingLevelUps: 0, sectorCleared: false, dmStage: 0, unlockedStage: 0, bossDmMul: 0, dmGreed: 0, evadeTxtCD: 0,
     fac: FACTIONS[c[1]] || FACTIONS[0], hero: c, cid, stg, diff,
     weapons: [{
       id: cid,
@@ -788,58 +789,150 @@ function startRun() {
   sfx(220, 660, 0.18, "triangle");
 }
 
+/* === 7b. SECTOR CLEAR, DARK MATTER PAYOUT & RUN END (bug fixes) === */
+// "Dark Matter Greed" shop upgrade advertises "+20% XP & DM Gain" per rank; the DM half was never applied.
+function getDmGainMul() {
+  const rank = (meta && Array.isArray(meta.ranks)) ? (meta.ranks[9] || 0) : 0;
+  return 1 + rank * 0.20 + ((player && player.dmGreed) || 0);
+}
+
+// FIX: stages 2-50 could never be unlocked (meta.stages stayed [1]) and the stage "Drop: N DM"
+// was never paid. Defeating the Sector Titan now clears the sector: its DM drop is banked
+// immediately (dying afterwards cannot lose it) and the next stage unlocks. The run continues.
+function onSectorTitanDefeated(x, y) {
+  if (!player || player.sectorCleared) return;
+  player.sectorCleared = true;
+  const stg = player.stg || STAGES[0];
+  const dm = Math.max(1, Math.round((stg.dmDrop || 1) * (1 + (player.bossDmMul || 0)) * getDmGainMul()));
+  meta.dmEarned += dm;
+  player.dmStage = dm;
+  if (!Array.isArray(meta.cleared)) meta.cleared = [];
+  if (!meta.cleared.includes(stg.id)) meta.cleared.push(stg.id);
+  const nextId = stg.id + 1;
+  player.unlockedStage = 0;
+  if (nextId <= STAGES.length && !meta.stages.includes(nextId)) {
+    meta.stages.push(nextId);
+    player.unlockedStage = nextId;
+  }
+  saveMeta();
+  const msg = player.unlockedStage
+    ? `SECTOR CLEARED! STAGE ${nextId} UNLOCKED (+${dm} DM)`
+    : (nextId > STAGES.length ? `FINAL SECTOR CLEARED! (+${dm} DM)` : `SECTOR CLEARED! (+${dm} DM)`);
+  spawnSpeech(player.x, player.y - 34, msg, "#00e676", 4.5);
+  sfx(330, 990, 0.42, "triangle");
+  if (opts.flash && typeof flashAlpha !== "undefined") flashAlpha = Math.max(flashAlpha, 0.35);
+  if (typeof updateHUD === "function") updateHUD();
+}
+
+// FIX: one exit path for every way a run can end. Quitting from the pause menu used to purge the
+// run and pay 0 DM (dying paid normally) and there was no end-of-run summary at all.
+function endRun(reason = "death") {
+  if (!player) return null;
+  const p = player;
+  const killDM = Math.floor(p.kills / 18);
+  const bonusDM = Math.floor(p.dmRun || 0);
+  const mul = getDmGainMul();
+  let runDM = Math.round((killDM + bonusDM) * mul);
+  if (reason === "death") runDM = Math.max(1, runDM);   // original minimum payout on death
+  meta.dmEarned += runDM;
+  const stg = p.stg || STAGES[0];
+  const summary = {
+    reason, cid: p.cid, hero: p.hero ? p.hero[3] : "Hero",
+    stageId: stg.id, stageName: `${p.fac && p.fac.worlds ? p.fac.worlds[stg.tier] : "Sector"} ${stg.suffix}`,
+    diffName: p.diff ? p.diff.name : "", time: runTime, lvl: p.lvl, kills: p.kills,
+    weapons: p.weapons.length, relics: p.relics.length,
+    killDM, bonusDM, mul, runDM, stageDM: p.dmStage || 0, totalDM: runDM + (p.dmStage || 0),
+    cleared: !!p.sectorCleared, unlockedStage: p.unlockedStage || 0, bossSpawned: !!p.bossSpawned
+  };
+  saveMeta();
+  purgeRunMemory();
+  const hud = document.getElementById("hud"); if (hud) hud.classList.remove("active");
+  const pb = document.getElementById("pauseBar"); if (pb) pb.style.display = "none";
+  if (typeof showRunSummary === "function") showRunSummary(summary);
+  else showScreen("scrMain");
+  return summary;
+}
+
 /* === 8. RELIC, PASSIVE & FORMATION SPAWNERS === */
+// FIX: relic effects are now table-driven and reversible. Previously, hitting the relic cap
+// shift()-ed the oldest relic out of the list WITHOUT removing its stat bonuses, and because it
+// was no longer "held" it could be granted again and stack (Might 1.00 -> 1.70 -> 1.85).
+function applyRelicEffect(r, sign = 1) {
+  if (!player || !r) return;
+  const p = player, v = r.val;
+  const add = (prop, amt) => { p[prop] = (p[prop] || 0) + sign * amt; };
+  const mul = (prop, f) => { p[prop] = (p[prop] || 0) * (sign > 0 ? f : 1 / f); };
+  const mulHp = (f) => { p.maxHp *= (sign > 0 ? f : 1 / f); };
+  const flag = (prop) => {
+    if (sign > 0) { r.prevFlag = !!p[prop]; p[prop] = true; }
+    else p[prop] = !!r.prevFlag;
+  };
+  switch (r.key) {
+    case "repulsor": flag("hasRepulsor"); break;
+    case "prcArm": add("pierce", 1); add("armor", 3); break;
+    case "critPack": add("crit", 0.15); add("cdmg", 0.25); break;
+    case "fastDraw": mul("cdr", 0.85); add("projSpd", 0.20); break;
+    case "fortFast": add("fortFastMul", 0.35); add("might", 0.15); break;
+    case "jetHover": mul("spd", 1.18); flag("hazImmune"); break;
+    case "cdrAll": mul("cdr", 0.86); mul("utilCdrMul", 0.86); break;
+    case "dmgSpd": add("might", 0.18); mul("spd", 1.15); break;
+    case "magXp": mul("mag", 1.35); add("greed", 0.15); break;
+    case "critArea": add("crit", 0.20); add("area", 0.18); break;
+    case "armReg": add("armor", 4); add("regen", 1.5); break;
+    case "utilCdr": mul("utilCdrMul", 0.78); break;
+    case "pspdDur": add("projSpd", 0.30); add("dur", 0.20); break;
+    case "bossDmg": add("bossMul", 0.25); break;
+    case "dmgKb": add("might", v); add("kb", 0.22); break;
+    case "dmg": add("might", v); break;
+    case "reg": add("regen", v); break;
+    case "hpArm": mulHp(1.3); if (sign > 0) p.hp += 30; add("armor", 2); break;
+    case "regSpd": add("regen", 1.8); mul("spd", 1.12); break;
+    case "arm": add("armor", v); break;
+    case "cdmg": add("cdmg", v); break;
+    case "cnt": add("projCnt", v); break;
+    case "greed": add("greed", v); add("dmGreed", v); break;       // "+25% Experience & Dark Matter Greed"
+    case "hp": mulHp(1 + v); if (sign > 0) p.hp += 35; break;
+    case "slow": add("slow", v); break;
+    case "area": add("area", v); break;
+    case "cdrMag": mul("cdr", 0.88); mul("mag", 1.20); break;
+    case "crit": add("crit", v); break;
+    case "dm": add("bossDmMul", v); break;                          // "+30% Boss Dark Matter Yield" (was a fractional +0.3 DM)
+    case "shred": add("shred", v); break;
+    case "critCdr": add("crit", 0.15); mul("cdr", 0.90); break;
+    case "dodge": add("dodge", v); break;
+    case "spd": mul("spd", 1 + v); break;
+    case "prc": add("pierce", v); break;
+    case "pspd": add("projSpd", v); break;
+    case "rev": add("revives", v); if (p.revives < 0) p.revives = 0; break;
+    case "vehBoost": add("vehBoostMul", v); break;
+    case "dur": add("dur", v); break;
+    case "kb": add("kb", v); mulHp(1.2); break;
+    case "omni": add("might", 0.15); add("area", 0.15); mul("cdr", 0.90); break;
+  }
+  p.hp = Math.min(p.hp, p.maxHp);
+}
+
 function grantRelic(forcedId = -1) {
   if (!player) return;
   const avail = RELICS_DB.filter(r => !player.relics.some(pr => pr.id === r[0]));
   if (avail.length === 0) return;
-  const rel = forcedId >= 0 ? (RELICS_DB[forcedId] || avail[0]) : avail[Math.floor(Math.random() * avail.length)];
-  if (player.relics.length >= player.maxRelics) player.relics.shift();
-  player.relics.push({ id: rel[0], name: rel[1], desc: rel[2], key: rel[3], val: rel[4] });
+  let rel;
+  if (forcedId >= 0) {
+    rel = RELICS_DB[forcedId];
+    if (!rel || !avail.includes(rel)) return;   // never stack a relic that is already held
+  } else {
+    rel = avail[Math.floor(Math.random() * avail.length)];
+  }
+  let evicted = null;
+  if (player.relics.length >= player.maxRelics) {
+    evicted = player.relics.shift();
+    applyRelicEffect(evicted, -1);               // FIX: give back the evicted relic's bonuses
+  }
+  const r = { id: rel[0], name: rel[1], desc: rel[2], key: rel[3], val: rel[4] };
+  applyRelicEffect(r, 1);
+  player.relics.push(r);
 
-  const k = rel[3], v = rel[4];
-  if (k === "repulsor") player.hasRepulsor = true;
-  else if (k === "prcArm") { player.pierce += 1; player.armor += 3; }
-  else if (k === "critPack") { player.crit += 0.15; player.cdmg += 0.25; }
-  else if (k === "fastDraw") { player.cdr *= 0.85; player.projSpd += 0.20; }
-  else if (k === "fortFast") { player.fortFastMul += 0.35; player.might += 0.15; }
-  else if (k === "jetHover") { player.spd *= 1.18; player.hazImmune = true; }
-  else if (k === "cdrAll") { player.cdr *= 0.86; player.utilCdrMul *= 0.86; }
-  else if (k === "dmgSpd") { player.might += 0.18; player.spd *= 1.15; }
-  else if (k === "magXp") { player.mag *= 1.35; player.greed += 0.15; }
-  else if (k === "critArea") { player.crit += 0.20; player.area += 0.18; }
-  else if (k === "armReg") { player.armor += 4; player.regen += 1.5; }
-  else if (k === "utilCdr") { player.utilCdrMul *= 0.78; }
-  else if (k === "pspdDur") { player.projSpd += 0.30; player.dur += 0.20; }
-  else if (k === "bossDmg") { player.bossMul += 0.25; }
-  else if (k === "dmgKb") { player.might += v; player.kb += 0.22; }
-  else if (k === "dmg") { player.might += v; }
-  else if (k === "reg") { player.regen += v; }
-  else if (k === "hpArm") { player.maxHp *= 1.3; player.hp += 30; player.armor += 2; }
-  else if (k === "regSpd") { player.regen += 1.8; player.spd *= 1.12; }
-  else if (k === "arm") { player.armor += v; }
-  else if (k === "cdmg") { player.cdmg += v; }
-  else if (k === "cnt") { player.projCnt += v; }
-  else if (k === "greed") { player.greed += v; }
-  else if (k === "hp") { player.maxHp *= (1 + v); player.hp += 35; }
-  else if (k === "slow") { player.slow += v; }
-  else if (k === "area") { player.area += v; }
-  else if (k === "cdrMag") { player.cdr *= 0.88; player.mag *= 1.20; }
-  else if (k === "crit") { player.crit += v; }
-  else if (k === "dm") { player.dmRun += v; }
-  else if (k === "shred") { player.shred += v; }
-  else if (k === "critCdr") { player.crit += 0.15; player.cdr *= 0.90; }
-  else if (k === "dodge") { player.dodge += v; }
-  else if (k === "spd") { player.spd *= (1 + v); }
-  else if (k === "prc") { player.pierce += v; }
-  else if (k === "pspd") { player.projSpd += v; }
-  else if (k === "rev") { player.revives += v; }
-  else if (k === "vehBoost") { player.vehBoostMul += v; }
-  else if (k === "dur") { player.dur += v; }
-  else if (k === "kb") { player.kb += v; player.maxHp *= 1.2; }
-  else if (k === "omni") { player.might += 0.15; player.area += 0.15; player.cdr *= 0.90; }
-
-  spawnSpeech(player.x, player.y, "RELIC: " + rel[1].toUpperCase(), "#e040fb", 2.4);
+  spawnSpeech(player.x, player.y, "RELIC: " + rel[1].toUpperCase() + (evicted ? " (REPLACES " + evicted.name.toUpperCase() + ")" : ""), "#e040fb", 2.4);
   sfx(480, 980, 0.18, "triangle"); updateHUD();
 }
 

@@ -32,6 +32,63 @@ const eScarAng = new Float32Array(MAX_E), eScarHeat = new Float32Array(MAX_E),
       eScarOffY = new Float32Array(MAX_E), eScarHitCD = new Float32Array(MAX_E),
       eKneel = new Uint8Array(MAX_E);
 
+/* === 1b. BUG-FIX HELPERS: PROJECTILE HIT MEMORY, SABER DEFLECT CHANCE, SINGLE DEATH CHECK === */
+const MAX_WEAPONS = 6;          // same cap the level-up screen uses for "NEW WEAPON" cards
+const PERSIST_REHIT = 0.25;     // s before a persistent projectile (disc / orbit / aura) may re-hit the SAME enemy
+const SIM_MAX_STEP = 1 / 60;    // largest simulated step; bigger frames (or 3x speed) are sub-stepped
+
+function isPersistentProj(i) { const s = pStyle[i]; return s === 8 || s === 1 || s === 6; }
+
+function projHasHit(i, j) {
+  const base = i * PROJ_HIT_SLOTS;
+  for (let k = 0; k < PROJ_HIT_SLOTS; k++) {
+    if (pHitIdx[base + k] === j) return !isPersistentProj(i) || (runTime - pHitT[base + k]) < PERSIST_REHIT;
+  }
+  return false;
+}
+
+function projRecordHit(i, j) {
+  const base = i * PROJ_HIT_SLOTS;
+  for (let k = 0; k < PROJ_HIT_SLOTS; k++) {
+    if (pHitIdx[base + k] === j) { pHitT[base + k] = runTime; return; }
+  }
+  const slot = base + (pHit[i] % PROJ_HIT_SLOTS);
+  pHitIdx[slot] = j; pHitT[slot] = runTime;
+  pHit[i] = (pHit[i] + 1) & 255;
+}
+
+// Real per-bolt deflect chance (the HUD now shows this exact number).
+function getSaberDeflectChance() {
+  if (!player || !player.hasSaber) return 0;
+  return Math.min(1, 0.35 + ((player.saberMastery || 0) / 100) * 0.65);
+}
+
+// FIX: the death / revive check used to live only inside the melee-contact branch, so enemy
+// bolts could push HP below 0 without ending the run. Every damage source now funnels here.
+function resolvePlayerDeath() {
+  if (!player || !(player.hp <= 0)) return false;
+  if (player.revives > 0) {
+    player.revives--; player.hp = player.maxHp * 0.6; player.limbs.fill(100);
+    if ([46, 69, 70, 76].includes(player.cid)) {
+      player.might *= 1.20; player.spd *= 1.15; player.area *= 1.15;
+    }
+    spawnBlastWave(player.x, player.y, 130, "#ffd166");
+    const revMsg = player.cid === 69 ? "FAWKES PHOENIX REBIRTH!" : (player.cid === 70 ? "HORCRUX SOUL ANCHOR!" : "SECOND WIND REVIVAL!");
+    spawnSpeech(player.x, player.y, revMsg, "#ffd166", 2.4);
+    sfx(220, 880, 0.35, "triangle");
+    return false;
+  }
+  if (typeof endRun === "function") {
+    endRun("death");
+  } else {
+    meta.dmEarned += Math.max(1, Math.floor(player.kills / 18) + (player.dmRun || 0));
+    saveMeta(); purgeRunMemory();
+    document.getElementById("hud").classList.remove("active");
+    showScreen("scrMain");
+  }
+  return true;
+}
+
 /* === 2. 4-STAGE THROWN BLADE IMPALE, KNEEL, FORCE-WIGGLE & RECALL STATE === */
 let thrownBlade = {
   active: false, stage: 0, timer: 0, wpnId: 0, isSaber: true,
@@ -262,6 +319,8 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
   const xpVal = et === 99 ? 120 : (et === 98 ? 65 : (3.2 + waveNum * 0.55));
   spawnOrb(ex, ey, xpVal);
   if (et >= 98 && typeof grantRelic === "function") grantRelic();
+  // FIX: killing the Sector Titan now clears the sector (unlocks the next stage + pays its DM drop).
+  if (et === 99 && typeof onSectorTitanDefeated === "function") onSectorTitanDefeated(ex, ey);
   if (player.kills % 10 === 0 && typeof updateHUD === "function") updateHUD();
 }
 
@@ -444,6 +503,9 @@ function hitTestPlayerProj(i) {
     const eRad = eType[j] === 99 ? 24 : (eType[j] === 3 ? 17 : 13);
     const dx = pX[i] - eX[j], dy = pY[i] - eY[j];
     if (Math.hypot(dx, dy) > pRad[i] + eRad) continue;
+    // FIX: skip enemies this projectile already struck (persistent discs may re-hit after PERSIST_REHIT).
+    if (projHasHit(i, j)) continue;
+    projRecordHit(i, j);
 
     if (pStyle[i] === 2) {
       triggerRocketDetonation(pX[i], pY[i], pDmg[i], Math.max(58, pRad[i] * 5.2));
@@ -480,7 +542,8 @@ function hitTestPlayerProj(i) {
 
     const visorBonus = (player.activeVisor && player.activeVisor > 0) ? 0.10 : 0;
     const vatsGuaranteed = (player.cid === 43 && player.vatsTimer > 0);
-    const isCrit = isHead || vatsGuaranteed || (Math.random() < ((player.crit || 0.08) + visorBonus));
+    const baseCrit = typeof player.crit === "number" ? player.crit : 0.08; // FIX: crit 0 no longer falls back to 8%
+    const isCrit = isHead || vatsGuaranteed || (Math.random() < (baseCrit + visorBonus));
     const bossBoost = eType[j] >= 98 ? (player.bossMul || 1.0) : 1.0;
     const finalDmg = pDmg[i] * (isCrit ? (player.cdmg || 1.75) : 1.0) * bossBoost * (1 + eShred[j] * 0.04);
 
@@ -525,7 +588,7 @@ function hitTestPlayerProj(i) {
       pBounce[i]--;
       let nextE = -1, nextD = 180;
       for (let k = 0; k < MAX_E; k++) {
-        if (k !== j && eAct[k]) {
+        if (k !== j && eAct[k] && !projHasHit(i, k)) {
           const dk = Math.hypot(eX[k] - pX[i], eY[k] - pY[i]);
           if (dk < nextD) { nextD = dk; nextE = k; }
         }
@@ -554,6 +617,19 @@ function updateSim(rawDt) {
   if (typeof updateThemeMusic === "function") updateThemeMusic(rawDt);
   if (!runActive || runPaused || !player) return;
 
+  // FIX: sub-step long frames and high time-scales so a single step never exceeds ~1/60 s of
+  // simulated time (at 10x a bolt used to jump past its target in one step and never hit).
+  const scaled = rawDt * timeScale;
+  const steps = Math.min(8, Math.max(1, Math.ceil(scaled / (SIM_MAX_STEP * 1.05))));
+  const subDt = rawDt / steps;
+  for (let s = 0; s < steps; s++) {
+    stepSimulation(subDt);
+    if (!runActive || runPaused || !player) break;
+  }
+  frameMs = +(performance.now() - t0).toFixed(1);
+}
+
+function stepSimulation(rawDt) {
   // Pick up dropped Rival / Boss Signature Weapons from the battlefield!
   if (typeof activeWeaponDrops !== "undefined" && activeWeaponDrops.length > 0) {
     for (let w = activeWeaponDrops.length - 1; w >= 0; w--) {
@@ -565,6 +641,18 @@ function updateSim(rawDt) {
           existingWpn.lvl = Math.min(10, existingWpn.lvl + 2);
           existingWpn.enabled = true;
           spawnSpeech(player.x, player.y - 18, `UPGRADED ${rc[4].toUpperCase()} (LV.${existingWpn.lvl})!`, "#ffd166", 2.8);
+        } else if (player.weapons.length >= MAX_WEAPONS) {
+          // FIX: weapon drops used to bypass the 6-weapon cap. A full arsenal salvages the drop
+          // into +2 levels on your lowest-level active weapon instead.
+          const active = player.weapons.filter(pw => pw.enabled !== false && pw.lvl < 10);
+          const target = (active.length ? active : player.weapons.filter(pw => pw.lvl < 10))
+            .sort((a, b) => a.lvl - b.lvl)[0];
+          if (target) {
+            target.lvl = Math.min(10, target.lvl + 2);
+            spawnSpeech(player.x, player.y - 18, `ARSENAL FULL (${MAX_WEAPONS}/${MAX_WEAPONS}): SALVAGED INTO ${target.name.toUpperCase()} (LV.${target.lvl})`, "#ffd166", 2.8);
+          } else {
+            spawnSpeech(player.x, player.y - 18, "ARSENAL FULL & MAXED: WEAPON SALVAGED", "#ffd166", 2.4);
+          }
         } else {
           const wCol = drop.bladeCol || (typeof getWeaponColor === "function" ? getWeaponColor(drop.wpnId) : "#00f0ff");
           player.weapons.push({
@@ -611,6 +699,7 @@ function updateSim(rawDt) {
   if (flameVisTimer > 0) flameVisTimer = Math.max(0, flameVisTimer - simDt);
   if (muzzleFlashTimer > 0) muzzleFlashTimer = Math.max(0, muzzleFlashTimer - simDt);
   if (player.recoilKick > 0) player.recoilKick = Math.max(0, player.recoilKick - simDt * 6.5);
+  if (player.evadeTxtCD > 0) player.evadeTxtCD = Math.max(0, player.evadeTxtCD - simDt);
   if (player.regen > 0 && player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + player.regen * simDt);
 
   if ((player.acrobatZ || 0) > 0 || (player.acrobatVZ || 0) !== 0) {
@@ -904,6 +993,13 @@ function updateSim(rawDt) {
       if (!isEnemyOnScreen(i) || eLevitate[i] <= 0) {
         const ox = Math.max(player.x - 160, Math.min(player.x + 160, eX[i]));
         const oy = Math.max(player.y - 160, Math.min(player.y + 160, eY[i]));
+        if (eType[i] >= 98) {
+          // FIX: a levitated Rival used to be deleted here with no weapon drop, relic or trophy
+          // corpse. Route it through killEnemy() (dropping within reach) so rewards are kept.
+          eLevitate[i] = 0; eLevZ[i] = 0; eX[i] = ox; eY[i] = oy;
+          killEnemy(i, false);
+          continue;
+        }
         eAct[i] = 0; eLevitate[i] = 0; eLevZ[i] = 0;
         player.kills++;
         const xpVal = eType[i] >= 98 ? 65 : (3.5 + waveNum * 0.55);
@@ -984,7 +1080,11 @@ function updateSim(rawDt) {
       }
 
       if ((player.acrobatZ || 0) > 8 || (player.dodge > 0 && Math.random() < Math.min(0.65, player.dodge))) {
-        spawnSpeech(player.x, player.y - 12, (player.acrobatZ || 0) > 8 ? "ATARU LEAP!" : "EVADED!", "#00e5ff", 0.55);
+        // FIX: this text used to be spawned on EVERY dodged frame, flooding the damage-number pool.
+        if (!(player.evadeTxtCD > 0)) {
+          spawnSpeech(player.x, player.y - 12, (player.acrobatZ || 0) > 8 ? "ATARU LEAP!" : "EVADED!", "#00e5ff", 0.55);
+          player.evadeTxtCD = 0.45;
+        }
       } else {
         if (player.cid === 23) player.adaptTimer = 5.0;
         if (player.cid === 50) {
@@ -1008,24 +1108,8 @@ function updateSim(rawDt) {
           player.limbs[hitZone] = Math.max(15, player.limbs[hitZone] - netDmg * 0.85);
           player.xp += netDmg * 0.18 * (player.greed || 1);
         }
-        if (player.hp <= 0) {
-          if (player.revives > 0) {
-            player.revives--; player.hp = player.maxHp * 0.6; player.limbs.fill(100);
-            if ([46, 69, 70, 76].includes(player.cid)) {
-              player.might *= 1.20; player.spd *= 1.15; player.area *= 1.15;
-            }
-            spawnBlastWave(player.x, player.y, 130, "#ffd166");
-            const revMsg = player.cid === 69 ? "FAWKES PHOENIX REBIRTH!" : (player.cid === 70 ? "HORCRUX SOUL ANCHOR!" : "SECOND WIND REVIVAL!");
-            spawnSpeech(player.x, player.y, revMsg, "#ffd166", 2.4);
-            sfx(220, 880, 0.35, "triangle");
-          } else {
-            meta.dmEarned += Math.max(1, Math.floor(player.kills / 18) + (player.dmRun || 0));
-            saveMeta(); purgeRunMemory();
-            document.getElementById("hud").classList.remove("active");
-            showScreen("scrMain"); return;
-          }
-        }
       }
+      if (player.hp <= 0 && resolvePlayerDeath()) return;
     }
   }
 
@@ -1101,7 +1185,14 @@ function updateSim(rawDt) {
         pAct[i] = 0; spawnParticles(pX[i], pY[i], 3); sfx(680, 1220, 0.04, "sine", 0.12); continue;
       }
 
-      if (player.hasSaber && dp < 34 && Math.random() < (0.35 + (player.saberMastery / 100) * 0.65)) {
+      // FIX: roll the deflect ONCE per bolt. It used to be re-rolled every frame while the bolt was
+      // inside 34px, so the real deflect rate was ~90-100% (and frame-rate dependent).
+      let deflected = false;
+      if (player.hasSaber && dp < 34 && !pDeflRolled[i]) {
+        pDeflRolled[i] = 1;
+        deflected = Math.random() < getSaberDeflectChance();
+      }
+      if (deflected) {
         pEnemy[i] = 0; pVX[i] = -pVX[i] * 1.55; pVY[i] = -pVY[i] * 1.55;
         pDmg[i] = (36 + player.lvl * 10) * (player.might || 1) * (player.cid === 78 ? 1.45 : 1.0);
         pSup[i] = 2; pLife[i] = 0.95;
@@ -1115,8 +1206,17 @@ function updateSim(rawDt) {
       if (dp < 14) {
         player.combatAlertTimer = 2.0;
         const effArmor = (player.armor || 0) + (player.adaptTimer > 0 ? 5 : 0);
-        player.hp -= Math.max(1, pDmg[i] * (100 / (100 + effArmor * 8)));
+        const boltDmg = Math.max(1, pDmg[i] * (100 / (100 + effArmor * 8)));
+        if (player.inVehicle > 0) {
+          // Vehicles soak enemy bolts the same way they soak melee contact.
+          player.vehicleHp -= boltDmg;
+          if (player.vehicleHp <= 0) { player.inVehicle = 0; spawnBlastWave(player.x, player.y, 75, "#00e5ff"); sfx(120, 45, 0.25); }
+        } else {
+          player.hp -= boltDmg;
+        }
         pAct[i] = 0; spawnParticles(player.x, player.y, 3);
+        // FIX: enemy bolts can now actually kill (or trigger a revive).
+        if (player.hp <= 0 && resolvePlayerDeath()) return;
       }
       continue;
     }
@@ -1141,7 +1241,6 @@ function updateSim(rawDt) {
     if (slHeat[i] > 0) slHeat[i] = Math.max(0, slHeat[i] - simDt * 0.65);
   }
 
-  let leveledUp = false;
   for (let i = 0; i < MAX_O; i++) {
     if (!oAct[i]) continue;
     const d = Math.hypot(player.x - oX[i], player.y - oY[i]);
@@ -1153,15 +1252,21 @@ function updateSim(rawDt) {
       if (d < 18) {
         oAct[i] = 0; player.xp += oVal[i] * (player.greed || 1);
         sfx(580, 880, 0.035, "sine", 0.08);
-        if (player.xp >= player.nextXp) {
-          player.xp -= player.nextXp; player.lvl++;
-          player.nextXp = Math.floor(player.nextXp * 1.24 + 8);
-          leveledUp = true;
-        }
       }
     }
   }
-  if (leveledUp) {
+
+  // FIX: convert ALL banked XP (orbs, XP-from-damage, passives) into levels and queue one card
+  // pick per level. Previously only one level per orb was granted and only one modal per frame
+  // was shown, so simultaneous level-ups silently lost their picks.
+  let gainedLvls = 0;
+  while (player.nextXp > 0 && player.xp >= player.nextXp && gainedLvls < 100) {
+    player.xp -= player.nextXp; player.lvl++;
+    player.nextXp = Math.floor(player.nextXp * 1.24 + 8);
+    gainedLvls++;
+  }
+  if (gainedLvls > 0) player.pendingLevelUps = (player.pendingLevelUps || 0) + gainedLvls;
+  if (player.pendingLevelUps > 0) {
     if (typeof syncHeroSpellbook === "function") syncHeroSpellbook();
     if (typeof updateHUD === "function") updateHUD();
     if (typeof triggerLevelUp === "function") triggerLevelUp();
@@ -1196,6 +1301,7 @@ function updateSim(rawDt) {
     }
   }
 
-  frameMs = +(performance.now() - t0).toFixed(1);
+  // Final safety net: any other HP loss this step (future hazards etc.) still ends the run.
+  if (player && player.hp <= 0) resolvePlayerDeath();
 }
 // EOF:js/sim.js
