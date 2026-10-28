@@ -1,9 +1,10 @@
 // FILE: js/proving.js
 // PART: v10 module 8 of 8
 // DETAIL: v10 "Debug All" Proving Ground — an automated in-game test runner launched from the main menu. It deploys the
-//         selected hero into a training arena (no natural spawns, invulnerable), places training dummies and plays 12
+//         selected hero into a training arena (no natural spawns, invulnerable), places training dummies and plays 14
 //         live gameplay actions in real time (boot/HUD, firing, close-quarters blade strikes, skills, dash, looting, level-up,
-//         driving, squad orders, glory kill, time rewind, memory purge), ticking each one PASS/FAIL on a live checklist
+//         driving, squad orders, glory kill, v12 execute chain, v12 rival showdown, time rewind, memory purge), ticking each
+//         one PASS/FAIL on a live checklist
 //         with a copyable report at the end. Doubles as a regression smoke test for the v9.01 fixes.
 
 "use strict";
@@ -41,7 +42,7 @@ function drawTrainingDummy(ex, ey, baseR, i) {
   ctx.restore();
 }
 
-/* === 2. THE 12 LIVE ACTIONS === */
+/* === 2. THE 14 LIVE ACTIONS === */
 const PROVING_TESTS = [
   { name: "Boot & HUD", desc: "Run boots, hero armed, HUD + skills mounted",
     setup() {}, tick(D) { return D.t > 0.4 ? (player && player.weapons.length > 0 && player.utils.length === 2 && document.getElementById("hud").classList.contains("active") ? true : "HUD/loadout missing") : null; } },
@@ -108,14 +109,25 @@ const PROVING_TESTS = [
     cleanup() { if (player) { player.pendingLevelUps = 0; player.nextXp = 1e12; } } },
 
   { name: "Driving", desc: "Board a hovercraft, drive it, dismount",
-    setup(D) { D.veh = pgChunkObj(5, 18, 0); triggerWorldInteract(); D.stage = 0; D.x0 = player.x; },
+    setup(D) { D.veh = pgChunkObj(5, 10, 0); triggerWorldInteract(); D.stage = 0; D.x0 = player.x; D.y0 = player.y; D.key = "KeyD"; },
     tick(D) {
-      if (D.stage === 0) { if (player.inVehicle !== 1) return D.t > 1 ? "could not board" : null; D.stage = 1; D.x0 = player.x; keys.KeyD = true; D.t1 = D.t; }
-      if (D.stage === 1 && D.t - D.t1 > 0.6) { keys.KeyD = false; D.dx = player.x - D.x0; triggerWorldInteract(); D.stage = 2; }
+      if (D.stage === 0) {
+        if (player.inVehicle !== 1) { if (D.t > 0.3 && D.t < 0.35) triggerWorldInteract(); return D.t > 1 ? "could not board" : null; }
+        // v12: drive toward whichever direction is clear of rocks / props (procedural worlds differ every run)
+        const dirs = [["KeyD", 1, 0], ["KeyA", -1, 0], ["KeyS", 0, 1], ["KeyW", 0, -1]];
+        let bestK = "KeyD", bestFree = -1;
+        for (const [k, dx, dy] of dirs) {
+          let free = 0;
+          for (let s = 1; s <= 8; s++) { if (typeof isPointBlockedByObstacle === "function" && isPointBlockedByObstacle(player.x + dx * s * 12, player.y + dy * s * 12, true)) break; free++; }
+          if (free > bestFree) { bestFree = free; bestK = k; }
+        }
+        D.key = bestK; D.stage = 1; D.x0 = player.x; D.y0 = player.y; keys[D.key] = true; D.t1 = D.t;
+      }
+      if (D.stage === 1 && D.t - D.t1 > 0.6) { keys[D.key] = false; D.dx = Math.hypot(player.x - D.x0, player.y - D.y0); triggerWorldInteract(); D.stage = 2; }
       if (D.stage === 2) { D.note = Math.round(D.dx) + "px driven"; return (player.inVehicle === 0 && D.dx > 20) ? true : (D.t > 2.5 ? "drive/dismount failed" : null); }
       return D.t > 3 ? "timeout" : null;
     },
-    cleanup() { keys.KeyD = false; if (player) player.inVehicle = 0; } },
+    cleanup(D) { keys.KeyD = keys.KeyA = keys.KeyS = keys.KeyW = false; if (player) player.inVehicle = 0; } },
 
   { name: "Squad Orders", desc: "Fireteam holds, focuses a marked dummy, regroups",
     setup(D) {
@@ -160,6 +172,65 @@ const PROVING_TESTS = [
       return D.t > 4 ? (D.fired ? "execution did not finish" : "elite never staggered") : null;
     },
     cleanup() { pgClearArena(); } },
+
+  { name: "Execute Chain", desc: "v12: EXECUTE takes the highest-ranked staggered elite first; a second tap chains the next",
+    setup(D) {
+      pgClearArena();
+      D.L = allocEnemySlot(player.x - 60, player.y + 10, 0, 1.0, 1, -1);          // shield-wall leader (rank 2), closer
+      D.H = allocEnemySlot(player.x + 140, player.y, 3, 1.0, 0, -1);               // heavy (rank 3), farther
+      // (high HP so stray shots can't finish them before the finisher - an execution kills at any HP)
+      [D.L, D.H].forEach(i => { eMax[i] = 5000; eHP[i] = 4500; eStun[i] = 99; eSpd[i] = 0; eFireCD[i] = 999; gloryStagger(i); });
+      D.uL = eUid[D.L]; D.uH = eUid[D.H]; D.g0 = gloryState.count; D.stage = 0;
+      D.wOn = player.weapons.map(w => w.enabled); player.weapons.forEach(w => { w.enabled = false; }); D.sig = player.sigGearCD; player.sigGearCD = 1e9;
+    },
+    tick(D) {
+      if (D.stage === 0 && D.t > 0.25 && !gloryState.exec) {          // (the previous test's finisher may still be playing)
+        if (gloryState.best !== D.H) return "best target is not the highest-ranked elite";
+        if (!gloryRequest() || !gloryState.exec || gloryState.exec.i !== D.H) return "EXECUTE did not fire on the heavy";
+        gloryRequest();
+        if (!gloryState.queued) return "second tap did not queue the chain";
+        D.stage = 1;
+      }
+      if (D.stage === 1) {
+        const hGone = !(eAct[D.H] && eUid[D.H] === D.uH), lGone = !(eAct[D.L] && eUid[D.L] === D.uL);
+        if (hGone && lGone && gloryState.count >= D.g0 + 2) { D.note = `heavy → leader · chain ×${gloryState.chain}`; return true; }
+      }
+      return D.t > 4.5 ? "chain did not finish" : null;
+    },
+    cleanup(D) { if (player && D && D.wOn) { player.weapons.forEach((w, k) => { if (k < D.wOn.length) w.enabled = D.wOn[k]; }); player.sigGearCD = D.sig || 0; } pgClearArena(); } },
+
+  { name: "Rival Showdown", desc: "v12: the crowd backs into a ring, the rival executes a challenger, then duels you",
+    setup(D) {
+      pgClearArena();
+      for (let k = 0; k < 10; k++) {
+        const a = k / 10 * Math.PI * 2, d = 50 + (k % 3) * 28;
+        const i = allocEnemySlot(player.x + Math.cos(a) * d, player.y + Math.sin(a) * d, k % 3, 1.0, 0, -1);
+        if (i >= 0) { eHP[i] = eMax[i] = 1e5; eFireCD[i] = 999; }
+      }
+      spawnEnemy(false, true);
+      D.ri = -1; for (let i = 0; i < MAX_E; i++) if (eAct[i] && eType[i] === 98) D.ri = i;
+      if (D.ri >= 0) { eFireCD[D.ri] = 999; D.rUid = eUid[D.ri]; }
+      D.stage = 0;
+    },
+    tick(D) {
+      if (D.ri < 0) return "no rival spawned";
+      if (D.stage === 0 && D.t > 0.2 && showdown.phase === SD_IDLE) return "showdown did not start";
+      if (D.stage === 0 && showdown.phase === SD_DUEL) {
+        let minD = 1e9, n = 0;
+        for (let j = 0; j < MAX_E; j++) if (sdSpect(j)) { n++; minD = Math.min(minD, Math.hypot(eX[j] - player.x, eY[j] - player.y)); }
+        if (showdown.finishers < 1) return "rival never executed a challenger";
+        if (n < 5) return "crowd did not form";
+        if (minD < 80) return `crowd too close (${Math.round(minD)}px)`;
+        D.note = `${n} spectators ≥${Math.round(minD)}px, challenger executed`;
+        killEnemy(D.ri, false); D.stage = 1; D.t1 = D.t;
+      }
+      if (D.stage === 1 && D.t - D.t1 > 0.2) {
+        let left = 0; for (let j = 0; j < MAX_E; j++) if (sdSpect(j)) left++;
+        return showdown.phase === SD_IDLE && left === 0 ? true : "crowd was not released after the duel";
+      }
+      return D.t > 7 ? "showdown timeout (" + SD_PHASE_NAMES[showdown.phase] + ")" : null;
+    },
+    cleanup() { if (typeof showdownEnd === "function" && showdown.phase !== SD_IDLE) showdownEnd("test"); pgClearArena(); } },
 
   { name: "Time Rewind", desc: "Kill a dummy, rewind -1.0x: it returns as an echo",
     setup(D) { pgClearArena(); D.d = pgDummy(player.x + 90, player.y + 40); D.uid = eUid[D.d]; D.stage = 0; },

@@ -202,6 +202,7 @@ function saberResetAll() {
   player.weapons.forEach(w => { if (w) w.sf = null; });
   player.sfLX = 0; player.sfLY = 0;
   sfGlobal.fanT = 0; sfGlobal.fanCd = 0; sfGlobal.nearStep = -1;
+  sfGlobal.claimed[0] = sfGlobal.claimed[1] = sfGlobal.claimed[2] = sfGlobal.claimed[3] = -1;
 }
 
 /* === 6. PER-STEP SHARED SCAN (nearby enemies + incoming bolts) === */
@@ -210,8 +211,9 @@ function sfScan() {
   sfGlobal.nearStep = sfGlobal.stepId;
   let n = 0;
   const px = player.x, py = player.y, near = sfGlobal.near;
+  const sdOn = typeof showdownBusy === "function" && showdownBusy();
   for (let j = 0; j < MAX_E && n < near.length; j++) {
-    if (!eAct[j]) continue;
+    if (!eAct[j] || (sdOn && sdIgnore(j))) continue;          // v12 Rival Showdown: blades leave the crowd alone
     const dx = eX[j] - px, dy = eY[j] - py;
     if (dx > 300 || dx < -300 || dy > 300 || dy < -300) continue;
     const d = Math.hypot(dx, dy);
@@ -225,7 +227,8 @@ function sfScan() {
     if (pAct[i] && pEnemy[i] && Math.abs(pX[i] - px) < 200 && Math.abs(pY[i] - py) < 200) bolt = true;
   }
   sfGlobal.boltNear = bolt;
-  sfGlobal.claimed[0] = sfGlobal.claimed[1] = sfGlobal.claimed[2] = sfGlobal.claimed[3] = -1;
+  // v12: claims persist between steps (each blade's latest target), so twin / Jar'Kai blades spread over different foes
+  for (let c = 0; c < 4; c++) { const j = sfGlobal.claimed[c]; if (j >= 0 && (!eAct[j] || eStagger[j] > 0)) sfGlobal.claimed[c] = -1; }
 }
 // called once per simulation step from js/sim.js before the weapon-slot loop
 const sfGrazeT = new Float32Array(typeof MAX_E === "number" ? MAX_E : 4096);   // per-enemy graze timer (runTime)
@@ -325,7 +328,7 @@ function saberEngineStep(w, slot, nSlots, simDt, col) {
   const C = sfGlobal.ctx;
   C.info = info; C.F = F; C.col = col; C.simDt = simDt;
   C.spd = F.tempo * (info.tempoK || 1) * lvlK * haste * cdrK;
-  C.baseLen = (w.id === 79 ? 18 : (w.lvl >= 5 ? 28 : 23)) * (player.area || 1) * (F.reachK || 1);
+  C.baseLen = (w.id === 79 ? 18 : (w.lvl >= 5 ? 28 : 23)) * (player.area || 1) * (F.reachK || 1) * (w.bladeK || 1);   // v12: shoto hilts
   C.R = 9.5 + C.baseLen;                                          // blade reach from the body centre
   C.facing = (tgtNear >= 0 && nearest < 150) ? sfGlobal.near[tgtNear].a : (player.aim || 0);
   C.kStyle = typeof getHeroKinematicStyle === "function" ? getHeroKinematicStyle(player.cid) : 4;
@@ -362,7 +365,7 @@ function sfStepBlade(w, st, slot, nSlots, C, main) {
   const F = C.F, simDt = C.simDt;
   st.grip = (SF_POSES[F.pose] || SF_POSES.mid).grip;
   st.off = (SF_POSES[F.pose] || SF_POSES.mid).off || "";
-  st.dbl = (w.id === 77) && (!!F.staff || player.whirlwindTimer > 0);
+  st.dbl = (w.id === 77 || !!w.dbl) && (!!F.staff || player.whirlwindTimer > 0);     // v12: custom saberstaff too
   if (w.id === 55 && nSlots > 1) st.grip = 1;                    // one blade per hand
   const sideSign = (slot % 2 === 0) ? 1 : -1;
   st.side0 = sideSign * (nSlots === 1 && C.kStyle <= 2 ? 1.5 : 4.5) + (slot >= 2 ? -3.25 : 0);
@@ -463,7 +466,7 @@ function sfPickTarget(st, slot, R, extra) {
     if (o.d > R + o.r + extra) continue;
     let s = o.d + Math.abs(sfWrap(o.a - st.blade)) * 7;
     if (eStagger[o.j] > 0) s += 400;                               // waiting for a glory kill: leave it
-    for (let c = 0; c < 4; c++) if (c !== slot && sfGlobal.claimed[c] === o.j) s += 22;
+    for (let c = 0; c < 4; c++) if (c !== slot && sfGlobal.claimed[c] === o.j) s += 30;
     if (s < bestS) { bestS = s; best = k; }
   }
   return best;

@@ -511,7 +511,7 @@ function castArcaneSpell(spellType, manualClick = false) {
     if (typeof sfxSpell === "function") sfxSpell("avada");
     let best = -1, bestScore = -1;
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && isEnemyOnScreen(i)) {
+      if (eAct[i] && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i)) && !(eStagger[i] > 0)) {    // v12: never steal a waiting glory kill
         const d = Math.hypot(eX[i] - player.x, eY[i] - player.y);
         if (d < 320) {
           const score = eHP[i] * (eType[i] >= 98 ? 5 : 1) / (1 + d * 0.01);
@@ -534,7 +534,7 @@ function castArcaneSpell(spellType, manualClick = false) {
     if (typeof sfxSpell === "function") sfxSpell("sectum");
     let hits = 0;
     for (let i = 0; i < MAX_E; i++) {
-      if (!eAct[i] || !isEnemyOnScreen(i)) continue;
+      if (!eAct[i] || !isEnemyOnScreen(i) || !!(typeof sdIgnore === "function" && sdIgnore(i))) continue;
       if (Math.hypot(eX[i] - player.x, eY[i] - player.y) < 185 * player.area && hits < 5) {
         const cutA = Math.atan2(eY[i] - player.y, eX[i] - player.x) + (Math.random() - 0.5) * 0.9;
         if (typeof eScarAng !== "undefined") { eScarAng[i] = cutA; eScarHeat[i] = 1.0; }
@@ -643,7 +643,7 @@ function startRun() {
   if ([1, 54].includes(cid)) innateVisor = 1;
   else if ([40, 23, 26, 36, 55, 65, 76].includes(cid)) innateVisor = 2;
   else if ([28, 29, 31, 32, 33, 34, 47, 59, 77].includes(cid)) innateVisor = 3;
-  else if ([0, 3, 7, 10, 14, 18, 20, 38, 39, 46, 48, 56, 69, 71, 73, 74, 78, 79].includes(cid)) innateVisor = 4;
+  else if ([0, 3, 7, 10, 14, 18, 20, 38, 39, 46, 48, 56, 69, 71, 73, 74, 78, 79, 80].includes(cid)) innateVisor = 4;
 
   const startVisors = innateVisor > 0 ? [innateVisor] : [];
 
@@ -778,6 +778,8 @@ function startRun() {
   if (cid === 77) { player.spd *= 1.28; player.crit += 0.30; player.cdmg += 0.35; }
   if (cid === 78) { player.crit += 0.35; player.cdmg += 0.45; player.bossMul = 1.40; }
   if (cid === 79) { player.spd *= 1.32; player.dodge += 0.35; player.cdr *= 0.82; }
+  // v12 Custom Hero (#80): your sabers (dual = two separate weapons, own hilt / colour / level), talent & allegiance
+  if (cid === CUSTOM_CID && typeof customHeroApplyRun === "function") customHeroApplyRun(player);
 
   player.hp = player.maxHp;
   syncHeroSpellbook();
@@ -990,12 +992,14 @@ function spawnEnemy(isBoss = false, isRival = false) {
   if (isRival) {
     const idx = allocEnemySlot(sx, sy, 98, 1.0, 0, -1);
     if (idx >= 0) {
-      let rCid = Math.floor(Math.random() * CHAR_RAW.length);
-      if (rCid === player.cid) rCid = (rCid + 1) % CHAR_RAW.length;
+      // v12: rivals come from the 80 canon heroes (never your custom hero #80)
+      let rCid = typeof randomRosterHero === "function" ? randomRosterHero() : Math.floor(Math.random() * 80);
+      if (rCid === player.cid) rCid = (rCid + 1) % 80;
       eRivalCid[idx] = rCid;
       const callout = typeof getRivalCallout === "function" ? getRivalCallout(rCid, player.cid) : "Bounty target locked!";
       spawnSpeech(player.x, player.y - 24, `${CHAR_RAW[rCid][3].toUpperCase()}: "${callout}"`, "#ff5252", 3.8);
       sfx(140, 420, 0.4, "sawtooth", 0.35);
+      if (typeof showdownBegin === "function") showdownBegin(idx);   // v12: the crowd backs off - Rival Showdown
     }
     return;
   }
@@ -1023,7 +1027,7 @@ function fireWeapon(w) {
   if (w.lvl >= 5 && w.lvl < 10 && !w.evolvedLv5) {
     const sig = HERO_SIG_GEAR[w.id];
     if (sig && sig[0]) {
-      w.name = sig[0]; w.evolvedLv5 = true; player.equipAnimTimer = 1.2;
+      w.name = sig[0] + (w.dualTag || ""); w.evolvedLv5 = true; player.equipAnimTimer = 1.2;   // v12: twin sabers keep "#1 of 2"
       spawnSpeech(player.x, player.y, "PRIMARY ARSENAL: " + sig[0].toUpperCase() + "!", "#ffd166", 2.0);
     }
   }
@@ -1039,7 +1043,7 @@ function fireWeapon(w) {
 
   let tx = player.x + Math.cos(player.aim) * 120, ty = player.y + Math.sin(player.aim) * 120, best = 1e9;
   for (let i = 0; i < MAX_E; i++) {
-    if (eAct[i] && !(eStagger[i] > 0) && isEnemyOnScreen(i)) {
+    if (eAct[i] && !(eStagger[i] > 0) && !(typeof sdIgnore === "function" && sdIgnore(i)) && isEnemyOnScreen(i)) {
       const d = Math.hypot(eX[i] - player.x, eY[i] - player.y);
       if (d < best) { best = d; tx = eX[i]; ty = eY[i]; }
     }
@@ -1188,7 +1192,7 @@ function triggerUtility(uIdx) {
   } else if (u.type === "grappleHook") {
     let best = -1, bestHP = -1;
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && isEnemyOnScreen(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 320 && eHP[i] > bestHP) {
+      if (eAct[i] && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i)) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 320 && eHP[i] > bestHP) {
         bestHP = eHP[i]; best = i;
       }
     }
@@ -1358,7 +1362,7 @@ function updateHeroSpecials(simDt) {
   if (player.sigGearCD <= 0) {
     let best = -1, maxH = 0;
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && isEnemyOnScreen(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 280 && eHP[i] > maxH) {
+      if (eAct[i] && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i)) && !(eStagger[i] > 0) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 280 && eHP[i] > maxH) {
         maxH = eHP[i]; best = i;
       }
     }

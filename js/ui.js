@@ -27,7 +27,7 @@ function ensurePlayerVisors() {
 
 async function runDynamicEOFScan() {
   const files = ["js/chaos.js", "js/data-factions.js", "js/data-heroes.js", "js/data-relics.js", "js/state.js", "js/world.js", "js/combat.js", "js/sim.js", "js/render.js",
-                 "js/fx.js", "js/rewind.js", "js/arsenal.js", "js/squad.js", "js/glory.js", "js/biomes.js", "js/campaign.js", "js/proving.js", "js/saberforms.js", "js/ui.js"];
+                 "js/fx.js", "js/rewind.js", "js/arsenal.js", "js/squad.js", "js/glory.js", "js/showdown.js", "js/biomes.js", "js/campaign.js", "js/proving.js", "js/saberforms.js", "js/creator.js", "js/ui.js"];
   const results = [];
   for (let i = 0; i < files.length; i++) {
     const f = files[i], marker = "// " + "EOF:" + f;
@@ -65,9 +65,9 @@ function checkLoadedScripts() {
     ["render.js", typeof renderScene === "function"],
     ["fx.js", typeof fxTimeMul === "function"], ["rewind.js", typeof rewindPlayback === "function"],
     ["arsenal.js", typeof castWhistlingBirds === "function"], ["squad.js", typeof squadMinionsSim === "function"],
-    ["glory.js", typeof gloryExecute === "function"], ["biomes.js", typeof biomeRenderGround === "function"],
+    ["glory.js", typeof gloryExecute === "function"], ["showdown.js", typeof showdownBegin === "function"], ["biomes.js", typeof biomeRenderGround === "function"],
     ["campaign.js", typeof renderCampaign === "function"], ["proving.js", typeof startProvingGround === "function"],
-    ["saberforms.js", typeof saberEngineStep === "function"]
+    ["saberforms.js", typeof saberEngineStep === "function"], ["creator.js", typeof openCreator === "function"]
   ];
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
   if (failed.length > 0) {
@@ -373,6 +373,12 @@ function drawRangeTarget(tabIdx = selRangeTab) {
   }
 }
 
+// v12: custom-hero sabers show their own blade colour (so "#1 of 2" and "#2 of 2" are told apart at a glance)
+function wpnSlotIcon(w) {
+  if (w && w.ownCol) return makeSVG("orbit", w.bladeCol === "#212121" ? "#9e9e9e" : w.bladeCol, "#ffd166", -1);
+  return makeSVG(w.style, w.lvl >= 10 ? "#ffd166" : "#00e5ff", "#ffd166", w.id);
+}
+
 function triggerLevelUp() {
   if (window.trackProgress) window.trackProgress("Level Up Modal Opened: Lv." + player.lvl);
   ensurePlayerVisors();
@@ -400,7 +406,7 @@ function triggerLevelUp() {
   // FIX: the 4 random "NEW WEAPON" rolls could pick the same weapon twice (duplicate cards).
   const offeredNew = new Set();
   for (let k = 0; k < 4; k++) {
-    const rc = CHAR_RAW[Math.floor(Math.random() * CHAR_RAW.length)];
+    const rc = CHAR_RAW[Math.floor(Math.random() * 80)];      // v12: canon weapons only (never the custom hero #80)
     if (offeredNew.has(rc[0])) continue;
     if (!player.weapons.some(w => w.id === rc[0]) && player.weapons.length < (typeof MAX_WEAPONS !== "undefined" ? MAX_WEAPONS : 6)) {
       offeredNew.add(rc[0]);
@@ -433,7 +439,7 @@ function triggerLevelUp() {
       if (ch.type === "wup") {
         const nxt = ch.w.lvl + 1;
         const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[ch.w.id]) ? HERO_SIG_GEAR[ch.w.id] : null;
-        const lv5Name = sig ? sig[0] : ch.w.name;
+        const lv5Name = sig ? sig[0] + (ch.w.dualTag || "") : ch.w.name;        // v12: "#1 of 2" / "#2 of 2" stay visible
         let nxtStance = typeof getHeroStanceSpec === "function" ? getHeroStanceSpec(ch.w.id, nxt, false).stageName : "Combat Form";
         // v11: blades preview their next lightsaber Form / sword stance from the Saber Form Engine
         let formUp = nxt === 4 || nxt === 7, formWord = "STANCE";
@@ -443,10 +449,10 @@ function triggerLevelUp() {
           formUp = nxF.idx !== curF.idx; formWord = nxF.saber ? "FORM" : "STANCE";
         }
         card.className = "card unlocked" + (nxt === 10 ? " super-flash" : "");
-        title = nxt === 10 ? "★ SUPERCHARGE: " + ch.w.superName + " (Lv.10)" : (nxt === 5 ? "★ LV.5 PRIMARY: " + lv5Name : ch.w.name + " (Lv." + nxt + "/10)");
+        title = nxt === 10 ? "★ SUPERCHARGE: " + ch.w.superName + (ch.w.dualTag || "") + " (Lv.10)" : (nxt === 5 ? "★ LV.5 PRIMARY: " + lv5Name : ch.w.name + " (Lv." + nxt + "/10)");
         sub = nxt === 10 ? "GUARANTEED LEVEL 10 ULTIMATE EVOLUTION!" : (formUp ? `${formWord} EVOLUTION: ${nxtStance.toUpperCase()}` : "Weapon, Stance & Spellbook Upgrade");
         desc = nxt === 10 ? `Supercharges ${nxtStance} & unlocks 2.35x Ultimate Damage!` : `+25% Base Damage, Stance: ${nxtStance}, & unlocks next Spellbook tier!`;
-        ico = makeSVG(ch.w.style, nxt >= 5 ? "#ffd166" : "#00e5ff", "#ffd166", ch.w.id);
+        ico = ch.w.ownCol ? wpnSlotIcon(ch.w) : makeSVG(ch.w.style, nxt >= 5 ? "#ffd166" : "#00e5ff", "#ffd166", ch.w.id);
       } else if (ch.type === "sigup") {
         const sig = (typeof HERO_SIG_GEAR !== "undefined" && HERO_SIG_GEAR[player.cid]) ? HERO_SIG_GEAR[player.cid] : HERO_SIG_GEAR[0];
         const isMax = ch.nextLvl === 10;
@@ -682,7 +688,7 @@ function updateHUD() {
         let d = wBox.children[wIdx];
         if (!d) {
           d = document.createElement("div");
-          bindTooltip(d, () => `${w.name} (Lv.${w.lvl}/10)`, () => "Tap to Toggle ON/OFF • Hold 350ms to Inspect", () => `Supercharge: ${w.superName}\nStyle: ${w.style.toUpperCase()}`, () => makeSVG(w.style, "#00e5ff", "#ffd166", w.id));
+          bindTooltip(d, () => `${w.name} (Lv.${w.lvl}/10)`, () => "Tap to Toggle ON/OFF • Hold 350ms to Inspect", () => `Supercharge: ${w.superName}\nStyle: ${w.style.toUpperCase()}`, () => wpnSlotIcon(w));
           d.onclick = (e) => {
             e.stopPropagation();
             if (wasLongPress) return;
@@ -697,7 +703,7 @@ function updateHUD() {
         const wKey = `${w.id}_${w.lvl}_${w.enabled}`;
         if (d.getAttribute("data-wkey") !== wKey) {
           d.setAttribute("data-wkey", wKey);
-          d.innerHTML = `${makeSVG(w.style, w.lvl >= 10 ? "#ffd166" : "#00e5ff", "#ffd166", w.id)}<span>L${w.lvl}</span>`;
+          d.innerHTML = `${wpnSlotIcon(w)}<span>L${w.lvl}</span>`;
         }
       });
     }
@@ -833,7 +839,9 @@ function updateMenuUI() {
   const campNode = (typeof campaignSelectedNode === "function") ? campaignSelectedNode() : null;
   document.getElementById("menuSelStage").textContent = campNode ? `🗺️ ${campaignNodeLabel(campNode)}` : `Stage ${stg.id}: ${f.worlds[stg.tier]} ${stg.suffix}`;
   document.getElementById("menuDiff").textContent = `Difficulty: ${df.name}`;
-  const gc = document.getElementById("goChars"); if (gc) gc.textContent = `CHARACTER ROSTER (${CHAR_RAW.length})`;
+  const gc = document.getElementById("goChars"); if (gc) gc.textContent = `CHARACTER ROSTER (80 + YOUR HERO)`;
+  const gcr = document.getElementById("goCreate");
+  if (gcr) gcr.textContent = (typeof customHeroCreated === "function" && customHeroCreated()) ? `✨ EDIT YOUR HERO: ${CHAR_RAW[80][3].toUpperCase()}` : "✨ CREATE YOUR OWN HERO";
 }
 
 /* === 5. GENRE-SORTED 80-HERO ROSTER WITH BIOGRAPHICAL STANCES, DASH SPECS & HOUSE CRESTS === */
@@ -843,8 +851,9 @@ function renderChars() {
   const g = document.getElementById("charGrid"); g.innerHTML = "";
   window._inHudUpdate = true;
   try {
+    if (typeof customRosterCard === "function") g.appendChild(customRosterCard());   // v12: #80 your own hero
     FACTIONS.forEach(fac => {
-      const genreHeroes = CHAR_RAW.filter(c => c[1] === fac.id).sort((a, b) => (a[2] - b[2]) || (a[0] - b[0]));
+      const genreHeroes = CHAR_RAW.filter(c => c && c[1] === fac.id && c[0] !== 80).sort((a, b) => (a[2] - b[2]) || (a[0] - b[0]));
       if (genreHeroes.length === 0) return;
 
       const hdr = document.createElement("div");

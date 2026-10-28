@@ -13,7 +13,7 @@ let birdPopT = 0;
 function castWhistlingBirds(u) {
   if (!player) return;
   const targets = [];
-  for (let i = 0; i < MAX_E; i++) if (eAct[i] && !eDummy[i] && isEnemyOnScreen(i)) targets.push(i);
+  for (let i = 0; i < MAX_E; i++) if (eAct[i] && !eDummy[i] && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i))) targets.push(i);
   targets.sort((a, b) => Math.hypot(eX[a] - player.x, eY[a] - player.y) - Math.hypot(eX[b] - player.x, eY[b] - player.y));
   const n = Math.max(14, Math.min(BIRD_MAX, targets.length));
   const queues = Array.from({ length: n }, () => []);

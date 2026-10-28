@@ -43,7 +43,7 @@ function getHeroKinematicStyle(cid) {
   if ([52, 6, 13, 22].includes(cid)) return 1;
   if ([15, 28, 31, 33, 34, 37, 40, 44, 53].includes(cid)) return 2;
   if ([1, 16, 25, 47, 54].includes(cid)) return 3;
-  if ([0, 14, 18, 24, 32, 48, 50, 76, 77, 78, 79].includes(cid)) return 4;
+  if ([0, 14, 18, 24, 32, 48, 50, 76, 77, 78, 79, 80].includes(cid)) return 4;
   if ([3, 7, 10, 11, 12, 20, 21, 27, 38, 39, 46, 49, 56, 57, 59, 66, 67, 69, 70, 71, 72, 73, 74, 75].includes(cid)) return 5;
   return 6;
 }
@@ -80,12 +80,47 @@ const FEMALE_HEROES = new Set([8, 11, 14, 20, 23, 25, 27, 28, 30, 42, 47, 57, 59
 
 // bladeLenPx (v11): > 0 draws the blade at exactly the Saber Form Engine's hitbox length, < 0 draws only the hilt
 // (retracted / stowed). dblOverride: true/false forces Maul's second blade on/off (null = always double).
-function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift = 0, angVel = 0, bladeLenPx = 0, dblOverride = null) {
+// v12: lightsaber hilts. Custom-hero sabers carry their own hilt (SABER_HILTS index, js/creator.js); the canon saber
+// heroes get their film hilt (Luke Graflex, Vader, Windu / Palpatine electrum, Yoda shoto, Grievous' trophies).
+const CANON_HILTS = { 0: 0, 3: 4, 55: 2, 76: 3, 77: 3, 78: 4, 79: 6 };
+function canonHiltFor(id) { return (typeof SABER_HILTS !== "undefined" && id in CANON_HILTS) ? SABER_HILTS[CANON_HILTS[id]] : null; }
+function drawSaberHilt(t, H, isDouble) {
+  if (isDouble) {                                              // saberstaff: long centre-gripped hilt, emitters at both ends
+    t.fillStyle = H.body; t.fillRect(-5.2, -1.4, 10.4, 2.8);
+    t.fillStyle = H.grip; t.fillRect(-1.8, -1.5, 3.6, 3.0);
+    t.fillStyle = H.band; t.fillRect(-3.9, -1.55, 0.8, 3.1); t.fillRect(3.1, -1.55, 0.8, 3.1);
+    t.fillStyle = H.accent; t.fillRect(-0.4, -1.8, 0.8, 0.5);
+    t.fillStyle = "#cfd8dc"; t.fillRect(4.4, -1.65, 1.0, 3.3); t.fillRect(-5.4, -1.65, 1.0, 3.3);
+    return;
+  }
+  const L = 5.6 * (H.len || 1), x0 = 3 - L;
+  t.save();
+  if (H.curve) { t.translate(2.2, 0); t.rotate(H.curve); t.translate(-2.2, 0); }     // Dooku's bent grip
+  t.fillStyle = H.body; t.fillRect(x0, -1.35, L - 1.2, 2.7);
+  t.fillStyle = H.grip; t.fillRect(x0 + L * 0.14, -1.45, L * 0.46, 2.9);
+  t.fillStyle = H.band;
+  if (H.ribs) { for (let k = 0; k < 5; k++) t.fillRect(x0 + L * 0.16 + k * L * 0.085, -1.6, L * 0.035, 3.2); }
+  else if (H.wraps) { for (let k = 0; k < 4; k++) t.fillRect(x0 + L * 0.16 + k * L * 0.11, -1.5, L * 0.05, 3.0); }
+  else { t.fillRect(x0 + L * 0.22, -1.55, 0.6, 3.1); t.fillRect(x0 + L * 0.44, -1.55, 0.6, 3.1); }
+  t.fillRect(x0 - 0.5, -1.05, 0.7, 2.1);                                              // pommel
+  t.fillStyle = H.accent; t.fillRect(x0 + L * 0.66, -1.8, 0.9, 0.55);                  // activation stud
+  t.restore();
+  const e = H.emitter;                                                                 // emitter head (blade axis stays true)
+  if (e === "clamp") { t.fillStyle = "#cfd8dc"; t.fillRect(1.2, -1.75, 1.3, 3.5); t.fillStyle = "#263238"; t.fillRect(2.5, -1.45, 0.9, 2.9); }
+  else if (e === "shroud") { t.fillStyle = "#b0bec5"; t.fillRect(1.3, -1.95, 2.1, 3.9); t.fillStyle = "#16181b"; t.fillRect(1.7, -1.95, 0.4, 3.9); t.fillRect(2.5, -1.95, 0.4, 3.9); }
+  else if (e === "flare") { t.fillStyle = H.band; t.beginPath(); t.moveTo(1.3, -1.35); t.lineTo(3.4, -1.95); t.lineTo(3.4, 1.95); t.lineTo(1.3, 1.35); t.closePath(); t.fill(); }
+  else if (e === "cross") { t.fillStyle = H.body; t.fillRect(1.3, -2.3, 2.0, 4.6); t.fillStyle = "#5d4037"; t.fillRect(1.7, -2.3, 0.5, 4.6); }
+  else { t.fillStyle = H.band; t.beginPath(); t.moveTo(1.3, -1.4); t.lineTo(3.3, -1.1); t.lineTo(3.3, 1.1); t.lineTo(1.3, 1.4); t.closePath(); t.fill(); }
+}
+
+function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift = 0, angVel = 0, bladeLenPx = 0, dblOverride = null, hilt = null) {
   const lenMul = isLv5 ? 1.22 : 1.0;
   const effCol = bladeCol || (typeof getWeaponColor === "function" ? getWeaponColor(wpnId) : "#00f0ff");
 
   if (style === "orbit") {
-    const bLen = bladeLenPx > 0 ? bladeLenPx : (wpnId === 79 ? 16.5 : 21.5) * lenMul;
+    const ownHilt = hilt !== null && hilt !== undefined && typeof SABER_HILTS !== "undefined" && SABER_HILTS[hilt];
+    const H = ownHilt || canonHiltFor(wpnId);
+    const bLen = bladeLenPx > 0 ? bladeLenPx : (wpnId === 79 ? 16.5 : 21.5) * lenMul * ((ownHilt && ownHilt.blade) || 1);
     const isDouble = dblOverride === null ? (wpnId === 77) : !!dblOverride; // Darth Maul Double-Bladed Saberstaff
     const steelBlade = [14, 18, 19, 24, 34, 48, 50, 68, 71].includes(wpnId);
 
@@ -109,12 +144,17 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
       tCtx.restore();
     }
 
-    tCtx.fillStyle = wpnId === 78 ? "#ffd166" : (wpnId === 76 ? "#212121" : "#b0bec5");
-    tCtx.fillRect(isDouble ? -5.0 : -2.5, -1.4, isDouble ? 10.0 : 5.5, 2.8);
-    if (bladeLenPx < 0) {                       // retracted: emitter shroud only
-      tCtx.fillStyle = "#37474f"; tCtx.fillRect(isDouble ? 4.0 : 2.4, -1.7, 1.4, 3.4);
-      if (isDouble) tCtx.fillRect(-5.4, -1.7, 1.4, 3.4);
-      return;
+    if (H && !steelBlade) {
+      drawSaberHilt(tCtx, H, isDouble);
+      if (bladeLenPx < 0) return;              // retracted: just the hilt
+    } else {
+      tCtx.fillStyle = wpnId === 78 ? "#ffd166" : (wpnId === 76 ? "#212121" : "#b0bec5");
+      tCtx.fillRect(isDouble ? -5.0 : -2.5, -1.4, isDouble ? 10.0 : 5.5, 2.8);
+      if (bladeLenPx < 0) {                       // retracted: emitter shroud only
+        tCtx.fillStyle = "#37474f"; tCtx.fillRect(isDouble ? 4.0 : 2.4, -1.7, 1.4, 3.4);
+        if (isDouble) tCtx.fillRect(-5.4, -1.7, 1.4, 3.4);
+        return;
+      }
     }
 
     if (steelBlade) {
@@ -123,10 +163,21 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
       tCtx.moveTo(3, -1.9); tCtx.lineTo(bLen, 0); tCtx.lineTo(3, 1.9);
       tCtx.closePath(); tCtx.fill();
     } else {
+      // v12: the Darksaber is a black blade with a white corona
+      const darkBlade = effCol === "#212121";
+      const glowCol = darkBlade ? "#eceff1" : effCol;
+      if (H && H.emitter === "cross" && !isDouble) {     // Kylo-style crossguard quillons
+        tCtx.save();
+        tCtx.strokeStyle = glowCol; tCtx.globalAlpha = 0.3; tCtx.lineWidth = 3.4; tCtx.lineCap = "round";
+        tCtx.beginPath(); tCtx.moveTo(2.3, -2.4); tCtx.lineTo(2.3, -5.6); tCtx.moveTo(2.3, 2.4); tCtx.lineTo(2.3, 5.6); tCtx.stroke();
+        tCtx.globalAlpha = 1; tCtx.strokeStyle = darkBlade ? "#111" : effCol; tCtx.lineWidth = 1.5;
+        tCtx.beginPath(); tCtx.moveTo(2.3, -2.4); tCtx.lineTo(2.3, -5.4); tCtx.moveTo(2.3, 2.4); tCtx.lineTo(2.3, 5.4); tCtx.stroke();
+        tCtx.restore();
+      }
       // v11: soft plasma glow around the core
       tCtx.save();
-      tCtx.globalAlpha = 0.22;
-      tCtx.strokeStyle = effCol;
+      tCtx.globalAlpha = darkBlade ? 0.32 : 0.22;
+      tCtx.strokeStyle = glowCol;
       tCtx.lineWidth = (isSuper ? 4.0 : 3.0) + 4.5;
       tCtx.lineCap = "round";
       tCtx.beginPath();
@@ -134,7 +185,7 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
       if (isDouble) { tCtx.moveTo(-4.5, 0); tCtx.lineTo(-bLen, 0); }
       tCtx.stroke();
       tCtx.restore();
-      tCtx.strokeStyle = effCol;
+      tCtx.strokeStyle = darkBlade ? "#0d0d0d" : effCol;
       tCtx.lineWidth = isSuper ? 4.0 : 3.0;
       tCtx.lineCap = "round";
       tCtx.beginPath();
@@ -146,8 +197,8 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
       }
       tCtx.stroke();
 
-      tCtx.strokeStyle = "#ffffff";
-      tCtx.lineWidth = 1.3;
+      tCtx.strokeStyle = darkBlade ? "#616161" : "#ffffff";
+      tCtx.lineWidth = darkBlade ? 0.6 : 1.3;
       tCtx.beginPath();
       tCtx.moveTo(isDouble ? 4.5 : 3, 0);
       tCtx.lineTo(bLen - 1, 0);
@@ -156,6 +207,15 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
         tCtx.lineTo(-(bLen - 1), 0);
       }
       tCtx.stroke();
+      if (H && H.unstable) {                              // cracked kyber: the blade spits and crackles
+        tCtx.save(); tCtx.strokeStyle = effCol; tCtx.lineWidth = 0.9; tCtx.globalAlpha = 0.75;
+        tCtx.beginPath();
+        for (let k = 0; k < 4; k++) {
+          const x = 4 + Math.random() * (bLen - 6), dy = (Math.random() < 0.5 ? -1 : 1) * (1.6 + Math.random() * 1.6);
+          tCtx.moveTo(x, 0); tCtx.lineTo(x + 1.2, dy);
+        }
+        tCtx.stroke(); tCtx.restore();
+      }
     }
     return;
   }
@@ -229,7 +289,7 @@ function drawSaberBladePose(tCtx, w, R, col, handCol, aim, slotIdx, bladeSt, mai
     tCtx.save();
     tCtx.translate(4.8 * sideSign, 5.2 + upper);
     tCtx.rotate(Math.PI / 2 - 0.3 * sideSign);
-    drawWeaponModel(tCtx, w.id, "orbit", w.lvl >= 5, w.lvl >= 10, col, 0, 0, -1, R.dbl);
+    drawWeaponModel(tCtx, w.id, "orbit", w.lvl >= 5, w.lvl >= 10, col, 0, 0, -1, R.dbl, w.hilt);
     tCtx.restore();
     drawBallHand(tCtx, 7.2 * sideSign, 1.2 + upper, 2.4, handCol);
     return;
@@ -240,7 +300,7 @@ function drawSaberBladePose(tCtx, w, R, col, handCol, aim, slotIdx, bladeSt, mai
   tCtx.translate(R.reach, R.side);
   tCtx.save();
   tCtx.rotate(R.blade - R.arm);
-  drawWeaponModel(tCtx, w.id, "orbit", w.lvl >= 5, w.lvl >= 10, col, 0, 0, Math.max(0.5, R.len), R.dbl);
+  drawWeaponModel(tCtx, w.id, "orbit", w.lvl >= 5, w.lvl >= 10, col, 0, 0, Math.max(0.5, R.len), R.dbl, w.hilt);
   if (R.grip === 2 || R.dbl) drawBallHand(tCtx, R.dbl ? -4.2 : -3.6, 0, 2.3, handCol);   // second hand on the hilt
   tCtx.restore();
   drawBallHand(tCtx, 0, 0, 2.5, handCol);
@@ -373,14 +433,14 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     let hIdx = 0;
     player.weapons.forEach(w => {
       if (activeSet.has(w)) return;
-      const wHolsterCol = (w.id === cid)
+      const wHolsterCol = (w.id === cid && !w.ownCol)
         ? cBlade
         : (w.bladeCol || (typeof getWeaponColor === "function" ? getWeaponColor(w.id) : cBlade));
       tCtx.save();
       if (hIdx % 2 === 0) { tCtx.translate(-4, -3); tCtx.rotate(-0.85 - hIdx * 0.18); }
       else { tCtx.translate(hIdx === 1 ? -6.5 : 6.5, 4); tCtx.rotate(Math.PI * 0.48); }
       tCtx.scale(0.72, 0.72);
-      drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, wHolsterCol, 0, 0);
+      drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, wHolsterCol, 0, 0, 0, w.dbl ? true : null, w.hilt);
       tCtx.restore();
       hIdx++;
     });
@@ -487,7 +547,8 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
       }
     }
   } else {
-    const skinCol = cid === 79 ? "#7cb342"
+    const skinCol = (cid === CUSTOM_CID && typeof customSkinCol === "function") ? customSkinCol()
+      : cid === 79 ? "#7cb342"
       : (cid === 77 ? "#d50000"
       : (cid === 78 ? "#5d4037"
       : (cid === 70 ? "#e0e7e9"
@@ -628,6 +689,10 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     } else if (cid === 53) {
       tCtx.fillStyle = "#ff1744"; tCtx.fillRect(-5.4, -12.2, 10.8, 1.8);
     }
+    if (cid === CUSTOM_CID && typeof drawCustomSpeciesExtras === "function") {   // v12 creator: hood + species details
+      if (customHairStyle() === "hood") customHoodOver(tCtx, cHead);
+      drawCustomSpeciesExtras(tCtx, eyeLookX);
+    }
   }
 
   const swapP = isLivePlayer ? (player.swapPause || 0) : 0;
@@ -647,9 +712,11 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
         for (let s = 0; s < cap; s++) arr.push(en[(player.handSlotOffset + s) % en.length]);
         return arr;
       })()
-    : [{ id: cid, style: (CHAR_RAW[cid] ? CHAR_RAW[cid][6] : "beam"), lvl: 1, bladeCol: cBlade }];
+    : ((cid === CUSTOM_CID && typeof customPreviewWeapons === "function") ? customPreviewWeapons()
+      : [{ id: cid, style: (CHAR_RAW[cid] ? CHAR_RAW[cid][6] : "beam"), lvl: 1, bladeCol: cBlade }]);
 
-  const handCol = isHelmeted ? cHead : (cid === 79 ? "#7cb342" : (cid === 77 ? "#111111" : (cid === 78 ? "#5d4037" : "#f1c27d")));
+  const handCol = isHelmeted ? cHead : ((cid === CUSTOM_CID && typeof customSkinCol === "function") ? customSkinCol()
+    : (cid === 79 ? "#7cb342" : (cid === 77 ? "#111111" : (cid === 78 ? "#5d4037" : "#f1c27d"))));
 
   if (isLivePlayer && player.forceHandTimer > 0) {
     tCtx.save();
@@ -672,7 +739,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
       }
 
       // Each weapon uses its own independent canonical bladeCol (while primary weapon respects your Outfit Customizer)!
-      const wActiveCol = (w.id === cid)
+      const wActiveCol = (w.id === cid && !w.ownCol)
         ? cBlade
         : (w.bladeCol || (typeof getWeaponColor === "function" ? getWeaponColor(w.id) : cBlade));
 
@@ -712,7 +779,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
       tCtx.translate(hx, hy);
       tCtx.save();
       tCtx.rotate(wristSpin);
-      drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, wActiveCol, rackShift, w.angVel || 0);
+      drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, wActiveCol, rackShift, w.angVel || 0, 0, w.dbl ? true : null, w.hilt);
       tCtx.restore();
       drawBallHand(tCtx, 0, 0, 2.5, handCol);
 
@@ -1191,6 +1258,7 @@ function renderScene() {
 
   const visorMode = player.activeVisor || 0;
   let bestTarget = -1, bestTargetScore = -1;
+  const sdOn = typeof showdownBusy === "function" && showdownBusy();   // v12 Rival Showdown crowd
 
   for (let i = 0; i < MAX_E; i++) {
     if (!eAct[i] || !isEnemyOnScreen(i)) continue;
@@ -1199,14 +1267,16 @@ function renderScene() {
 
     const isLevitating = typeof eLevitate !== "undefined" && eLevitate[i] > 0;
     const isKneeling = typeof eKneel !== "undefined" && eKneel[i] > 0;
-    const ex = eX[i], ey = eY[i] - (isLevitating ? (eLevZ[i] || 0) : (isKneeling ? -5 : 0)), et = eType[i];
+    const spect = sdOn && sdSpect(i);
+    const ex = eX[i], ey = eY[i] - (isLevitating ? (eLevZ[i] || 0) : (isKneeling ? -5 : 0)) - (spect ? sdCheerBob(i) : 0), et = eType[i];
     const baseR = et === 99 ? 22 : (et === 3 ? 15 : 11);
 
     if (eDummy[i] && typeof drawTrainingDummy === "function") {
       drawTrainingDummy(ex, ey, baseR, i);
     } else if (et === 98 && eRivalCid[i] >= 0) {
       const rFac = FACTIONS[CHAR_RAW[eRivalCid[i]][1]] || player.fac;
-      drawHeroSprite(ex, ey, rFac, eRivalCid[i], runTime * 4, Math.atan2(player.y - ey, player.x - ex), 0, ctx, -1);
+      const faceOv = sdOn ? showdownFaceAng(i) : null;     // v12: the rival turns to its challenger during its entrance
+      drawHeroSprite(ex, ey, rFac, eRivalCid[i], runTime * 4, faceOv !== null ? faceOv : Math.atan2(player.y - ey, player.x - ex), 0, ctx, -1);
     } else {
       if (visorMode === 3) {
         ctx.fillStyle = "rgba(48, 79, 254, 0.45)";
@@ -1226,6 +1296,11 @@ function renderScene() {
         }
         ctx.fillRect(ex - baseR * 0.6, ey - baseR * 0.5 + crawlOff, baseR * 1.2, baseR);
         ctx.beginPath(); ctx.arc(ex, ey - baseR * 0.75 + crawlOff, baseR * 0.45, 0, Math.PI * 2); ctx.fill();
+        if (spect && eArmsLost[i] < 2) {          // v12: spectators pump their fists while they watch the duel
+          const pump = Math.sin(runTime * 9 + i) > 0 ? 1.5 : 0;
+          ctx.fillRect(ex - baseR * 0.82, ey - baseR * 1.15 - pump, 2.2, baseR * 0.75);
+          if (eArmsLost[i] < 1) ctx.fillRect(ex + baseR * 0.82 - 2.2, ey - baseR * 1.15 - (1.5 - pump), 2.2, baseR * 0.75);
+        }
 
         ctx.fillStyle = "#111";
         ctx.fillRect(ex - baseR * 0.32, ey - baseR * 0.85 + crawlOff, baseR * 0.64, 2.2);

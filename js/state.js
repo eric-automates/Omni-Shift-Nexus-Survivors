@@ -301,6 +301,10 @@ function loadMeta() {
   // Older saves could hold fractional DM (the "+30% boss DM" relic used to add a raw 0.3 DM).
   meta.dmEarned = Math.round(+meta.dmEarned || 0); meta.dmSpent = Math.round(+meta.dmSpent || 0);
   ensureStarterChars();
+  // v12 Custom Hero (#80): validate the saved design and register it as CHAR_RAW[80] (js/creator.js)
+  if (meta.custom && typeof customHeroSanitize === "function") meta.custom = customHeroSanitize(meta.custom);
+  if (typeof customHeroRegister === "function") customHeroRegister();
+  if (meta.selChar === 80 && !(meta.custom && meta.custom.created)) meta.selChar = 0;
   loadOpts();
 }
 

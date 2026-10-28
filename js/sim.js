@@ -134,7 +134,7 @@ let thrownBlade = {
 function launchThrownBladeImpale(w, glowCol) {
   let best = -1, bestScore = -1;
   for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j] || !isEnemyOnScreen(j)) continue;
+    if (!eAct[j] || !isEnemyOnScreen(j) || (typeof sdIgnore === "function" && sdIgnore(j))) continue;
     const d = Math.hypot(eX[j] - player.x, eY[j] - player.y);
     if (d < 290) {
       const score = (eHP[j] * (eType[j] >= 98 ? 6 : 1)) / (1 + d * 0.015);
@@ -309,12 +309,14 @@ function triggerRocketDetonation(x, y, dmg, blastRadius) {
   }
 }
 
+// v12: > 0 while a kill is credited to someone else (a Rival's opening finisher on its challenger): full gore, no payout
+let killNoPayDepth = 0;
 function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0ff") {
   if (!eAct[idx]) return;
   const ex = eX[idx], ey = eY[idx], et = eType[idx], rCid = eRivalCid[idx];
   // v10 rewind: an enemy that was already killed (and paid out) before a rewind comes back as a
   // "temporal echo" - killing it again shows the gore but never pays XP / drops / relics twice.
-  const isEcho = eEcho[idx] === 1;
+  const realEcho = eEcho[idx] === 1, isEcho = realEcho || killNoPayDepth > 0;
   eAct[idx] = 0;
   eKneel[idx] = 0;
   if (typeof eLevitate !== "undefined") { eLevitate[idx] = 0; eLevZ[idx] = 0; }
@@ -340,7 +342,7 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
 
   // Rival Bounty Hunter & Boss Signature Weapon Drop on Death!
   if (et >= 98 && !isEcho) {
-    const dropWpnId = (et === 98 && rCid >= 0) ? rCid : Math.floor(Math.random() * CHAR_RAW.length);
+    const dropWpnId = (et === 98 && rCid >= 0) ? rCid : Math.floor(Math.random() * 80);   // v12: canon weapons only
     if (typeof spawnWeaponDrop === "function") {
       spawnWeaponDrop(ex, ey, dropWpnId);
     } else if (typeof activeWeaponDrops !== "undefined" && CHAR_RAW[dropWpnId]) {
@@ -367,7 +369,8 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
   }
 
   spawnParticles(ex, ey, 6);
-  if (isEcho) { spawnParticles(ex, ey, 5, 9, 2.5); return; }   // echoes dissolve in cyan, no payout
+  if (realEcho) { spawnParticles(ex, ey, 5, 9, 2.5); return; }   // echoes dissolve in cyan, no payout
+  if (isEcho) return;                                             // v12: someone else's kill - no payout
   const xpVal = et === 99 ? 120 : (et === 98 ? 65 : (3.2 + waveNum * 0.55));
   spawnOrb(ex, ey, xpVal);
   if (et >= 98 && typeof grantRelic === "function") grantRelic();
@@ -393,7 +396,7 @@ function updateMinionsSim(simDt) {
 
     let bestE = -1, bestD = 360;
     for (let j = 0; j < MAX_E; j++) {
-      if (!eAct[j] || (typeof eLevitate !== "undefined" && eLevitate[j] > 0)) continue;
+      if (!eAct[j] || (typeof eLevitate !== "undefined" && eLevitate[j] > 0) || (typeof sdIgnore === "function" && sdIgnore(j))) continue;
       const d = Math.hypot(eX[j] - mX[m], eY[j] - mY[m]);
       if (d < bestD) { bestD = d; bestE = j; }
     }
@@ -843,9 +846,10 @@ function stepSimulation(rawDt) {
   }
 
   let aimTarget = -1, bestAimDist = 380;
+  const sdIgnoreFn = (typeof showdownBusy === "function" && showdownBusy()) ? sdIgnore : null;   // v12: crowd is not a target
   for (let j = 0; j < MAX_E; j++) {
     // v10: staggered elites are left alone by auto-aim - they are waiting for a glory kill
-    if (eAct[j] && !(eStagger[j] > 0) && isEnemyOnScreen(j)) {
+    if (eAct[j] && !(eStagger[j] > 0) && !(sdIgnoreFn && sdIgnoreFn(j)) && isEnemyOnScreen(j)) {
       const d = Math.hypot(eX[j] - player.x, eY[j] - player.y);
       if (d < bestAimDist) { bestAimDist = d; aimTarget = j; }
     }
@@ -954,7 +958,7 @@ function stepSimulation(rawDt) {
     if (s === 0 && thrownBlade.active && isMeleeBlade) continue;
 
     // Each weapon uses its own independent canonical bladeCol (while primary weapon respects your Outfit Customizer)!
-    const wBladeCol = (w.id === player.cid)
+    const wBladeCol = (w.id === player.cid && !w.ownCol)       // v12: custom twin sabers keep their own colours
       ? bladeGlowCol
       : (w.bladeCol || (typeof getWeaponColor === "function" ? getWeaponColor(w.id) : bladeGlowCol));
 
@@ -1070,7 +1074,8 @@ function stepSimulation(rawDt) {
   const targetPop = Math.min(MAX_E - 12, Math.floor((14 + waveNum * 4.5) * diffSpawnMul));
 
   // v10: player.noSpawns (Proving Ground), player.spawnMul / bossAt / rivalEvery (campaign sectors)
-  const spawnRateMul = player.spawnMul || 1;
+  const sdOn = typeof showdownBusy === "function" && showdownBusy();   // v12 Rival Showdown in progress
+  const spawnRateMul = (player.spawnMul || 1) * (sdOn ? 0.35 : 1);
   if (!player.noSpawns) {
     if (activeEnemies < 5 && runTime < 2.5) {
       spawnEnemy(false, false);
@@ -1078,12 +1083,12 @@ function stepSimulation(rawDt) {
       spawnEnemy(false, false);
     }
 
-    if (runTime > (player.bossAt || 120) && !player.bossSpawned) {
+    if (runTime > (player.bossAt || 120) && !player.bossSpawned && !sdOn) {
       player.bossSpawned = true; spawnEnemy(true, false);
       spawnSpeech(player.x, player.y - 24, (player.bossName ? player.bossName.toUpperCase() : "SECTOR TITAN") + " DETECTED!", "#ff1744", 3.2);
     }
     rivalTimer += simDt;
-    if (rivalTimer >= (player.rivalEvery || 75)) { rivalTimer = 0; spawnEnemy(false, true); }
+    if (rivalTimer >= (player.rivalEvery || 75) && !sdOn) { rivalTimer = 0; spawnEnemy(false, true); }
   }
 
   const nearObs = typeof getNearbyObstacles === "function" ? getNearbyObstacles(player.x, player.y, 340) : [];
@@ -1139,6 +1144,9 @@ function stepSimulation(rawDt) {
       eX[i] += Math.cos(ga) * 260 * simDt; eY[i] += Math.sin(ga) * 260 * simDt;
       continue;
     }
+
+    // v12 Rival Showdown (js/showdown.js): spectators hold the ring, the rival stalks / executes its challenger
+    if (sdOn && showdownEnemyStep(i, simDt)) continue;
 
     let goalX = player.x, goalY = player.y;
     const ldr = eFormLeader[i];
@@ -1258,7 +1266,7 @@ function stepSimulation(rawDt) {
       if (pStyle[i] === 2 && !pEnemy[i]) {
         let best = -1, bestScore = -1;
         for (let j = 0; j < MAX_E; j++) {
-          if (eAct[j] && isEnemyOnScreen(j)) {
+          if (eAct[j] && isEnemyOnScreen(j) && !(typeof sdIgnore === "function" && sdIgnore(j))) {
             const d = Math.hypot(eX[j] - pX[i], eY[j] - pY[i]);
             if (d < 340) {
               const score = eHP[j] * (eType[j] >= 98 ? 4 : 1) / (1 + d * 0.01);

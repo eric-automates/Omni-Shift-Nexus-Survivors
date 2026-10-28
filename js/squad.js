@@ -85,7 +85,7 @@ function squadCallFireteam(x, y, source = "beacon", count = 4, life = 75) {
 function squadPickFocus() {
   let best = -1, bestScore = -1;
   for (let i = 0; i < MAX_E; i++) {
-    if (!eAct[i] || !isEnemyOnScreen(i)) continue;
+    if (!eAct[i] || !isEnemyOnScreen(i) || (typeof sdIgnore === "function" && sdIgnore(i))) continue;
     const score = (eType[i] === 99 ? 1e7 : (eType[i] === 98 ? 1e6 : 0)) + eHP[i];
     if (score > bestScore) { bestScore = score; best = i; }
   }
@@ -196,7 +196,7 @@ function squadMinionsSim(simDt) {
     else {
       const cx = S.order === 1 ? S.ax : mX[m], cy = S.order === 1 ? S.ay : mY[m];
       for (let j = 0; j < MAX_E; j++) {
-        if (!eAct[j] || eLevitate[j] > 0) continue;
+        if (!eAct[j] || eLevitate[j] > 0 || (typeof sdIgnore === "function" && sdIgnore(j))) continue;   // v12: not the crowd
         const d = Math.hypot(eX[j] - cx, eY[j] - cy);
         if (d < bestD) { bestD = d; bestE = j; }
       }
