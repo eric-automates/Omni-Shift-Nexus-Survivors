@@ -386,10 +386,18 @@ h2 {
 #squadWheel .lbl { font: 700 9px monospace; fill: #c5e1a5; }
 #squadWheel .hub { fill: rgba(0, 0, 0, 0.8); stroke: #c5e1a5; }
 #squadWheel .hubtxt { font: 700 10px monospace; fill: #ffd166; }
-#gloryBtn { position: fixed; left: 50%; bottom: 175px; transform: translateX(-50%); z-index: 55; display: none; padding: 10px 22px;
+#gloryBtn { position: fixed; left: 50%; bottom: 175px; transform: translateX(-50%); z-index: 55; display: none; padding: 7px 20px 6px;
   border-radius: 24px; background: linear-gradient(#ff6d00, #b71c1c); color: #fff; font: 900 15px sans-serif; letter-spacing: 1px;
-  border: 2px solid #ffd180; box-shadow: 0 0 18px rgba(255, 109, 0, 0.7); animation: gloryPulse 0.6s ease-in-out infinite alternate; touch-action: none; }
+  border: 2px solid #ffd180; box-shadow: 0 0 18px rgba(255, 109, 0, 0.7); touch-action: none; min-width: 168px; line-height: 1.05;
+  transition: opacity 0.18s, filter 0.18s, box-shadow 0.18s; }
+#gloryBtn .gb-main { display: block; }
+#gloryBtn .gb-sub { display: block; font: 700 9px monospace; letter-spacing: 0.5px; color: #ffe0b2; min-height: 10px; margin-top: 2px; }
+#gloryBtn.ready { animation: gloryPulse 0.6s ease-in-out infinite alternate; }
+#gloryBtn.idle { opacity: 0.42; filter: saturate(0.35); box-shadow: none; animation: none; }
+#gloryBtn.busy { opacity: 0.85; animation: none; background: linear-gradient(#ff9100, #8e0000); }
+#gloryBtn.shake { animation: gloryShake 0.3s linear; }
 @keyframes gloryPulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.08); } }
+@keyframes gloryShake { 0%, 100% { transform: translateX(-50%); } 25% { transform: translateX(calc(-50% - 5px)); } 75% { transform: translateX(calc(-50% + 5px)); } }
 #provingPanel { position: fixed; top: 6px; right: 6px; z-index: 999990; width: min(330px, calc(100vw - 12px)); max-height: calc(100vh - 80px);
   overflow-y: auto; background: rgba(4, 10, 20, 0.94); border: 1px solid #00e5ff; border-radius: 8px; padding: 8px;
   font: 11px/1.35 monospace; color: #e0f7fa; display: none; }
@@ -418,3 +426,24 @@ h2 {
 #campMap .camp-col { font: 700 9px monospace; fill: #546e7a; }
 /* the generic ".card * { pointer-events: none }" scroll rule must not swallow the Expedition panel buttons */
 #campInfo button { pointer-events: auto; touch-action: manipulation !important; }
+/* v12 Hero Creator (#80) */
+#scrCreate { align-items: center; }
+#crCv { flex-shrink: 0; }
+#crForm { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 6px; margin: 4px auto; }
+.cr-row { background: #0b1524; border: 1px solid #263850; border-radius: 8px; padding: 6px 7px; display: flex; flex-direction: column; gap: 4px; font-size: 0.7rem; color: #e0f7fa; }
+.cr-row small { color: #90a4ae; font-size: 0.62rem; line-height: 1.35; }
+.cr-row small b { color: #ffd166; }
+.cr-row.cr-saber { border-color: #00e5ff66; }
+.cr-lbl { font: 800 0.6rem monospace; color: #ffd166; letter-spacing: 0.6px; }
+.cr-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.cr-chip { padding: 4px 8px !important; font-size: 0.64rem !important; }
+.cr-cyc { display: inline-flex; align-items: center; gap: 4px; margin: 1px 6px 1px 2px; }
+.cr-cyc .btn { padding: 2px 7px; font-size: 0.66rem; }
+.cr-cyc b { min-width: 74px; text-align: center; color: #e0f7fa; font-size: 0.66rem; }
+.cr-sws { display: flex; flex-wrap: wrap; gap: 5px; }
+.cr-sw { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #263850; cursor: pointer; touch-action: manipulation; box-shadow: 0 0 6px rgba(0,0,0,0.6) inset; }
+.cr-sw.on { border-color: #ffd166; box-shadow: 0 0 8px #ffd166; }
+#crName { background: #050a12; color: #ffd166; border: 1px solid #00e5ff88; border-radius: 6px; padding: 6px 8px; font: 700 0.8rem sans-serif; width: 100%; }
+.cr-card { border-color: #ffd166aa !important; background: linear-gradient(135deg, #142238, #0b1524) !important; }
+.cr-card .cr-plus { width: 36px; height: 36px; border-radius: 6px; border: 1px dashed #ffd166; color: #ffd166; font: 900 22px sans-serif; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.card .cr-edit { pointer-events: auto; touch-action: manipulation !important; align-self: flex-start; padding: 5px 10px; font-size: 0.66rem; }
