@@ -7,7 +7,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>OMNI-SHIFT: NEXUS SURVIVORS</title>
-<link rel="stylesheet" href="css/style.css?v=v12-2026-10-27">
+<link rel="stylesheet" href="css/style.css?v=v13-2026-10-28">
 <!-- PRE-BOOT BULLETPROOF DOM GUARD & LIVE DEBUGGER -->
 <script>
 (function() {
@@ -235,7 +235,7 @@
   <!-- v12 CUSTOM HERO CREATOR (#80) -->
   <div id="scrCreate" class="screen">
     <h2>✨ HERO CREATOR · #80</h2>
-    <div class="sub">Free & always unlocked. Dual sabers are two separate weapons: own hilt, own colour, own level & Form stage.</div>
+    <div class="sub">Free & always unlocked. Build anyone: 1-3 weapons (twins are separate weapons), exactly 2 skills, 1 gear, 1 mobility, 1 armor — each with honest requirements.</div>
     <canvas id="crCv" width="320" height="200" style="position:relative;width:320px;height:200px;margin:2px auto 4px;display:block;border:1px solid #00e5ff66;border-radius:8px;background:#060b14"></canvas>
     <div id="crForm"></div>
     <div class="bar">
@@ -306,6 +306,16 @@
     <h2>INTERACTIVE VISUAL HUD GUIDE & CONTROLS</h2>
     <div class="sub">Color-Coded Reference: <span style="color:#ffd166;font-weight:bold">⚡ GOLD = Fast Tap Skill/Toggle</span> • <span style="color:#00e5ff;font-weight:bold">🔍 CYAN = Hold 350ms to Inspect</span></div>
     <div style="max-width:355px;margin:4px auto;display:flex;flex-direction:column;gap:8px;width:100%">
+
+      <div class="hud-guide-box">
+        <div class="guide-title">NEW IN v13 · THREAT SENSE, THE LIGHT SIDE, YODA & CREATOR v2</div>
+        <div class="card-desc" style="line-height:1.45">
+          <b style="color:#4fc3f7">📡 Threat Sense meter</b> — under the XP bar: <b>0-100%</b> until the next <b>rival</b> or the <b>Sector Titan</b> (whichever comes first). At 100% it's here. It's dressed for your hero: Jedi feel a <i>Disturbance in the Force</i>, Sith feel <i>the Dark Side stir</i>, marines get a beeping <i>Motion Tracker</i>, Geralt's <i>medallion hums</i>, Harry's <i>scar burns</i>, bounty hunters feel the <i>heat</i>… The further you roam from the map centre, the faster it fills (×1.0 in the Outpost → ×2.1 at the Abyssal Core). At 90%+ an arrow on the screen edge shows where it will come from.<br>
+          <b style="color:#69f0ae">☯ Force Persuasion</b> — Luke, Mace, Yoda (and your own Light-side hero who is Strong in the Force) automatically turn a few nearby enemies to their side when a crowd closes in. Turned enemies glow, get a halo and a green health bar, are healed to double health and fight <b>for you</b> — your shots and blades pass through them. When it wears off they lay down their arms and leave (half XP). Rivals and Titans can't be persuaded.<br>
+          <b style="color:#9cff57">🟢 Yoda, Grand Master</b> — Lv.4 Ataru leaps · <b>Lv.5 Force Lift & Hurl</b> (lifts up to 8 foes and throws them) · <b>Lv.7</b> his Ataru <b>bounds from foe to foe</b>, and his ultimate <b>WILL OF THE FORCE</b>: he puts his lightsaber away, raises a hand, and a wave of the Force crosses the whole screen — every enemy levitates; the weak are obliterated, the rest turn to the light and fight for him for 25 s (new arrivals are still hostile). His ward is now a true <b>Tutaminis</b>.<br>
+          <b style="color:#ffd166">✨ Hero Creator v2</b> — build <b>any</b> character: 1-3 weapons from 26 (lightsaber, saberstaff, blades, six-shooter & blasters, rifles, heavy guns, wands & staves, tech), <b>exactly 2 skills</b>, 1 signature gear, 1 mobility move and 1 armor — every choice has honest requirements (🔒 shows what's missing). Two of the same weapon are real twins (own level, own reload, own target). <b>Mandalorian beskar comes with a jetpack and you really fly</b> — over rocks, walls, water and hazards. 8 presets: Jedi Knight, Sith Lord, Twin-Gun Drifter, Force-Touched Wizard, Space Cowboy, Smuggler, Mandalorian, Jar'Kai Duelist.
+        </div>
+      </div>
 
       <div class="hud-guide-box">
         <div class="guide-title">NEW IN v12 · YOUR OWN HERO, RIVAL SHOWDOWNS & EXECUTE</div>
@@ -429,27 +439,29 @@
 </div>
 
 <!-- ORDERED MODULAR SCRIPT LOADING (?v= busts stale GitHub Pages caches after an upload; bump it on every release) -->
-<script src="js/chaos.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
-<script src="js/data-factions.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
-<script src="js/data-heroes.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
-<script src="js/data-relics.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
-<script src="js/state.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
-<script src="js/world.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
-<script src="js/combat.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
-<script src="js/sim.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
-<script src="js/render.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
-<script src="js/fx.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/fx.js', true)"></script>
-<script src="js/rewind.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/rewind.js', true)"></script>
-<script src="js/arsenal.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/arsenal.js', true)"></script>
-<script src="js/squad.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/squad.js', true)"></script>
-<script src="js/glory.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/glory.js', true)"></script>
-<script src="js/showdown.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/showdown.js', true)"></script>
-<script src="js/biomes.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/biomes.js', true)"></script>
-<script src="js/campaign.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/campaign.js', true)"></script>
-<script src="js/proving.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/proving.js', true)"></script>
-<script src="js/saberforms.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/saberforms.js', true)"></script>
-<script src="js/creator.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/creator.js', true)"></script>
-<script src="js/ui.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
+<script src="js/chaos.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
+<script src="js/data-factions.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
+<script src="js/data-heroes.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
+<script src="js/data-relics.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
+<script src="js/state.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
+<script src="js/world.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
+<script src="js/combat.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
+<script src="js/sim.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
+<script src="js/render.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
+<script src="js/fx.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/fx.js', true)"></script>
+<script src="js/rewind.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/rewind.js', true)"></script>
+<script src="js/arsenal.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/arsenal.js', true)"></script>
+<script src="js/squad.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/squad.js', true)"></script>
+<script src="js/glory.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/glory.js', true)"></script>
+<script src="js/showdown.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/showdown.js', true)"></script>
+<script src="js/sense.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/sense.js', true)"></script>
+<script src="js/force.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/force.js', true)"></script>
+<script src="js/biomes.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/biomes.js', true)"></script>
+<script src="js/campaign.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/campaign.js', true)"></script>
+<script src="js/proving.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/proving.js', true)"></script>
+<script src="js/saberforms.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/saberforms.js', true)"></script>
+<script src="js/creator.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/creator.js', true)"></script>
+<script src="js/ui.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
 </body>
 </html>
 <!-- EOF:index.html -->

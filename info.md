@@ -1,25 +1,26 @@
 # FILE: info.md
 # PART: 1 of 14
-# DETAIL: Master design document, updated for v12 (2026-10-27). Covers what the game is now, everything built so far (v8.x → v12), how much of the Version 9.0 plan is done, and the roadmap for future iterations, including realism and cool-factor ideas. The architecture and execution diagrams are in flowchart.md.
+# DETAIL: Master design document, updated for v13 (2026-10-28). Covers what the game is now, everything built so far (v8.x → v13), how much of the Version 9.0 plan is done, and the roadmap for future iterations, including realism and cool-factor ideas. The architecture and execution diagrams are in flowchart.md.
 
 ---
 
-## 1. What the game is (current state, v12)
+## 1. What the game is (current state, v13)
 
 **OMNI-SHIFT: NEXUS SURVIVORS** is a touch-first multiverse survival roguelike built on HTML5 Canvas. It runs in mobile WebViews and desktop browsers and is played live on GitHub Pages.
 
 ### Engine
 - **Zero-garbage engine:**
-  - Every high-frequency entity lives in pre-allocated Structure-of-Arrays typed-array pools: enemies, projectiles, orbs, particles, blood drips, severed limbs, corpses, bisected halves, squad and minion allies, and rewind keyframes.
+  - Every high-frequency entity lives in pre-allocated Structure-of-Arrays typed-array pools: enemies, projectiles, orbs, particles, blood drips, severed limbs, corpses, bisected halves, squad and minion allies, Force-persuaded allies and rewind keyframes.
   - The sim runs at 60 FPS with sub-steps.
   - The HUD updates in place, so taps never drop.
-- **Modular code:** 21 files.
+- **Modular code:** 23 files.
   - **Core:** index.html, css/style.css.
   - **Data:** `chaos.js`, `data-factions.js`, `data-heroes.js`, `data-relics.js`.
   - **Engine:** `state.js`, `world.js`, `combat.js`, `sim.js`, `render.js`.
   - **v10 modules:** `fx.js`, `rewind.js`, `arsenal.js`, `squad.js`, `glory.js`, `biomes.js`, `campaign.js`, `proving.js`.
   - **v11 module:** `saberforms.js`.
-  - **v12 modules:** `showdown.js`, `creator.js`.
+  - **v12 modules:** `showdown.js`, `creator.js` (rewritten as Creator v2 in v13).
+  - **v13 modules:** `sense.js` (Threat Sense), `force.js` (Force Persuasion + Yoda's powers).
   - **UI:** `ui.js`.
   - Feature modules plug in through the `V10` hook lists:
     - `onRunStart` / `onRunReset`
@@ -28,7 +29,7 @@
     - `onRenderWorld` / `onRenderScreen`
 
 ### Content
-- **81 heroes:** 80 canon heroes (#00–#79) in 11 universe genres, plus **your own hero (#80)**.
+- **81 heroes:** 80 canon heroes (#00–#79) in 11 universe genres, plus **your own hero (#80)** — any kind of character since v13.
 - **The 11 genres:** Star-Sector, Chevron-Gate, Verse-Rim, Spice-Dune, Star-Citadel, Xeno-Hive, Grim-Imperium, Cyber-Noir, Anomaly-Lab, Eldritch-Ash and Arcane-Sanctum.
 - **Sectors:** 50 procedural sectors, plus the **Galactic Expedition** branching campaign map.
 - **Meta progression:**
@@ -41,9 +42,9 @@
 Pick a hero → deploy into a sector → auto-fighting weapons, Forms and spells shred hordes. Then:
 - Pick up XP orbs.
 - Level up and choose 1 of 3 cards (weapons, signature gear, passives, visors, vacuum).
-- Survive to 2:00, when the **Sector Titan** arrives.
-- Kill it to clear the sector and bank Dark Matter.
-- **Rivals:** other heroes hunt you every ~75 s, and the duel is now a **Rival Showdown**.
+- Watch the **Threat Sense** meter: it fills toward the next rival or the **Sector Titan** (about 2:00 near the centre — sooner the further you roam).
+- Kill the Titan to clear the sector and bank Dark Matter.
+- **Rivals:** other heroes hunt you about every 75 s (sooner in the outer rings), and the duel is a **Rival Showdown**.
 
 ---
 
@@ -61,7 +62,7 @@ Pick a hero → deploy into a sector → auto-fighting weapons, Forms and spells
 - **Hand slots:** heroes hold 2–4 weapons at once (`armCap`). Grievous holds 4, the saber masters 3. Extra weapons are holstered and swapped automatically.
 - **Weapon drops:** rivals and Titans drop their signature weapon. Each weapon keeps its own blade colour.
 
-### 2.2 Lightsaber Form Engine (v11, extended in v12)
+### 2.2 Lightsaber Form Engine (v11, extended in v12 and v13)
 - **Real strikes, no blind spinning:**
   - Every blade goes guard → wind-up aimed at a real enemy → committed cut → follow-through.
   - Cuts chain from foe to foe and alternate forehand / backhand.
@@ -86,29 +87,38 @@ Pick a hero → deploy into a sector → auto-fighting weapons, Forms and spells
   - The Darksaber renders as a black blade with a white corona.
   - Twin / Jar'Kai blades keep persistent target claims, so they spread across different foes.
   - The Crossguard hilt has quillons and an unstable, crackling blade.
+- **New in v13:** Yoda's prime (Lv.7) is a new Form variant, **Ataru Grand Master** (`ataruGrand`): his leaps really carry his body from foe to foe (up to ~118 px, about every 0.5 s, never against the direction you are steering). Lv.4 Ataru still leaps in place. During the Will of the Force he puts his blade away.
 
-### 2.3 Your Own Hero — Custom Hero Creator (#80, new in v12)
-- **Access:** free and always unlocked, from the main menu or the top card of the roster.
+### 2.3 Your Own Hero — Hero Creator v2 (#80; v12, rebuilt in v13)
+- **Access:** free and always unlocked, from the main menu or the top card of the roster. 8 one-tap **presets** load a full build that you can then change: Jedi Knight, Sith Lord, Twin-Gun Drifter (the Man with No Name), Force-Touched Wizard, Space Cowboy (six-shooter + saber + a little Force), Smuggler (six-shooter + saber, no Force, thermal detonators), Mandalorian (beskar + jetpack) and Jar'Kai Duelist.
 - **Identity:**
   - Name.
-  - Allegiance: Jedi (+0.6 HP/s), Sith (+25 % crit damage) or Grey (+15 % XP & Dark Matter).
-  - Force talent: Speed (+15 % speed, +10 % dodge), Endurance (+25 % HP, +2 armour) or Fury (+20 % damage, +10 % crit).
-- **Look:**
-  - Species: Human, Zabrak (horns), Togruta (montrals & head-tails), Twi'lek (lekku), Miraluka (blindfold) or Cyborg (half-mech face).
-  - Body: masculine or feminine.
-  - 9 skin tones.
-  - Hair, or a Jedi / Sith hood.
-  - 8 robes, 4 legs, 5 cloaks.
-- **Sabers:**
-  - **Single saber**, **saberstaff**, or **dual sabers**.
-  - **Dual sabers are two completely separate weapons ("#1 of 2" / "#2 of 2").** Each has:
-    - its own hilt (hilt selector, 10 hilts);
-    - its own blade colour (10 colours, including the Darksaber);
-    - its own level and its own level-up cards;
-    - its own Form stage and its own targets.
-  - They fight in relay through the Form Engine. **Match #1** mirrors saber 1 onto saber 2 for a matched pair.
-  - **The 10 hilts:** Graflex Classic, Jedi Knight, Ribbed Hermit, Dark Lord, Electrum, Curved Duelist (bent grip), Shoto (short blade), Crossguard (quillons, unstable), Temple Guard, Scavenger.
-- **Fighting Form paths** (all start at Shii-Cho and end at a prime Form at Lv.7):
+  - Allegiance: **Light Side** (+0.6 HP/s), **Dark Side** (+25 % crit damage), **Grey** (+15 % XP & Dark Matter) or **Bounty Hunter** (+8 % crit, +20 % Dark Matter).
+  - **The Force:** **None** (+10 % max HP) · **Force-Touched** (35 % orb pull, +5 % dodge, basic Force skills) · **Strong in the Force** (full orb vacuum, Force-sight visor, every Force skill; Light → automatic Force Persuasion, Dark → heal on every kill).
+  - Talent: Speed, Endurance, Fury or Deadeye.
+- **The loadout budget** (shown as a capacity bar): **1–3 weapons · exactly 2 skills · 1 signature gear · 1 mobility move · 1 armor.** Every choice has honest requirements; a locked chip shows 🔒 and tells you what's missing.
+- **Weapons (26, each keeps its real firing behaviour):**
+
+  | Category | Weapons |
+  |---|---|
+  | Lightsaber | Lightsaber, Saberstaff (hilt selector + 10 colours + Form path) |
+  | Blade | Silver Longsword, Nodachi Katana, Bat'leth |
+  | Pistol | **Six-Shooter Revolver**, DL-44 Heavy Blaster, IB-94 Beskar Pistol, Kimber .45, Phaser |
+  | Rifle | E-11, P90, EE-3 Carbine, Bowcaster, M-25 Plasma Rifle |
+  | Heavy | Super Shotgun, M56 Smartgun, M60 |
+  | Magic | Phoenix-Feather Wand, Elder Wand, Obsidian Wizard Staff, Eldritch Tome, Chaos Hex-Orbs (any magic weapon adds the wizard spellbook) |
+  | Tech | Smart-Discs, Gravity Gun, Arm Cannon |
+
+  - **Twins:** two of the same weapon are two separate weapons ("#1 of 2" / "#2 of 2"): own level, own level-up cards, and for guns their own target (the second gun takes the second-nearest enemy). **Six-shooters have their own cylinders**: each fires 6, runs dry and reloads on its own, half a beat apart.
+  - A saberstaff can't share the loadout with other lightsabers. The quick saber setup (single / staff / dual) and "make #2 a twin of #1" are one tap.
+- **Skills (pick exactly 2):** Force Push (Force) · Saber Throw (blade) · **Mind Trick** (Force + Light: turns 2–3 nearby enemies into allies for 12 s) · Tutaminis Barrier (Strong) · **Force Choke** (Strong + Dark: lifts and crushes the strongest nearby enemy) · Force Lightning (Strong + Dark) · **Thermal Detonator** (lob, beep-beep, boom) · Fan the Hammer (pistol) · Whistling Birds (beskar) · Wrist Flamethrower · Grapple Line · Explosive Arrows · Deploy Cover · Overclock Stim · Execution Strike · Leviosa / Patronus / Protego / Summon Familiar / Sectumsempra (magic weapon).
+- **Signature gear (automatic, 1):** Force Push (Force), Force Lightning (Strong + Dark), Wrist Rocket, Shoulder Missile Pod (beskar), Deadeye Shot (gun), Arcane Bolt (magic).
+- **Mobility (dash button, 1):** Force Dash (Force), Acrobatic Force Flip (Force), Jetpack Rocket-Jump (beskar), Gunslinger Dive-Roll, Apparition Blink (magic), Tactical Thrusters.
+- **Armor (1):** Jedi / Sith Robes · **Mandalorian Beskar + Jetpack** · Gunslinger Duster · Tactical Armor · Wizard Robes · Cyborg Plating · Bounty Hunter Rig — each with its own look and bonus.
+  - **Jetpack flight is real:** you hover above a ground shadow with thrusters burning, fly straight over rocks, walls and water, ignore ground hazards, and the jetpack dash rocket-jumps over anything. A "JETPACK ONLINE — YOU'RE FLYING!" call-out confirms it at the start of a run.
+- **Look:** species (Human, Zabrak, Togruta, Twi'lek, Miraluka, Cyborg), body, 9 skins, 7 hair styles, **headgear** (Jedi / Sith hood, Mandalorian T-visor helmet, cowboy hat, wizard hat, tactical helmet, pilot goggles), 12 outfit colours, legs and cloak.
+- **The run follows the build:** weapon-hand pose (saber guard, gunslinger hip-fire, braced rifle, jetpack hover, floating wizard weapons), finisher style (saber / gun / arcane), Threat Sense style, visor, rival dialogue (Dark = villain, Bounty = bounty hunter).
+- **Fighting Form paths** (lightsaber builds; all start at Shii-Cho and end at a prime Form at Lv.7):
 
   | Path | Lv.1 | Lv.3 | Lv.5 | Lv.7 (prime) |
   |---|---|---|---|---|
@@ -120,14 +130,8 @@ Pick a hero → deploy into a sector → auto-fighting weapons, Forms and spells
   | Soresu Defender | Shii-Cho | Soresu | Shien | Soresu Master |
   | Saberstaff Dervish (staff only) | Staff Shii-Cho | Staff Ataru | Staff Niman | Staff Juyo |
 
-- **Also included:**
-  - Allegiance-based utilities: Saber Throw plus Force Repulse, Force Lightning or Shatterpoint.
-  - Signature gear: Force Push (Jedi / Grey) or Force Lightning (Sith).
-  - Force Dash in your saber colour.
-  - Force-sense visor and quotes.
-  - Sith heroes count as villains in rival dialogue.
 - **Saving:**
-  - The design is saved in `localStorage` (`meta.custom`) and sanitised on load.
+  - The design is saved in `localStorage` (`meta.custom`, `v: 2`) and sanitised on load; v12 designs migrate automatically (Jedi → Light, Sith → Dark, the hoods become headgear, the sabers become weapons).
   - It registers itself as `CHAR_RAW[80]`, so every per-hero system works with it.
   - Rivals, weapon drops and new-weapon cards never pick #80.
 
@@ -182,7 +186,7 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
   - Radio beacons call universe-themed fireteams; military heroes start with one.
 - **Adaptive biomes:** every universe has its own ground, props, weather and a hazard that hurts you *and* enemies.
 - **Galactic Expedition map:** a branching route of sectors. The district you clear decides the next faction, modifier, biome and warlord.
-- **Debug All · Proving Ground:** plays **14** live actions with your hero and ticks each PASS / FAIL:
+- **Debug All · Proving Ground:** plays **14** live actions with your hero and ticks each PASS / FAIL (it passes with every creator build, including the twin six-shooters and the flying Mandalorian):
   - boot, firing, close-quarters blade, skills, dash, looting, level-up, driving, squad orders;
   - glory kill, **execute chain**, **rival showdown**;
   - rewind, memory purge.
@@ -198,6 +202,42 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
   - Genre filter in the player; credit line in the now-playing pop-up.
   - Full credits in `music/MUSIC_CREDITS.md`.
 
+### 2.7 Threat Sense (new in v13)
+- **What it is:** a slim meter under the XP bar that fills **0 → 100 %** toward the next arrival — a **rival** or the **Sector Titan**, whichever comes first. At 100 % it's here (the meter then reads "RIVAL ENGAGED" / "THE TITAN IS HERE").
+- **Distance matters:** both arrival clocks tick faster the further you are from the map centre — ×1.0 within the Outpost (≤ 300 px), rising smoothly to **×2.1 at the Abyssal Core** (≥ 1800 px). Exploring the outer rings brings the hunters sooner. Both clocks hold still during a Rival Showdown.
+- **Dressed for the hero:**
+
+  | Hero type | Reading |
+  |---|---|
+  | Luke, Mace, light custom Force users | DISTURBANCE IN THE FORCE (blue ripples) |
+  | Yoda | THE FORCE IS TROUBLED ("Clouded, the future is…") |
+  | Sidious, Vader, Maul, dark custom Force users | THE DARK SIDE STIRS (red) |
+  | Psychics / prescience | PRESCIENCE, PSYCHIC STATIC (River), DÉJÀ VU (Neo), FUTURES SEEN (Strange), TIMEY-WIMEY (the Doctor) |
+  | Wizards | DARK OMEN — SCAR BURNING for Harry |
+  | Military / tech | MOTION TRACKER with beeps that quicken; SENSOR SWEEP for R2; COLLECTIVE ALERT for the Borg |
+  | Bounty hunters / hunters | BOUNTY HEAT, MEDALLION HUMMING (Geralt), HUNT INSTINCT (Predator) |
+  | Demons / beasts | DEMONIC PRESENCE (Doom), PRIMAL INSTINCT, WAAAGH-O-METER (Ork), HIVE SENSE (Xeno) |
+  | Everyone else | THREAT LEVEL |
+
+- **Feedback:** flavour lines at 50 / 75 / 90 %, a style-specific sound cue, pings around the hero that quicken as it closes in, and at **90 %+ an arrow on the screen edge** pointing where it will come from (the spawn angle is pre-rolled, so the arrow is truthful) with a soft coloured vignette. At 100 % the line ("IT IS HERE.", "CONTACT!", "AS FORESEEN."…) sweeps the screen.
+- Hidden in the Proving Ground (no spawns there).
+
+### 2.8 Force Persuasion & allies (new in v13)
+- **Who:** Luke (#0), Mace Windu (#78), Yoda (#79) and a custom hero who is **Light + Strong in the Force** — automatically. A custom hero with the **Mind Trick** skill can do it on a button.
+- **When:** at least 4 enemies within ~170 px, every 22 s (Yoda every 14 s).
+- **What:** the hero raises a hand toward the crowd and **2 enemies (3 from saber Lv.5) turn to his side** for 15 s — Yoda turns 4 (6 from Lv.5) for 20 s. Each one is lifted for a moment, then glows with a halo, a ground ring and a green health bar plus a time-left bar, and is **healed to double health**.
+- **Allies fight for you:** they hunt the nearest hostile (favouring the ones near you), ranged ones shoot friendly bolts, and their kills are yours. Hostiles brawl back with any ally in their way. Your shots, blades, explosions, pushes, barriers and spells all pass through allies.
+- **Endings:** when the effect wears off an ally **lays down its arms** and leaves (half an XP orb, no kill). An ally killed by hostiles pays nothing.
+- **Never converted:** rivals, Sector Titans, staggered elites waiting for EXECUTE, and Showdown spectators. During a showdown allies stand by you and leave the duel alone.
+
+### 2.9 Yoda, Grand Master (new in v13)
+- **Lv.1–3 Soresu:** small, economical shoto cuts (unchanged).
+- **Lv.4 Ataru:** the leaps and flips of the Geonosis duel.
+- **Lv.5+ FORCE LIFT & HURL** (automatic, ~10 s): with 5+ enemies nearby, he lifts up to 8 of them into the air and hurls them outward for heavy damage (most grunts die, survivors are stunned).
+- **Lv.7 Ataru Grand Master:** full jumping attacks — he bounds from foe to foe.
+- **Lv.7 WILL OF THE FORCE** (his ultimate, automatic, ~45 s, needs 8+ enemies on screen): he **puts his lightsaber away and raises his hand**; the screen slows, and a wave of the Force rolls across the entire screen. **Every enemy it touches levitates.** The badly hurt (< 30 % HP) are **obliterated**; **everyone else turns to the light and fights for Yoda for 25 s**. Rivals and Titans resist (stunned). Anything that spawns afterwards is still hostile. A banner counts how many turned.
+- **Tutaminis:** his barrier now says "TUTAMINIS!" (no more "Protego Totalum"), is 25 % bigger (45 % at Lv.7) and lasts 40 % longer (70 % at Lv.7).
+
 ---
 
 ## 3. Version history
@@ -209,7 +249,8 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 | **Bug-fix pass** (`a3d581d`) | 13 bugs + 12 smaller issues fixed. Included: Titan kill now clears the sector, levitated rivals pay out, OFF weapons are no longer offered on level-up, the empty level-up hand is fixed, the Dark Matter Greed bonus works, EVADED! text is throttled, music discovery 404 bursts are gone. |
 | **v9.01 → v10** (`bac8b41`) | v9.01 items a–h: close-range blade immunity fixed, missile fire/smoke trails, Mandalorian IB-94 + Whistling Birds, temporal ladder + rewind, seed-locked corpse faces, relic objects, music button / perf HUD layout. Roadmap A–E: Proving Ground, squad wheel, adaptive biomes, glory kills, Galactic Expedition. Polish: game-feel layer. |
 | **v11** (`6095850`) | Lightsaber Form Engine (no more spinning; canon Forms; film progression per hero). 17 new royalty-free tracks → 20-track soundtrack with credits. |
-| **v12** (this update) | Custom Hero Creator #80 (single / staff / **dual sabers**, hilt selector, 10 colours, Form paths, species). Rival Showdown. Always-on EXECUTE with rank targeting and chains. Film hilts for canon saber heroes. Darksaber. Proving Ground 14 actions. Execute targets protected from auto-abilities. More robust Proving Ground tests. |
+| **v12** (`1bfed0e` … `9ccf8e0`) | Custom Hero Creator #80 (single / staff / dual sabers, hilt selector, 10 colours, Form paths, species). Rival Showdown. Always-on EXECUTE with rank targeting and chains. Film hilts for canon saber heroes. Darksaber. Proving Ground 14 actions. |
+| **v13** (this update) | **Threat Sense** meter (per-hero style, distance-scaled rival / Titan clocks, edge arrow). **Force Persuasion** (light-side Force users turn enemies into allies). **Yoda:** Force Lift & Hurl, Ataru bounding, **Will of the Force**, Tutaminis. **Hero Creator v2:** any character — 26 weapons, twins with own cylinders / targets, 2 skills, gear, mobility, armor, headgear, **jetpack flight**, 8 presets, v12 migration. |
 
 ---
 
@@ -226,56 +267,37 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 | Roster overhaul: Die Hard (McClane, Gruber), Hitman, Léon, Heat crew, SWAT BearCat, Special Forces transport, Abrams tank + co-gunner, Waters' SEAL team, Sam Fisher / Shinobi shadow-meld, Avengers, Thanos, TimeShift | ⏳ not built (Dune and Warhammer genres are still in place) |
 | Predator **spine-rip finisher** | ✅ v10 (glory kill) |
 | Predator **active cloak** (enemies lose you, "?") | ⏳ not built |
-| "Get 'Em Space!" Rival crowd deference + show of force | ✅ **v12 Rival Showdown** |
+| "Get 'Em Space!" Rival crowd deference + show of force | ✅ v12 Rival Showdown |
 | DPS telemetry badges on level-up cards + Tactical DPS & Arsenal matrix | ⏳ not built |
 | Active-only weapon levelling | ✅ bug-fix pass |
-| Custom Character Creator #80 | ✅ **v12 for lightsaber builds** (single / staff / dual with hilt selector). Still to add: gun builds (twin guns), wizard / cyborg classes, jetpack gear, house crest, 10-slot utility belt |
-| Twin weapons named "#1 of 2 / #2 of 2", levelled independently | ✅ v12 (custom dual sabers). Twin **guns** with independent aim: ⏳ |
+| Custom Character Creator #80 | ✅ **v13 Creator v2**: any build (sabers, blades, guns, wands, tech), Force tiers, skills / gear / mobility / armor budget, jetpack flight, headgear. Still open: house crest, several save slots |
+| Twin weapons named "#1 of 2 / #2 of 2", levelled independently | ✅ v12 sabers, ✅ **v13 twin guns** with own cylinders and split targets |
 | True temporal rewind | ✅ v10 for every hero (~40 s window; not gated behind Infinity Gauntlet / Chrono-Gauntlet as the spec suggested) |
 
 ---
 
 ## 5. Future iterations (roadmap)
 
-### 5.1 Next up (v13 candidates)
-1. **Twin guns as two separate weapons.**
-   - Akimbo pistols that track two different targets (independent aim arcs), each with its own level and "#1 of 2 / #2 of 2" cards.
-   - Fan-hammer / Silverballer-style alternating fire.
-2. **Creator, part 2.**
-   - Gunslinger builds: twin pistols with grip / finish / barrel selector, muzzle-flash colour.
-   - Wizard builds: wand wood & core, spell school.
-   - Cyborg builds: implants and weapon arm.
-   - Jetpack and back gear, house crest, utility-belt picker.
-   - Save several custom heroes (slots #80–#82).
+### 5.1 Next up (v14 candidates)
+1. **Dark-side mirror of Persuasion — "Fear":** Sith heroes make nearby enemies kneel or flee in terror for a few seconds (kneeling ones can be executed for a heal). Automatic, like Persuasion.
+2. **Ally orders without extra buttons:** allies follow the squad wheel's existing orders (Hold / Focus / Advance / Regroup), and a Yoda ally army gets a short "For the Republic!" charge when the Titan arrives.
 3. **Saber-vs-saber Showdowns.**
    - When the rival is a lightsaber hero, the duel uses the Form Engine on both sides: blade locks (bind → push-off), clashes, parry-riposte, Force-push breaks.
    - A "duel camera" that frames both fighters.
-4. **Form-specific Force powers**, all automatic, no extra buttons:
-   - Soresu: *Circle of Shelter* bubble that eats bolts.
-   - Niman: Force-push wave.
-   - Ataru: Force-leap to distant targets.
-   - Juyo / Vaapad: rage burst at low HP.
-   - Makashi: disarm, so enemies drop their weapon.
-5. **The rest of the v9.0 roster:** Die Hard, Hitman, Léon, Heat crew, SWAT / Spec-Ops vehicles with AI co-gunners, Waters' SEAL team, Sam Fisher / Ninja stealth, Avengers, Thanos (Infinity Gauntlet), TimeShift.
-6. **Predator active cloak**, plus a stealth meter for ninja / Sam Fisher heroes.
-7. **DPS telemetry:** Δ-DPS badges on level-up cards (red / green / flashing gold) and a Tactical DPS & Arsenal matrix in the pause menu.
-8. **Post-run Memory Purge & Diagnostics screen** (`#scrPurge`) with the animated "130 → 0 CLEARED" count-down.
-9. **Credits screen** listing every music track and attribution (the CC-BY credits are already in the toast and in `MUSIC_CREDITS.md`).
-10. **Proving Ground batch mode:** run all 81 heroes back to back, not just the selected one.
-11. **Hero-specific squad co-gunners**, a dedicated Batman / Gotham theme, and a visible rewind-window meter.
+4. **Creator, part 3:** several save slots (#80–#82), gun finish / grip / muzzle-flash colour, wand wood & core, cyborg implants, house crest, cape physics; share a build as a short code.
+5. **Threat Sense extras:** the meter also warns of elite squads (shield walls) and hazards; a Force user can "meditate" (stand still for 2 s) to read the exact arrival time.
+6. **Form-specific Force powers**, all automatic, no extra buttons: Soresu *Circle of Shelter* bubble, Niman Force-push wave, Juyo / Vaapad rage burst at low HP, Makashi disarm.
+7. **The rest of the v9.0 roster:** Die Hard, Hitman, Léon, Heat crew, SWAT / Spec-Ops vehicles with AI co-gunners, Waters' SEAL team, Sam Fisher / Ninja stealth, Avengers, Thanos (Infinity Gauntlet), TimeShift.
+8. **Predator active cloak**, plus a stealth meter for ninja / Sam Fisher heroes.
+9. **DPS telemetry:** Δ-DPS badges on level-up cards and a Tactical DPS & Arsenal matrix in the pause menu.
+10. **Post-run Memory Purge & Diagnostics screen** (`#scrPurge`) and an in-game **credits screen** for the music.
+11. **Proving Ground batch mode:** run all 81 heroes (and the 8 creator presets) back to back.
 
-### 5.2 Showdown and EXECUTE follow-ups (after playtesting)
-- Rival intro variations:
-  - The rival Force-chokes or shoots the challenger from range.
-  - A rival bounty hunter tosses a thermal detonator into the crowd.
-  - Two challengers at once at higher difficulties.
-- Crowd reactions:
-  - Some spectators flee when the rival dies; others kneel ("WE YIELD").
-  - Kneeling enemies can be spared for bonus Dark Matter, or executed.
-- EXECUTE fine-tuning:
-  - Adjustable reach in Options.
-  - Optional auto-execute when walking near a staggered elite.
-  - A chain counter that rewards ×3+ chains with a short invulnerability.
+### 5.2 Showdown, EXECUTE and ally follow-ups (after playtesting)
+- Rival intro variations: the rival Force-chokes or shoots the challenger from range; a bounty hunter tosses a thermal detonator into the crowd; two challengers at higher difficulties.
+- Crowd reactions: some spectators flee when the rival dies; others kneel ("WE YIELD") and can be spared for Dark Matter — or persuaded by a Jedi.
+- Allies: tune numbers after playtesting (count, duration, double health); maybe let a Jedi re-persuade an ally that is about to leave.
+- EXECUTE fine-tuning: adjustable reach in Options; optional auto-execute when walking near a staggered elite; chain rewards.
 
 ### 5.3 Realism and cool-factor ideas (automatic, no tedium, no extra buttons)
 The goal is to make the player *feel like the character* while the game stays a fast survivor game.
@@ -327,14 +349,19 @@ The goal is to make the player *feel like the character* while the game stays a 
   - Per-hero tables are indexed by `cid`: `HERO_SIG_GEAR`, `UTILS_56`, `Q_56`, `HERO_STANCE_TABLE`, `SABER_PATHS`, `WPN_SVG_56`, `CANON_56`.
   - `CUSTOM_CID = 80` is filled in at runtime by `customHeroRegister()`.
 - **Weapons:** player weapons are objects `{ id, name, style, lvl, bladeCol, … }`.
-  - v12 custom sabers add `ownCol`, `hilt`, `bladeK` (shoto length), `dualTag` (" #1 of 2") and `dbl` (saberstaff).
+  - Custom sabers add `ownCol`, `hilt`, `bladeK` (shoto length), `dualTag` (" #1 of 2") and `dbl` (saberstaff).
+  - v13: `twinIdx` (0 / 1 for twins; odd twins take the second-nearest target in `fireWeapon`) and `w.six = { left, burst, reload }` (per-weapon six-shooter cylinder; `player.six*` mirrors the last one for the HUD / render).
   - Two weapons may share an `id`; level-up cards reference the weapon object, so twins level independently.
+- **Creator v2 design (`meta.custom`, `v: 2`):** `{ name, align: light|dark|grey|bounty, force: none|touched|strong, talent, weapons: [{ k, hilt?, col? }] (1-3), path, skills: [2 keys], gear, dash, armor, species, body, skin, hair, head, robe, legs, cloak }`. Read-only views `setup` / `sabers` are derived for v12 compatibility. Catalogs: `CUSTOM_WEAPONS`, `CUSTOM_SKILLS`, `CUSTOM_GEAR`, `CUSTOM_DASHES`, `CUSTOM_ARMOR`, `CUSTOM_HEADGEAR`, `CUSTOM_PRESETS`; requirements via `crReqOk(design, req)`. Queries used by other modules: `customForceTier()`, `customAllegiance()`, `customHasMagic()`, `customHasJetpack()`, `customKinStyle()`, `customDashSpec()`, `customSpellLadder()`, `customGloryStyle()`, `customSenseKind()`, `customAllyColor()`.
+- **Flight:** `player.flying` (beskar) skips obstacle checks in movement and dashes; `hover` + `hazImmune` are set too. The sprite lift, shadow and jets are drawn in `drawHeroSprite` when `customHasJetpack()`.
+- **Allies API (`js/state.js` + `js/force.js`):** `allyIs(j)` (`allyUid[j] === eUid[j]`), `allyCount`, `allyT / allyDur / allyLift`, `allyConvert(j, dur, lift)`, `allyLayDown(j)`, `allyTakeHit(a, i, dt)`, `allyNearestFor(i, r)`. The enemy loop runs `allyEnemyStep` for allies. **Any new damage / targeting loop must skip `allyIs(j)` (or `sdIgnore(j)`, which now covers allies).** `targetFilterOn()` = showdown active or allies present.
+- **Threat Sense API (`js/sense.js`):** `threatMult()` (1.0 → 2.1 by distance), `player.titanClock` (replaces the old `runTime > bossAt` check; rewound with the player), `senseState` (pct, kind, engaged, angRival / angTitan), `threatSpawnAngle(isBoss)` used by `spawnEnemy`.
+- **Yoda:** `yodaSaberLvl()`, `forceState` (persuade / lift / will timers and counters), `player.saberStowT` (the Form Engine retracts and holds the blade), `player.boundT` (Ataru bound in flight), `eFLiftZ[j]` (render height of a lifted foe).
 - **Showdown API:** `showdownBusy()`, `sdSpect(j)`, `sdIgnore(j)`.
-  - Any new targeting code must skip `sdIgnore(j)` enemies.
   - Execution-style abilities should also skip staggered enemies (`eStagger[j] > 0`).
 - **EXECUTE API:** `gloryRequest()` (button / E key / Proving Ground), `gloryRank(i)`, `gloryState.best / inRange / queued / chain`.
-- **Saves:** the `localStorage` key `OMNISHIFT_META_V1` holds `chars`, `selChar`, `outfits`, `custom` (v12), `campaign`, `stages`, `cleared`, the Dark Matter totals and options.
-- **Cache-busting:** every script tag carries `?v=v12-2026-10-27`; bump it on each release so GitHub Pages serves fresh files.
+- **Saves:** the `localStorage` key `OMNISHIFT_META_V1` holds `chars`, `selChar`, `outfits`, `custom` (v2 since v13), `campaign`, `stages`, `cleared`, the Dark Matter totals and options.
+- **Cache-busting:** every script tag carries `?v=v13-2026-10-28`; bump it on each release so GitHub Pages serves fresh files.
 - **Testing:**
   - The in-game **Debug All · Proving Ground** covers 14 live actions.
-  - The offline QA suites used for each release (not part of the repo) cover the Form Engine, showdowns, the creator, all 81 heroes and 3-minute soak runs.
+  - The offline QA suites used for each release (not part of the repo) cover the Form Engine, showdowns, the creator (v12 + v13), Threat Sense, allies and Yoda, all 81 heroes plus the 8 creator presets, and 3-minute soak runs.
