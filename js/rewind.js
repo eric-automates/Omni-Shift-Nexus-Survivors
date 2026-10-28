@@ -13,7 +13,7 @@ const REWIND_PLAYER_FIELDS = ["x", "y", "aim", "hp", "vehicleHp", "inVehicle", "
   "acrobatZ", "acrobatVZ", "acrobatFlip", "deflectStanceTimer", "whirlwindTimer", "sandTimer", "overclockTimer", "sigGearCD", "cqcCD",
   "autoFlameCD", "kneeDartCD", "swapTimer", "handSlotOffset", "swapPause", "sfLX", "sfLY", "adaptTimer", "vatsTimer", "vatsCD",
   "sandCD", "guardZone", "swordSwingTimer", "swordLungeTimer", "forceHandTimer", "armReach", "equipAnimTimer", "flourishPhase",
-  "fortTimer", "sixShotsLeft", "sixBurstCD", "sixReloadCD"];
+  "fortTimer", "sixShotsLeft", "sixBurstCD", "sixReloadCD", "titanClock"];
 const RW_PSTRIDE = REWIND_PLAYER_FIELDS.length + 6;   // + 6 limb integrity values
 
 const rewindState = {

@@ -197,6 +197,7 @@ function getHeroDashSpec(cid) {
   if (cid === 79) return { name: "Yoda Multi-Flip Tornado", cd: 3.8, dist: 165, style: "yodaFlip", col: "#00e676", callout: "AROUND THE SURVIVORS, A PERIMETER CREATE!", desc: "Somersaults in a rapid multi-flip emerald cyclone, slicing every enemy along the path!" };
   if (cid === 77) return { name: "Maul Butterfly-Twist Blitz", cd: 4.0, dist: 160, style: "maulSpin", col: "#ff1744", callout: "AT LAST WE WILL HAVE REVENGE!", desc: "Leaps into an aerial butterfly-twist while spinning both crimson saberstaff blades!" };
   if (cid === 78) return { name: "Windu Vaapad Shatter-Blitz", cd: 4.2, dist: 155, style: "vaapadBlitz", col: "#d500f9", callout: "THIS PARTY'S OVER!", desc: "Blurs forward in a purple Vaapad streak, shattering armor along the path!" };
+  if (cid === CUSTOM_CID && typeof customDashSpec === "function") return customDashSpec();   // v13: the creator's mobility pick
   if (cid === CUSTOM_CID) {
     const col = typeof getWeaponColor === "function" ? getWeaponColor(cid) : "#00f0ff";
     return { name: "Force Dash & Saber Cleave", cd: 4.0, dist: 155, style: "saberRush", col: col === "#212121" ? "#cfd8dc" : col, callout: "FORCE DASH!", desc: "Force-dashes through enemy ranks, sabers leading, bisecting foes in the path!" };

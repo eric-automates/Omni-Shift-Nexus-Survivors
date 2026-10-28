@@ -173,7 +173,7 @@ function squadMinionsSim(simDt) {
     if (m === coGunner) {
       mX[m] = player.x - 7; mY[m] = player.y - 9;
       let tgt = -1, bd = 300;
-      for (let j = 0; j < MAX_E; j++) { if (!eAct[j]) continue; const d = Math.hypot(eX[j] - mX[m], eY[j] - mY[m]); if (d < bd) { bd = d; tgt = j; } }
+      for (let j = 0; j < MAX_E; j++) { if (!eAct[j] || allyIs(j)) continue; const d = Math.hypot(eX[j] - mX[m], eY[j] - mY[m]); if (d < bd) { bd = d; tgt = j; } }
       if (tgt >= 0) {
         const a = Math.atan2(eY[tgt] - mY[m], eX[tgt] - mX[m]);
         mAim[m] = lerpAng(mAim[m], a, Math.min(1, simDt * 14));
@@ -208,7 +208,7 @@ function squadMinionsSim(simDt) {
     if (soldier) {
       // contact damage: soldiers can be overrun
       for (let j = 0; j < MAX_E; j++) {
-        if (eAct[j] && !eDummy[j] && Math.abs(eX[j] - mX[m]) < 14 && Math.abs(eY[j] - mY[m]) < 14) mHP[m] -= (eType[j] >= 98 ? 40 : 14) * simDt;
+        if (eAct[j] && !eDummy[j] && !allyIs(j) && Math.abs(eX[j] - mX[m]) < 14 && Math.abs(eY[j] - mY[m]) < 14) mHP[m] -= (eType[j] >= 98 ? 40 : 14) * simDt;
       }
       const sp = SOLDIER_SPECS[kind];
       if (bestE >= 0 && !leashBreak) {

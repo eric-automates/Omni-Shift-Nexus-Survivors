@@ -269,7 +269,7 @@ function updateWorldObjects(simDt) {
         ft.fireCD = 0.55;
         let best = -1, bestD = 260;
         for (let j = 0; j < MAX_E; j++) {
-          if (eAct[j]) {
+          if (eAct[j] && !allyIs(j)) {
             const d = Math.hypot(eX[j] - ft.x, eY[j] - ft.y);
             if (d < bestD) { bestD = d; best = j; }
           }
@@ -280,7 +280,7 @@ function updateWorldObjects(simDt) {
         }
       }
       for (let j = 0; j < MAX_E; j++) {
-        if (!eAct[j]) continue;
+        if (!eAct[j] || allyIs(j)) continue;
         const d = Math.hypot(eX[j] - ft.x, eY[j] - ft.y);
         if (d < ft.rad + 10 && d > 1) {
           eX[j] += ((eX[j] - ft.x) / d) * 85 * simDt;
@@ -301,7 +301,7 @@ function updateWorldObjects(simDt) {
       }
       let triggered = false;
       for (let j = 0; j < MAX_E; j++) {
-        if (eAct[j] && Math.hypot(eX[j] - mn.x, eY[j] - mn.y) < mn.rad + 14) {
+        if (eAct[j] && !allyIs(j) && Math.hypot(eX[j] - mn.x, eY[j] - mn.y) < mn.rad + 14) {
           triggered = true;
           break;
         }

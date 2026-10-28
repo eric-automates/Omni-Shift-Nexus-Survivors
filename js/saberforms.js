@@ -95,6 +95,8 @@ const SABER_FORMS = Object.assign({}, SF_BASE_FORMS, {
   vaderHall:   sfVariant("djemso", { tag: "Hallway", tempo: 0.97, pose: "vader", combo: "FOTB", force: true, lethal: true, deflect: 0.12 }),
   ataruSith:   sfVariant("ataru", { tag: "Sith", combo: "XS_", spin: 3 }),
   ataruMaster: sfVariant("ataru", { tag: "Grand Master", tempo: 1.15, combo: "XL_", spin: 3, fin: "S", dmgK: 0.8 }),
+  // v13 Yoda's prime: Ataru bounding - he leaps from foe to foe (the body really travels), long reach, short leap cooldown
+  ataruGrand: sfVariant("ataru", { tag: "Grand Master", tempo: 1.08, combo: "XL_fL_", spin: 3, fin: "S", dmgK: 1.05, bound: true, leapCd: 0.5, leapExtra: 95, hop: 66 }),
   juyoSingle:  sfVariant("juyo", { tag: "Single Blade", tempo: 1.08, dmgK: 1.3 }),
   staffAtaru:  sfVariant("ataru", { tag: "Saberstaff", staff: true, pose: "staff", combo: "FbS", spin: 3 }),
   staffJuyo:   sfVariant("juyo", { tag: "Saberstaff", staff: true, pose: "staff", combo: "WS_", spin: 3 }),
@@ -134,7 +136,7 @@ const SABER_PATHS = {
   79: { who: "Yoda", stages: [
     { lv: 1, form: "soresu", era: "The Phantom Menace", title: "Grand Master", blurb: "Soresu economy: the shoto barely moves" },
     { lv: 4, form: "ataru", era: "Attack of the Clones", title: "Geonosis vs. Dooku", blurb: "Ataru unleashed: ricocheting leaps and flips" },
-    { lv: 7, form: "ataruMaster", era: "Revenge of the Sith", title: "The Senate Duel", prime: true, blurb: "Nine centuries of Ataru: whirlwind aerial strikes" }] }
+    { lv: 7, form: "ataruGrand", era: "Revenge of the Sith", title: "The Senate Duel", prime: true, blurb: "Nine centuries of Ataru: he bounds from foe to foe in whirlwind aerial strikes" }] }
 };
 // Swords / energy blades that are not Star Wars lightsabers reuse the same move vocabulary, keyed by their
 // existing HERO_STANCE_TABLE pattern (stage names come from that table).
@@ -211,7 +213,7 @@ function sfScan() {
   sfGlobal.nearStep = sfGlobal.stepId;
   let n = 0;
   const px = player.x, py = player.y, near = sfGlobal.near;
-  const sdOn = typeof showdownBusy === "function" && showdownBusy();
+  const sdOn = typeof targetFilterOn === "function" && targetFilterOn();   // v13: + Force-persuaded allies
   for (let j = 0; j < MAX_E && n < near.length; j++) {
     if (!eAct[j] || (sdOn && sdIgnore(j))) continue;          // v12 Rival Showdown: blades leave the crowd alone
     const dx = eX[j] - px, dy = eY[j] - py;
@@ -293,6 +295,13 @@ function saberEngineStep(w, slot, nSlots, simDt, col) {
   if (!w.sf) w.sf = sfNewState(w);
   const st = w.sf;
   sfScan();
+  if ((player.boundT || 0) > 0 && sfGlobal.boundStep !== sfGlobal.stepId) {   // v13 Ataru bound in flight
+    sfGlobal.boundStep = sfGlobal.stepId;
+    const k = Math.min(simDt, player.boundT); player.boundT -= simDt;
+    const nx = player.x + player.boundVX * k, ny = player.y + player.boundVY * k;
+    if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(nx, player.y, true)) player.x = nx;
+    if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(player.x, ny, true)) player.y = ny;
+  }
   const info = saberFormInfo(w);
   const F = info.form;
 
@@ -311,11 +320,13 @@ function saberEngineStep(w, slot, nSlots, simDt, col) {
   // ---- ignition / stowed hilt (per weapon) ----
   let nearest = 1e9, tgtNear = -1;
   for (let k = 0; k < sfGlobal.nearN; k++) { const o = sfGlobal.near[k]; if (o.d < nearest) { nearest = o.d; tgtNear = k; } }
-  const wantLit = nearest < 260 || sfGlobal.boltNear || player.whirlwindTimer > 0 || sfGlobal.fanT > 0 || (player.invulnT > 0 && nearest < 400);
+  const stow = (player.saberStowT || 0) > 0;                     // v13: Yoda puts his blade away for the Will of the Force
+  const wantLit = !stow && (nearest < 260 || sfGlobal.boltNear || player.whirlwindTimer > 0 || sfGlobal.fanT > 0 || (player.invulnT > 0 && nearest < 400));
   if (wantLit) st.idle = 0; else st.idle += simDt;
+  if (stow) st.idle = Math.max(st.idle, 3.5);
   const prevLit = st.lit;
   if (wantLit || st.idle < 3.0) st.lit = Math.min(1, st.lit + simDt / 0.16);
-  else st.lit = Math.max(0, st.lit - simDt / 0.26);
+  else st.lit = Math.max(0, st.lit - simDt / (stow ? 0.1 : 0.26));
   if (prevLit < 0.05 && st.lit >= 0.05 && slot === 0) {
     sfIgnite(w, true);
     if (!st.introDone) { st.introDone = true; sfAnnounce(w, info, col, false); }
@@ -571,8 +582,9 @@ function sfNextMove(w, st, F, slot, R, spd, facing) {
   }
   // Ataru Hawk-Bat Swoop: leap at a target just out of reach
   if (F.leap && st.cdLeap <= 0) {
-    const k = sfPickTarget(st, slot, R, 30);
-    if (k >= 0 && sfGlobal.near[k].d > R * 0.75 && sfStartMove(w, st, F, "L", slot, R, spd, facing, 30)) { st.cdLeap = 1.05; return; }
+    const ext = F.leapExtra || 30;
+    const k = sfPickTarget(st, slot, R, ext);
+    if (k >= 0 && sfGlobal.near[k].d > R * 0.75 && sfStartMove(w, st, F, "L", slot, R, spd, facing, ext)) { st.cdLeap = F.leapCd || 1.05; return; }
   }
   // Niman Draw Closer: pull a distant foe onto the blade
   if (F.pull && st.cdPull <= 0 && sfCountIn(R + 6) === 0) {
@@ -666,7 +678,19 @@ function sfBeginStrike(w, st, F, spd, col) {
   st.dur = mv.strike / spd;
   st.lungeTgt = mv.lunge || 0; st.lungeAng = st.ta;
   if (mv.k === "leap" || (mv.k === "spin" && F.leap)) {
-    if ((player.acrobatZ || 0) <= 0.5) { player.acrobatVZ = mv.hop || 46; player.acrobatFlip = (mv.k === "spin" || Math.random() < 0.5) ? SF_TAU : 0; }
+    if ((player.acrobatZ || 0) <= 0.5) { player.acrobatVZ = F.hop || mv.hop || 46; player.acrobatFlip = (mv.k === "spin" || Math.random() < 0.5) ? SF_TAU : 0; }
+  }
+  // v13 Ataru bounding (Yoda's prime): the body really flies at the target, unless you are steering away from it
+  if (mv.k === "leap" && F.bound && st.tgt >= 0 && eAct[st.tgt] && !((player.boundT || 0) > 0)) {
+    const d = Math.hypot(eX[st.tgt] - player.x, eY[st.tgt] - player.y), R = sfGlobal.ctx.R || 30;
+    const jump = Math.max(0, Math.min(118, d - R * 0.6));
+    const mvSpd = Math.hypot(player.vx || 0, player.vy || 0);
+    const against = mvSpd > 20 && Math.cos(Math.atan2(player.vy, player.vx) - st.ta) < 0.3;
+    if (jump > 10 && !against) {
+      const T = Math.max(0.12, st.dur * 1.15);
+      player.boundT = T; player.boundVX = Math.cos(st.ta) * jump / T; player.boundVY = Math.sin(st.ta) * jump / T;
+      player.acrobatVZ = Math.max(player.acrobatVZ || 0, F.hop || 60);
+    }
   }
   sfSwingSfx(w, mv.k === "overhead" ? 1.25 : (mv.k === "quick" ? 0.55 : (mv.k === "spin" ? 1.1 : 0.85)));
 }
@@ -826,7 +850,7 @@ function saberOnDeflect(i) {
     const back = Math.atan2(pVY[i], pVX[i]);
     let best = -1, bs = 1e9;
     for (let j = 0; j < MAX_E; j++) {
-      if (!eAct[j]) continue;
+      if (!eAct[j] || allyIs(j)) continue;
       const dx = eX[j] - pX[i], dy = eY[j] - pY[i], d = Math.hypot(dx, dy);
       if (d > 460 || d < 8) continue;
       const off = Math.abs(sfWrap(Math.atan2(dy, dx) - back));

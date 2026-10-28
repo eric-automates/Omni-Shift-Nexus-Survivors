@@ -297,7 +297,7 @@ function triggerRocketDetonation(x, y, dmg, blastRadius) {
   }
   sfx(120, 45, 0.28, "sawtooth", 0.32);
   for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j]) continue;
+    if (!eAct[j] || allyIs(j)) continue;
     const d = Math.hypot(eX[j] - x, eY[j] - y);
     if (d <= blastRadius) {
       const splash = dmg * 1.35 * (1 - (d / blastRadius) * 0.45);
@@ -325,7 +325,7 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
   if (!isEcho) player.kills++;
 
   if (!isEcho && player.cid === 33 && Math.hypot(ex - player.x, ey - player.y) <= 95) player.hp = Math.min(player.maxHp, player.hp + 1.5);
-  if (!isEcho && [3, 75, 76, 77].includes(player.cid)) player.hp = Math.min(player.maxHp, player.hp + 0.9);
+  if (!isEcho && ([3, 75, 76, 77].includes(player.cid) || player.killHeal)) player.hp = Math.min(player.maxHp, player.hp + (player.killHeal || 0.9));   // v13: + custom Dark Side heroes
   if (!isEcho && player.cid === 11 && player.kills % 10 === 0) player.hp = Math.min(player.maxHp, player.hp + 3.0);
 
   // Resolve exact Rival / Boss outfit colors so their corpse & severed halves match their live look!
@@ -479,7 +479,7 @@ function checkBladeSegmentSlice(hx, hy, tx, ty, w, bladeSweepAngle, glowCol, hm)
   const segLenSq = segDX * segDX + segDY * segDY;
   if (segLenSq < 1) return;
   for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j] || eScarHitCD[j] > 0) continue;
+    if (!eAct[j] || eScarHitCD[j] > 0 || allyIs(j)) continue;
     const eRad = eType[j] === 99 ? 22 : (eType[j] === 3 ? 15 : 11);
     const ex = eX[j], ey = eY[j];
     let t = ((ex - hx) * segDX + (ey - hy) * segDY) / segLenSq;
@@ -579,7 +579,7 @@ function bladeHitEnemy(j, cx, cy, w, bladeSweepAngle, glowCol, hm) {
 
 function hitTestPlayerProj(i) {
   for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j]) continue;
+    if (!eAct[j] || allyIs(j)) continue;
     const eRad = eType[j] === 99 ? 24 : (eType[j] === 3 ? 17 : 13);
     const dx = pX[i] - eX[j], dy = pY[i] - eY[j];
     if (Math.hypot(dx, dy) > pRad[i] + eRad) continue;
@@ -834,8 +834,11 @@ function stepSimulation(rawDt) {
 
     const nx = player.x + vx * simDt, ny = player.y + vy * simDt;
     const ignoreLow = player.hover || (player.acrobatZ > 4) || player.inVehicle > 0 || [1, 16, 21, 25, 47, 54, 70, 73, 74, 79].includes(player.cid);
-    if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(nx, player.y, ignoreLow)) player.x = nx;
-    if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(player.x, ny, ignoreLow)) player.y = ny;
+    if (player.flying) { player.x = nx; player.y = ny; }          // v13 creator jetpack: real flight over rocks, walls & water
+    else {
+      if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(nx, player.y, ignoreLow)) player.x = nx;
+      if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(player.x, ny, ignoreLow)) player.y = ny;
+    }
 
     if ([1, 16, 25, 47, 54].includes(player.cid) && Math.random() < 0.45) {
       spawnParticles(player.x - Math.cos(moveAng) * 10, player.y + 8, 1);
@@ -846,7 +849,7 @@ function stepSimulation(rawDt) {
   }
 
   let aimTarget = -1, bestAimDist = 380;
-  const sdIgnoreFn = (typeof showdownBusy === "function" && showdownBusy()) ? sdIgnore : null;   // v12: crowd is not a target
+  const sdIgnoreFn = (typeof targetFilterOn === "function" && targetFilterOn()) ? sdIgnore : null;   // v12: crowd is not a target (v13: nor allies)
   for (let j = 0; j < MAX_E; j++) {
     // v10: staggered elites are left alone by auto-aim - they are waiting for a glory kill
     if (eAct[j] && !(eStagger[j] > 0) && !(sdIgnoreFn && sdIgnoreFn(j)) && isEnemyOnScreen(j)) {
@@ -907,7 +910,7 @@ function stepSimulation(rawDt) {
         continue;
       }
       for (let j = 0; j < MAX_E; j++) {
-        if (!eAct[j]) continue;
+        if (!eAct[j] || allyIs(j)) continue;
         const dx = eX[j] - br.x, dy = eY[j] - br.y, d = Math.hypot(dx, dy) || 1;
         if (d < br.rad + 14) {
           eX[j] = br.x + (dx / d) * (br.rad + 18);
@@ -1040,17 +1043,21 @@ function stepSimulation(rawDt) {
     if (player.swapPause > 0.05) continue;
 
     if (w.id === 52) {
-      if (player.sixReloadCD > 0) {
-        player.sixReloadCD -= simDt;
-        if (player.sixReloadCD <= 0) { player.sixShotsLeft = 6; sfx(920, 1480, 0.045, "triangle", 0.14); }
+      // v13: every six-shooter has its OWN cylinder, so twin revolvers fire, run dry and reload independently
+      // (the second gun starts half a beat behind for that bang-bang rhythm)
+      const six = w.six || (w.six = { left: 6, burst: (w.twinIdx || 0) % 2 ? 0.06 : 0, reload: 0 });
+      if (six.reload > 0) {
+        six.reload -= simDt;
+        if (six.reload <= 0) { six.left = 6; sfx(920, 1480, 0.045, "triangle", 0.14); }
       } else {
-        player.sixBurstCD -= simDt;
-        if (player.sixBurstCD <= 0) {
-          fireWeapon(w); player.recoilKick = 1.0; player.sixShotsLeft--;
-          player.sixReloadCD = player.sixShotsLeft <= 0 ? Math.max(0.32, 0.55 * (player.cdr || 1) * hasteCdr) : 0;
-          if (player.sixShotsLeft > 0) player.sixBurstCD = Math.max(0.06, 0.12 * (player.cdr || 1) * hasteCdr);
+        six.burst -= simDt;
+        if (six.burst <= 0) {
+          fireWeapon(w); player.recoilKick = 1.0; six.left--;
+          six.reload = six.left <= 0 ? Math.max(0.32, 0.55 * (player.cdr || 1) * hasteCdr) : 0;
+          if (six.left > 0) six.burst = Math.max(0.06, 0.12 * (player.cdr || 1) * hasteCdr);
         }
       }
+      player.sixShotsLeft = six.left; player.sixReloadCD = six.reload; player.sixBurstCD = six.burst;
     } else {
       w.cd -= simDt;
       if (w.cd <= 0) {
@@ -1083,11 +1090,15 @@ function stepSimulation(rawDt) {
       spawnEnemy(false, false);
     }
 
-    if (runTime > (player.bossAt || 120) && !player.bossSpawned && !sdOn) {
+    // v13 Threat Sense: both arrival clocks tick faster the further you roam from the map centre
+    // (x1.0 in the Outpost → x2.1 at the Abyssal Core) and hold still while a Rival Showdown plays out.
+    const threatK = sdOn ? 0 : (typeof threatMult === "function" ? threatMult() : 1);
+    if (!player.bossSpawned) player.titanClock = (player.titanClock || 0) + simDt * threatK;
+    if ((player.titanClock || 0) >= (player.bossAt || 120) && !player.bossSpawned && !sdOn) {
       player.bossSpawned = true; spawnEnemy(true, false);
       spawnSpeech(player.x, player.y - 24, (player.bossName ? player.bossName.toUpperCase() : "SECTOR TITAN") + " DETECTED!", "#ff1744", 3.2);
     }
-    rivalTimer += simDt;
+    rivalTimer += simDt * threatK;
     if (rivalTimer >= (player.rivalEvery || 75) && !sdOn) { rivalTimer = 0; spawnEnemy(false, true); }
   }
 
@@ -1099,6 +1110,8 @@ function stepSimulation(rawDt) {
     if (eScarHitCD[i] > 0) eScarHitCD[i] = Math.max(0, eScarHitCD[i] - simDt);
     if (eScarHeat[i] > 0.08) eScarHeat[i] = Math.max(0.08, eScarHeat[i] - simDt * 0.75);
     if (eDummy[i]) continue;   // v10 Proving Ground training dummies: no AI, no fire, no contact damage
+    // v13 Force Persuasion (js/force.js): a converted enemy runs its own ally AI and never hurts the hero
+    if (allyCount > 0 && allyIs(i)) { if (typeof allyEnemyStep === "function") allyEnemyStep(i, simDt); continue; }
 
     if (typeof eLevitate !== "undefined" && eLevitate[i] > 0) {
       eLevitate[i] -= simDt;
@@ -1159,6 +1172,13 @@ function stepSimulation(rawDt) {
       goalX = player.x + Math.cos(la) * 42; goalY = player.y + Math.sin(la) * 42;
     }
 
+    // v13: hostiles brawl with Force-persuaded allies that get in their way
+    let allyTgt = -1;
+    if (allyCount > 0 && typeof allyNearestFor === "function") {
+      allyTgt = allyNearestFor(i, eType[i] === 99 ? 95 : 62);
+      if (allyTgt >= 0) { goalX = eX[allyTgt]; goalY = eY[allyTgt]; }
+    }
+
     const baseAng = Math.atan2(goalY - eY[i], goalX - eX[i]);
     const patAng = ChaosMath.movePattern(eMoveStyle[i], baseAng, runTime, eSeed[i]);
     const steered = ChaosMath.steerAround(eX[i], eY[i], eX[i] + Math.cos(patAng) * 60, eY[i] + Math.sin(patAng) * 60, nearObs, 0.95, eSeed[i]);
@@ -1188,6 +1208,10 @@ function stepSimulation(rawDt) {
       }
     }
 
+    if (allyTgt >= 0) {
+      if (Math.hypot(eX[allyTgt] - eX[i], eY[allyTgt] - eY[i]) < (eType[i] === 99 ? 30 : 19) && typeof allyTakeHit === "function") allyTakeHit(allyTgt, i, simDt);
+      if (distP >= (eType[i] === 99 ? 26 : 16)) continue;   // busy brawling with the ally
+    }
     if (distP < (eType[i] === 99 ? 26 : 16)) {
       player.combatAlertTimer = 2.0;
       if (player.cid === 30) {

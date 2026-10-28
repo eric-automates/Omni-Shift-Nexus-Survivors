@@ -39,6 +39,7 @@ function makeSVG(type, c1 = "#00e5ff", c2 = "#ffd166", wpnId = -1) {
 }
 
 function getHeroKinematicStyle(cid) {
+  if (cid === CUSTOM_CID && typeof customKinStyle === "function") return customKinStyle();   // v13: follows the creator loadout
   if ([51, 19, 41, 42].includes(cid)) return 0;
   if ([52, 6, 13, 22].includes(cid)) return 1;
   if ([15, 28, 31, 33, 34, 37, 40, 44, 53].includes(cid)) return 2;
@@ -334,8 +335,15 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   const hoverBob = (kStyle === 3 || kStyle === 5) ? Math.sin((typeof runTime !== "undefined" ? runTime : 0) * 5.5) * 2.0 : 0;
   const bankAng = isLivePlayer ? (player.bankTilt || 0) : 0;
 
+  // v13 creator jetpack: the hero really flies - raised sprite over a ground shadow
+  const flyer = cid === CUSTOM_CID && typeof customHasJetpack === "function" && customHasJetpack();
+  const flyLift = flyer ? 7.5 + Math.sin((typeof runTime !== "undefined" ? runTime : 0) * 3.1) * 1.4 : 0;
+  if (flyer && !inVeh) {
+    tCtx.save(); tCtx.fillStyle = "rgba(0,0,0,0.32)";
+    tCtx.beginPath(); tCtx.ellipse(x, y + 10.5 + bSpec.yOff, 6.5 - flyLift * 0.15, 2.3, 0, 0, Math.PI * 2); tCtx.fill(); tCtx.restore();
+  }
   tCtx.save();
-  tCtx.translate(x, y + hoverBob + bSpec.yOff - acrobatZ);
+  tCtx.translate(x, y + hoverBob + bSpec.yOff - acrobatZ - flyLift);
   if (bankAng !== 0) tCtx.rotate(bankAng);
   if (acrobatZ > 2 && isLivePlayer && player.acrobatFlip) tCtx.rotate(player.acrobatFlip * 0.5);
 
@@ -389,11 +397,13 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     return;
   }
 
-  const hasJetpack = [1, 16, 25, 34, 47, 54].includes(cid);
+  const hasJetpack = [1, 16, 25, 34, 47, 54].includes(cid) || flyer;
   if (hasJetpack) {
     tCtx.fillStyle = cBack !== "none" ? cBack : "#37474f";
     tCtx.fillRect(-6.8, -5.5, 13.6, 9.5);
-    if (Math.abs(stride) > 0.4) {
+    if (flyer) {                                                  // twin thruster nozzles (the jets are drawn under the boots)
+      tCtx.fillStyle = "#455a64"; tCtx.fillRect(-5.6, 3.6, 3.4, 2.0); tCtx.fillRect(2.2, 3.6, 3.4, 2.0);
+    } else if (Math.abs(stride) > 0.4) {
       tCtx.fillStyle = "#ff9100";
       tCtx.fillRect(-5, 4, 3, 4 + Math.random() * 3);
       tCtx.fillRect(2, 4, 3, 4 + Math.random() * 3);
@@ -449,9 +459,20 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   tCtx.fillStyle = cLegs;
   tCtx.fillRect(-4.8, 4 + stride * 0.5, 3.8, 6.5);
   tCtx.fillRect(1.0, 4 - stride * 0.5, 3.8, 6.5);
+  if (flyer) {                                                    // v13: thruster jets blasting down toward the ground shadow
+    const burn = 4.5 + Math.abs(stride) * 1.2 + Math.random() * 2.5;
+    for (const jx of [-2.9, 2.9]) {
+      const jy = 10.4 + (jx < 0 ? stride * 0.5 : -stride * 0.5);
+      tCtx.fillStyle = "rgba(255,120,0,0.9)";
+      tCtx.beginPath(); tCtx.moveTo(jx - 1.7, jy); tCtx.lineTo(jx + 1.7, jy); tCtx.lineTo(jx, jy + burn); tCtx.closePath(); tCtx.fill();
+      tCtx.fillStyle = "#fff59d";
+      tCtx.beginPath(); tCtx.moveTo(jx - 0.8, jy); tCtx.lineTo(jx + 0.8, jy); tCtx.lineTo(jx, jy + burn * 0.55); tCtx.closePath(); tCtx.fill();
+    }
+  }
 
   tCtx.fillStyle = cTorso;
   tCtx.fillRect(-5.8, -5.5, 11.6, 10.5);
+  if (cid === CUSTOM_CID && typeof drawCustomArmor === "function") drawCustomArmor(tCtx, stride, cTorso);   // v13 creator armour
 
   if (cid === 34 || cid === 33) {
     tCtx.fillStyle = cTorso;
@@ -468,8 +489,8 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     tCtx.fillStyle = "#263238"; tCtx.fillRect(-2.6, -2.8, 5.2, 4.2);
     tCtx.fillStyle = "#ff1744"; tCtx.fillRect(-1.8, -2.0, 1.4, 1.4);
     tCtx.fillStyle = "#00e676"; tCtx.fillRect(0.4, -2.0, 1.4, 1.4);
-  } else {
-    tCtx.fillStyle = cHead;
+  } else if (cid !== CUSTOM_CID || (typeof customNeckCol === "function" && customNeckCol())) {
+    tCtx.fillStyle = cid === CUSTOM_CID ? customNeckCol() : cHead;   // v13: the creator's collar is skin (none under beskar / plating)
     tCtx.beginPath();
     tCtx.moveTo(-3.2, -5.5); tCtx.lineTo(3.2, -5.5); tCtx.lineTo(0, -1.2);
     tCtx.closePath(); tCtx.fill();
@@ -485,7 +506,9 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   const eyeLookY = Math.sin(aim) * 0.45;
 
   if (isHelmeted) {
-    if (cid === 30) {
+    if (cid === CUSTOM_CID && typeof drawCustomHelmet === "function") {
+      drawCustomHelmet(tCtx, eyeLookX, isLivePlayer);             // v13 creator: Mandalorian / tactical helmet
+    } else if (cid === 30) {
       tCtx.fillStyle = cHead;
       tCtx.beginPath();
       tCtx.moveTo(-6.5, -8.5); tCtx.lineTo(-8.5, -18.0); tCtx.lineTo(0, -15.5); tCtx.lineTo(8.5, -18.0); tCtx.lineTo(6.5, -8.5);
@@ -689,8 +712,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     } else if (cid === 53) {
       tCtx.fillStyle = "#ff1744"; tCtx.fillRect(-5.4, -12.2, 10.8, 1.8);
     }
-    if (cid === CUSTOM_CID && typeof drawCustomSpeciesExtras === "function") {   // v12 creator: hood + species details
-      if (customHairStyle() === "hood") customHoodOver(tCtx, cHead);
+    if (cid === CUSTOM_CID && typeof drawCustomSpeciesExtras === "function") {   // v12/v13 creator: species details + headgear
       drawCustomSpeciesExtras(tCtx, eyeLookX);
     }
   }
@@ -715,7 +737,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     : ((cid === CUSTOM_CID && typeof customPreviewWeapons === "function") ? customPreviewWeapons()
       : [{ id: cid, style: (CHAR_RAW[cid] ? CHAR_RAW[cid][6] : "beam"), lvl: 1, bladeCol: cBlade }]);
 
-  const handCol = isHelmeted ? cHead : ((cid === CUSTOM_CID && typeof customSkinCol === "function") ? customSkinCol()
+  const handCol = (cid === CUSTOM_CID && typeof customHandCol === "function") ? customHandCol() : isHelmeted ? cHead : ((cid === CUSTOM_CID && typeof customSkinCol === "function") ? customSkinCol()
     : (cid === 79 ? "#7cb342" : (cid === 77 ? "#111111" : (cid === 78 ? "#5d4037" : "#f1c27d"))));
 
   if (isLivePlayer && player.forceHandTimer > 0) {
@@ -1262,14 +1284,17 @@ function renderScene() {
 
   for (let i = 0; i < MAX_E; i++) {
     if (!eAct[i] || !isEnemyOnScreen(i)) continue;
-    const score = eHP[i] * (eType[i] >= 98 ? 10 : 1);
+    const ally = allyCount > 0 && allyIs(i);                     // v13 Force-persuaded ally
+    const score = ally ? -1 : eHP[i] * (eType[i] >= 98 ? 10 : 1);
     if (score > bestTargetScore) { bestTargetScore = score; bestTarget = i; }
 
     const isLevitating = typeof eLevitate !== "undefined" && eLevitate[i] > 0;
     const isKneeling = typeof eKneel !== "undefined" && eKneel[i] > 0;
     const spect = sdOn && sdSpect(i);
-    const ex = eX[i], ey = eY[i] - (isLevitating ? (eLevZ[i] || 0) : (isKneeling ? -5 : 0)) - (spect ? sdCheerBob(i) : 0), et = eType[i];
+    const ex = eX[i], ey = eY[i] - (isLevitating ? (eLevZ[i] || 0) : (isKneeling ? -5 : 0)) - (spect ? sdCheerBob(i) : 0)
+      - (ally && typeof allyLiftOffset === "function" ? allyLiftOffset(i) : 0) - (eFLiftZ[i] || 0), et = eType[i];
     const baseR = et === 99 ? 22 : (et === 3 ? 15 : 11);
+    if (ally && typeof drawAllyAura === "function") drawAllyAura(ctx, i, ex, ey, baseR);
 
     if (eDummy[i] && typeof drawTrainingDummy === "function") {
       drawTrainingDummy(ex, ey, baseR, i);
@@ -1286,7 +1311,7 @@ function renderScene() {
         ctx.fillStyle = "#ffd600";
         ctx.beginPath(); ctx.arc(ex, ey - baseR * 0.55, baseR * 0.45, 0, Math.PI * 2); ctx.fill();
       } else {
-        ctx.fillStyle = et === 99 ? "#ff1744" : (eFormType[i] === 1 ? "#ffd166" : enemyCol2());
+        ctx.fillStyle = ally ? "#cfd8dc" : (et === 99 ? "#ff1744" : (eFormType[i] === 1 ? "#ffd166" : enemyCol2()));
         const crawlOff = (eLegsLost[i] >= 2 || isKneeling) ? 4 : 0;
         if (!isKneeling) {
           if (eLegsLost[i] < 1) ctx.fillRect(ex - 4, ey + 4, 3, 6);
@@ -1304,7 +1329,7 @@ function renderScene() {
 
         ctx.fillStyle = "#111";
         ctx.fillRect(ex - baseR * 0.32, ey - baseR * 0.85 + crawlOff, baseR * 0.64, 2.2);
-        ctx.fillStyle = et === 99 ? "#ffff00" : "#00e5ff";
+        ctx.fillStyle = ally ? forceAllyColor() : (et === 99 ? "#ffff00" : "#00e5ff");
         ctx.fillRect(ex - baseR * 0.24, ey - baseR * 0.82 + crawlOff, 2.0, 1.6);
         ctx.fillRect(ex + baseR * 0.08, ey - baseR * 0.82 + crawlOff, 2.0, 1.6);
 
@@ -1332,7 +1357,11 @@ function renderScene() {
 
     if ((eEcho[i] || eStagger[i] > 0) && typeof drawEnemyStatusFx === "function") drawEnemyStatusFx(i, ex, ey, baseR);
 
-    if (eHP[i] < eMax[i] || et >= 98) {
+    if (ally) {                                                   // v13: ally health (green) + time left (Force colour)
+      ctx.fillStyle = "rgba(0,0,0,0.65)"; ctx.fillRect(ex - 10, ey - 24, 20, 4.4);
+      ctx.fillStyle = "#69f0ae"; ctx.fillRect(ex - 10, ey - 24, 20 * Math.max(0, eHP[i] / eMax[i]), 2.4);
+      ctx.fillStyle = forceAllyColor(); ctx.fillRect(ex - 10, ey - 21.2, 20 * Math.max(0, allyT[i] / Math.max(1, allyDur[i])), 1.4);
+    } else if (eHP[i] < eMax[i] || et >= 98) {
       const bw = et === 99 ? 36 : 20;
       ctx.fillStyle = "rgba(0,0,0,0.65)";
       ctx.fillRect(ex - bw * 0.5, ey - 22, bw, 3.2);

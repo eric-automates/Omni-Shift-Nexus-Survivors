@@ -41,6 +41,7 @@ function gloryOnHeavyHit(j) { glorySync(j); gMeleeT[j] = runTime; }
 function gloryStyleFor(cid) { return gloryStyleForCid(cid, !!(player && player.hasSaber)); }
 // v12: also used for Rival finishers (js/showdown.js)
 function gloryStyleForCid(cid, hasSaber) {
+  if (cid === CUSTOM_CID && typeof customGloryStyle === "function") return customGloryStyle(hasSaber);   // v13 creator builds
   if (cid === 29) return "spine";
   if (cid === 33) return "doom";
   if ([5, 17, 30, 37, 61].includes(cid)) return "beast";
@@ -63,7 +64,7 @@ function gloryStep(simDt) {
   const G = gloryState;
   if (G.exec) gloryExecTick();
   let near = -1, nearD = 1e9, best = -1, bestD = 1e9, bestR = -1, inRange = 0, any = 0;
-  const sdOn = typeof showdownBusy === "function" && showdownBusy();
+  const sdOn = typeof targetFilterOn === "function" && targetFilterOn();   // v13: + Force-persuaded allies
   for (let i = 0; i < MAX_E; i++) {
     if (!eAct[i]) continue;
     if (eStagger[i] > 0) {

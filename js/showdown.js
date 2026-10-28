@@ -39,9 +39,12 @@ const SD_CHEERS = ["FIGHT!", "GET 'EM!", "FINISH HIM!", "OOOH!", "AGAIN!", "THAT
 
 /* === 1. QUERIES (used by targeting code all over the engine) === */
 function showdownBusy() { return showdown.phase !== SD_IDLE; }
+// v13: true while anything (showdown crowd OR Force-persuaded allies) must be filtered out of targeting
+function targetFilterOn() { return showdown.phase !== SD_IDLE || allyCount > 0; }
 function sdSpect(j) { return showdown.phase !== SD_IDLE && sdSpectUid[j] !== 0 && sdSpectUid[j] === eUid[j] && eAct[j] === 1; }
 // true = auto-aim / blades / squad / spells must leave this enemy alone right now
 function sdIgnore(j) {
+  if (allyCount > 0 && allyIs(j)) return true;                                                 // v13: a Force-persuaded ally
   if (showdown.phase === SD_IDLE) return false;
   if (sdSpectUid[j] !== 0 && sdSpectUid[j] === eUid[j]) return true;                          // spectator
   if (j === showdown.ch && eUid[j] === showdown.chUid) return true;                            // the doomed challenger
@@ -86,7 +89,7 @@ function showdownBegin(ri) {
 
 /* === 3. CROWD RING === */
 function sdEligibleSpectator(j) {
-  return eAct[j] && !eDummy[j] && eType[j] < 98 && !(typeof eLevitate !== "undefined" && eLevitate[j] > 0) && j !== showdown.ch;
+  return eAct[j] && !eDummy[j] && eType[j] < 98 && !(typeof eLevitate !== "undefined" && eLevitate[j] > 0) && j !== showdown.ch && !allyIs(j);
 }
 // flag every regular enemy (or just the newcomers) as a spectator. Each keeps the side of the ring it was standing on
 // (it backs straight away from the fight); crowded sides stack into deeper rows.

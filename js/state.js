@@ -125,6 +125,16 @@ const eUid = new Uint32Array(MAX_E), eEcho = new Uint8Array(MAX_E),
       eStagger = new Float32Array(MAX_E), eDummy = new Uint8Array(MAX_E);
 let enemyUidCounter = 1;
 
+// v13 Force Persuasion (js/force.js): converted enemies fight for the hero for a while.
+// allyUid[j] === eUid[j] marks slot j as an ally - a recycled slot gets a fresh uid, so a stale
+// flag can never leak onto a new enemy.
+const allyUid = new Uint32Array(MAX_E), allyT = new Float32Array(MAX_E), allyLift = new Float32Array(MAX_E),
+      allyAtkCD = new Float32Array(MAX_E), allyDur = new Float32Array(MAX_E);
+let allyCount = 0;
+function allyIs(j) { return allyUid[j] !== 0 && allyUid[j] === eUid[j] && eAct[j] !== 0; }
+// v13: height of a hostile held aloft by Yoda's Force Lift / Will of the Force (render offset only)
+const eFLiftZ = new Float32Array(MAX_E);
+
 // Allied Necromancer & Transfiguration Minion Pool (0=Swordsman, 1=Critter/Hound/Viper, 2=Bowman, 3=Knight, 4=Bone Golem)
 const mX = new Float32Array(MAX_MINION), mY = new Float32Array(MAX_MINION),
       mVX = new Float32Array(MAX_MINION), mVY = new Float32Array(MAX_MINION),
@@ -427,6 +437,7 @@ function clearEnemyLimbState(idx, fadeDrips = true) {
   eBleed[idx] = 0; eBleedRate[idx] = 0; eTurnAng[idx] = 0; eTurnTimer[idx] = 0;
   eFormType[idx] = 0; eFormLeader[idx] = -1;
   eLevitate[idx] = 0; eLevZ[idx] = 0; eLevVX[idx] = 0; eLevVY[idx] = 0;
+  if (typeof eFLiftZ !== "undefined") eFLiftZ[idx] = 0;
 }
 
 function spawnDrip(x, y, ownerIdx, initRad = 2.6) {
@@ -535,6 +546,7 @@ function purgeRunMemory() {
   flashAlpha = 0; flameVisTimer = 0; muzzleFlashTimer = 0;
 
   eUid.fill(0); eEcho.fill(0); eStagger.fill(0); eDummy.fill(0); ptHead = 0;
+  allyUid.fill(0); allyT.fill(0); allyLift.fill(0); allyCount = 0; eFLiftZ.fill(0);
   v10Run(V10.onRunReset);
 
   shWrite = 0; shCount = 0; activeCorpseCount = 0; player = null;

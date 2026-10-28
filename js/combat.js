@@ -221,6 +221,7 @@ const SPELLBOOK_LADDER = {
 };
 
 function getDefaultSpellLadder(cid) {
+  if (cid === CUSTOM_CID) return (typeof customSpellLadder === "function" && customSpellLadder()) || [];   // v13: wand / staff / tome builds
   if (SPELLBOOK_LADDER[cid]) return SPELLBOOK_LADDER[cid];
   if (cid >= 56 && cid <= 75) {
     return [
@@ -284,7 +285,7 @@ function executeHeroDash(targetX, targetY) {
   for (let s = 1; s <= steps; s++) {
     const tx = startX + Math.cos(dashAng) * (actualDist * (s / steps));
     const ty = startY + Math.sin(dashAng) * (actualDist * (s / steps));
-    if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(tx, ty, ignoreLow)) {
+    if (player.flying || typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(tx, ty, ignoreLow)) {
       endX = tx; endY = ty;
     } else break;
   }
@@ -339,7 +340,7 @@ function executeHeroDash(targetX, targetY) {
   const isBladeDash = ["vaderLunge", "yodaFlip", "maulSpin", "vaapadBlitz", "saberRush"].includes(spec.style);
 
   for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j]) continue;
+    if (!eAct[j] || allyIs(j)) continue;
     let t = segLenSq > 1 ? (((eX[j] - startX) * segDX + (eY[j] - startY) * segDY) / segLenSq) : 1;
     t = Math.max(0, Math.min(1, t));
     const cx = startX + t * segDX, cy = startY + t * segDY;
@@ -388,7 +389,7 @@ function executeForceKineticPush(originX, originY, aimAng, pushLvl = 1, baseDmg 
   playNoise(0.18, "bandpass", 620, 140, 1.4, 0.24);
 
   for (let i = 0; i < MAX_E; i++) {
-    if (!eAct[i]) continue;
+    if (!eAct[i] || allyIs(i)) continue;
     const dx = eX[i] - originX, dy = eY[i] - originY;
     const d = Math.hypot(dx, dy);
     if (d > maxRange || d < 0.001) continue;
@@ -494,7 +495,7 @@ function castArcaneSpell(spellType, manualClick = false) {
     if (typeof sfxSpell === "function") sfxSpell("leviosa");
     let floated = 0;
     for (let i = 0; i < MAX_E; i++) {
-      if (!eAct[i] || eType[i] === 99 || eLevitate[i] > 0) continue;
+      if (!eAct[i] || eType[i] === 99 || eLevitate[i] > 0 || allyIs(i)) continue;
       const d = Math.hypot(eX[i] - player.x, eY[i] - player.y);
       if (d < 195 * player.area && floated < (3 + Math.floor(wLvl / 2))) {
         eLevitate[i] = 9.5;
@@ -551,15 +552,20 @@ function castArcaneSpell(spellType, manualClick = false) {
     spawnSpeech(player.x, player.y, "SECTUMSEMPRA!", "#ff5252", 1.5);
   } else if (spellType === "youShallNotPass") {
     if (typeof sfxSpell === "function") sfxSpell("youShallNotPass");
-    const bRad = (84 + wLvl * 5) * player.area;
+    // v13: Jedi use Tutaminis (not a wizard's Protego). Yoda's ward is bigger and lasts longer - more so at his prime.
+    const isYoda = player.cid === 79, yLv = isYoda && typeof yodaSaberLvl === "function" ? yodaSaberLvl() : 0;
+    const forceWard = isYoda || /tutaminis/i.test(player.lastUtilName || "");
+    const bRad = (84 + wLvl * 5) * player.area * (isYoda ? (yLv >= 7 ? 1.45 : 1.25) : 1);
+    const bLife = 5.5 * player.dur * (isYoda ? (yLv >= 7 ? 1.7 : 1.4) : 1);
     if (typeof activeBarriers !== "undefined") {
       activeBarriers.push({
-        x: player.x, y: player.y, rad: bRad, life: 5.5 * player.dur, maxLife: 5.5 * player.dur,
-        col: player.cid === 71 ? "#ffd166" : (player.cid === 73 ? "#ff9100" : "#00e5ff")
+        x: player.x, y: player.y, rad: bRad, life: bLife, maxLife: bLife,
+        col: isYoda ? "#9cff57" : (forceWard ? "#4fc3f7" : (player.cid === 71 ? "#ffd166" : (player.cid === 73 ? "#ff9100" : "#00e5ff")))
       });
     }
-    executeForceKineticPush(player.x, player.y, player.aim, 10, 85 * player.might);
-    spawnSpeech(player.x, player.y, player.cid === 71 ? "YOU SHALL NOT PASS!" : "PROTEGO TOTALUM!", "#ffd166", 2.2);
+    executeForceKineticPush(player.x, player.y, player.aim, 10, 85 * player.might * (isYoda ? 1.5 : 1));
+    const wardLine = player.cid === 71 ? "YOU SHALL NOT PASS!" : (isYoda ? "TUTAMINIS! \"Pass, you will not.\"" : (forceWard ? "TUTAMINIS!" : "PROTEGO TOTALUM!"));
+    spawnSpeech(player.x, player.y, wardLine, isYoda ? "#9cff57" : "#ffd166", 2.2);
   } else if (spellType === "patronusStag") {
     if (typeof sfxSpell === "function") sfxSpell("patronus");
     if (typeof spawnBlastWave === "function") spawnBlastWave(player.x, player.y, 145 * player.area, "#e0f7fa");
@@ -571,7 +577,7 @@ function castArcaneSpell(spellType, manualClick = false) {
     player.limbs.fill(100);
     player.utils.forEach(u => { u.cd = 0; });
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && isEnemyOnScreen(i)) eStun[i] = Math.max(eStun[i], 3.2);
+      if (eAct[i] && !allyIs(i) && isEnemyOnScreen(i)) eStun[i] = Math.max(eStun[i], 3.2);
     }
     if (typeof spawnBlastWave === "function") spawnBlastWave(player.x, player.y, 135, "#ffd166");
     spawnSpeech(player.x, player.y, player.cid === 69 ? "FAWKES REBIRTH!" : "TIME REWIND!", "#ffd166", 1.8);
@@ -591,7 +597,7 @@ function castArcaneSpell(spellType, manualClick = false) {
     }
     spawnParticles(tx, ty, 18);
     for (let i = 0; i < MAX_E; i++) {
-      if (!eAct[i]) continue;
+      if (!eAct[i] || allyIs(i)) continue;
       if (Math.hypot(eX[i] - tx, eY[i] - ty) <= 125 * player.area) {
         const disDmg = eType[i] >= 98 ? Math.max(320 * player.might, eMax[i] * 0.38) : (eHP[i] + 9999);
         eHP[i] -= disDmg;
@@ -686,7 +692,7 @@ function startRun() {
     activeVisor: innateVisor,
     maxRelics: ([7, 10, 35, 69, 73, 75, 79].includes(cid)) ? 4 : 3,
     relics: [], utils: getHeroUtils(cid), spellbook: [],
-    xp: 0, nextXp: 10, lvl: 1, kills: 0, dmRun: 0, bossSpawned: false,
+    xp: 0, nextXp: 10, lvl: 1, kills: 0, dmRun: 0, bossSpawned: false, titanClock: 0,
     pendingLevelUps: 0, sectorCleared: false, dmStage: 0, unlockedStage: 0, bossDmMul: 0, dmGreed: 0, evadeTxtCD: 0,
     fac: FACTIONS[c[1]] || FACTIONS[0], hero: c, cid, stg, diff,
     weapons: [{
@@ -987,7 +993,9 @@ function allocEnemySlot(x, y, type, hpMul = 1.0, formType = 0, leaderIdx = -1) {
 }
 
 function spawnEnemy(isBoss = false, isRival = false) {
-  const ang = Math.random() * Math.PI * 2, dist = (isBoss || isRival ? 235 : 305) / Math.min(1.2, opts.zoom);
+  // v13: rivals / Titans arrive from the direction the Threat Sense meter has been pointing at
+  const ang = ((isBoss || isRival) && typeof threatSpawnAngle === "function") ? threatSpawnAngle(isBoss) : Math.random() * Math.PI * 2;
+  const dist = (isBoss || isRival ? 235 : 305) / Math.min(1.2, opts.zoom);
   const sx = player.x + Math.cos(ang) * dist, sy = player.y + Math.sin(ang) * dist;
   if (isRival) {
     const idx = allocEnemySlot(sx, sy, 98, 1.0, 0, -1);
@@ -1042,12 +1050,16 @@ function fireWeapon(w) {
   let baseDmg = (18 + w.lvl * 8.0) * lv5Boost * player.might * lowHpBonus * killBonus * mechBonus * armFactor * (sup ? 2.35 : 1);
 
   let tx = player.x + Math.cos(player.aim) * 120, ty = player.y + Math.sin(player.aim) * 120, best = 1e9;
+  let tx2 = 0, ty2 = 0, best2 = 1e9;
   for (let i = 0; i < MAX_E; i++) {
     if (eAct[i] && !(eStagger[i] > 0) && !(typeof sdIgnore === "function" && sdIgnore(i)) && isEnemyOnScreen(i)) {
       const d = Math.hypot(eX[i] - player.x, eY[i] - player.y);
-      if (d < best) { best = d; tx = eX[i]; ty = eY[i]; }
+      if (d < best) { best2 = best; tx2 = tx; ty2 = ty; best = d; tx = eX[i]; ty = eY[i]; }
+      else if (d < best2) { best2 = d; tx2 = eX[i]; ty2 = eY[i]; }
     }
   }
+  // v13: the second of a twin pair (two six-shooters...) takes the second-nearest target
+  if (((w.twinIdx || 0) % 2 === 1) && best2 < 1e9) { tx = tx2; ty = ty2; }
   const eyeJitter = ((100 - player.limbs[0]) / 100) * 0.42;
   const aimAng = Math.atan2(ty - player.y, tx - player.x) + (Math.random() - 0.5) * eyeJitter;
 
@@ -1166,6 +1178,7 @@ function triggerUtility(uIdx) {
   player.combatAlertTimer = 2.0;
 
   if (["leviosaFloat", "patronusStag", "avadaKedavra", "sectumSlash", "youShallNotPass", "piertotumKnights", "raiseDead", "summonHound", "timeRewind", "kneeDarts", "bobaDisintegrate"].includes(u.type)) {
+    player.lastUtilName = u.name;                                // v13: "Tutaminis ..." wards are Force wards, not Protego
     castArcaneSpell(u.type, true);
     updateHUD();
     return;
@@ -1173,6 +1186,14 @@ function triggerUtility(uIdx) {
 
   if (u.type === "whistlingBirds") {          // v9.01: Mandalorian active Skill 1 (js/arsenal.js)
     if (typeof castWhistlingBirds === "function") castWhistlingBirds(u);
+    updateHUD();
+    return;
+  }
+  // v13 creator skills (js/force.js / js/creator.js)
+  if (u.type === "mindTrick" || u.type === "thermalDetonator" || u.type === "forceChoke") {
+    if (u.type === "mindTrick" && typeof forceMindTrick === "function") forceMindTrick();
+    else if (u.type === "thermalDetonator" && typeof throwThermalDetonator === "function") throwThermalDetonator();
+    else if (u.type === "forceChoke" && typeof castForceChoke === "function") castForceChoke();
     updateHUD();
     return;
   }
@@ -1204,7 +1225,7 @@ function triggerUtility(uIdx) {
   } else if (u.type === "flameCone") {
     flameVisTimer = 0.75; sfx(140, 75, 0.25, "sawtooth", 0.28);
     for (let i = 0; i < MAX_E; i++) {
-      if (!eAct[i]) continue;
+      if (!eAct[i] || allyIs(i)) continue;
       const dx = eX[i] - player.x, dy = eY[i] - player.y, d = Math.hypot(dx, dy);
       if (d < 138 * player.area) {
         let diff = Math.atan2(dy, dx) - player.aim;
@@ -1227,7 +1248,7 @@ function triggerUtility(uIdx) {
   } else if (u.type === "executeDash") {
     player.armReach = 6.5;
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 140) {
+      if (eAct[i] && !allyIs(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 140) {
         const pushA = Math.atan2(eY[i] - player.y, eX[i] - player.x);
         eX[i] += Math.cos(pushA) * 42; eY[i] += Math.sin(pushA) * 42; eStun[i] = 2.5;
         if (player.cid === 78) eShred[i] = Math.min(12, eShred[i] + 6);
@@ -1241,7 +1262,7 @@ function triggerUtility(uIdx) {
     sfx(820, 120, 0.14, "sawtooth");
   } else if (u.type === "stareFreeze") {
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && (isEnemyOnScreen(i) || Math.hypot(eX[i] - player.x, eY[i] - player.y) < 340)) {
+      if (eAct[i] && !allyIs(i) && (isEnemyOnScreen(i) || Math.hypot(eX[i] - player.x, eY[i] - player.y) < 340)) {
         eStun[i] = Math.max(eStun[i], 3.5);
         eSlow[i] = Math.max(eSlow[i], 5.0);
         if (player.cid === 76) {
@@ -1294,7 +1315,7 @@ function updateHeroSpecials(simDt) {
 
   if ([51, 19, 41, 42].includes(player.cid) && player.cqcCD <= 0) {
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 42) {
+      if (eAct[i] && !allyIs(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 42) {
         player.cqcCD = 3.2 * (player.cdr || 1.0);
         player.armReach = 6.0;
         eStun[i] = Math.max(eStun[i], 1.8);
@@ -1393,12 +1414,12 @@ function updateHeroSpecials(simDt) {
   if (player.cid === 54) {
     if (player.autoFlameCD <= 0) {
       let nearCnt = 0;
-      for (let i = 0; i < MAX_E; i++) { if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 115) nearCnt++; }
+      for (let i = 0; i < MAX_E; i++) { if (eAct[i] && !allyIs(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 115) nearCnt++; }
       if (nearCnt >= 4) {
         player.autoFlameCD = 4.5; flameVisTimer = 0.65;
         spawnSpeech(player.x, player.y, "WRIST FLAMETHROWER!", "#ff6d00", 1.4); sfx(150, 65, 0.22, "sawtooth", 0.25);
         for (let i = 0; i < MAX_E; i++) {
-          if (eAct[i] && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 125 * player.area) {
+          if (eAct[i] && !allyIs(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 125 * player.area) {
             const flmDmg = 130 * player.might;
             eHP[i] -= flmDmg; eStun[i] = 1.0;
             spawnDmg(eX[i], eY[i], flmDmg, true);

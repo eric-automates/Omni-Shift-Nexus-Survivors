@@ -1079,7 +1079,7 @@ function showRunSummary(sm) {
   let subTxt;
   if (sm.cleared && sm.campaignLabel) subTxt = "District secured: new routes are charted on the Galactic Expedition Map.";
   else if (sm.cleared) subTxt = sm.unlockedStage ? `Stage ${sm.unlockedStage} is now unlocked on the Sector Map.` : (sm.stageId >= STAGES.length ? "Final sector cleared — the multiverse is yours." : "Sector cleared again.");
-  else subTxt = sm.bossSpawned ? "The Sector Titan is still out there — defeat it to clear this sector." : "Survive to 2:00 to summon the Sector Titan, then defeat it to clear the sector.";
+  else subTxt = sm.bossSpawned ? "The Sector Titan is still out there — defeat it to clear this sector." : "Survive ~2:00 to summon the Sector Titan (sooner the further you roam — watch your Threat Sense meter), then defeat it to clear the sector.";
   document.getElementById("sumSub").textContent = subTxt;
   const row = (label, val, col = "#e0f2f1") => `<div style="display:flex;justify-content:space-between;gap:8px"><span style="color:#90a4ae">${label}</span><b style="color:${col}">${val}</b></div>`;
   const mulTxt = sm.mul > 1.0001 ? ` × ${sm.mul.toFixed(2)} greed` : "";
