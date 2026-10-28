@@ -7,7 +7,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>OMNI-SHIFT: NEXUS SURVIVORS</title>
-<link rel="stylesheet" href="css/style.css?v=v11-2026-10-27">
+<link rel="stylesheet" href="css/style.css?v=v12-2026-10-27">
 <!-- PRE-BOOT BULLETPROOF DOM GUARD & LIVE DEBUGGER -->
 <script>
 (function() {
@@ -210,6 +210,7 @@
       <button class="btn gold" id="goPlay" style="font-size:0.95rem;padding:12px">DEPLOY INTO NEXUS</button>
       <button class="btn" id="goDiff">CYCLE DIFFICULTY TIER</button>
       <button class="btn" id="goChars">CHARACTER ROSTER (80)</button>
+      <button class="btn gold" id="goCreate">✨ CREATE YOUR OWN HERO</button>
       <button class="btn" id="goStages">🗺️ GALACTIC EXPEDITION MAP</button>
       <button class="btn" id="goMeta">DARK MATTER SHOP & RESPEC</button>
       <button class="btn" id="goCodex">WORLD MORPH CODEX & LEGEND</button>
@@ -222,13 +223,26 @@
 
   <!-- CHARACTER SELECT -->
   <div id="scrChars" class="screen">
-    <h2>80 MULTIVERSE HEROES & LEGENDS (Swipe Anywhere to Scroll • Hold 350ms to Inspect & Customize)</h2>
+    <h2>80 MULTIVERSE HEROES & LEGENDS + YOUR OWN HERO (Swipe Anywhere to Scroll • Hold 350ms to Inspect & Customize)</h2>
     <div class="bar">
       <div class="stat-pill" id="charDM">Available DM: 0</div>
       <button class="btn warn" id="btnRespecChars">RESPEC HEROES (REFUND & LOCK)</button>
       <button class="btn" data-back="scrMain">BACK</button>
     </div>
     <div id="charGrid" class="grid"></div>
+  </div>
+
+  <!-- v12 CUSTOM HERO CREATOR (#80) -->
+  <div id="scrCreate" class="screen">
+    <h2>✨ HERO CREATOR · #80</h2>
+    <div class="sub">Free & always unlocked. Dual sabers are two separate weapons: own hilt, own colour, own level & Form stage.</div>
+    <canvas id="crCv" width="320" height="200" style="position:relative;width:320px;height:200px;margin:2px auto 4px;display:block;border:1px solid #00e5ff66;border-radius:8px;background:#060b14"></canvas>
+    <div id="crForm"></div>
+    <div class="bar">
+      <button class="btn gold" id="crSave">SAVE & SELECT HERO</button>
+      <button class="btn" id="crRandom">🎲 RANDOM</button>
+      <button class="btn" id="crBack">BACK</button>
+    </div>
   </div>
 
   <!-- v10 GALACTIC EXPEDITION MAP -->
@@ -294,6 +308,16 @@
     <div style="max-width:355px;margin:4px auto;display:flex;flex-direction:column;gap:8px;width:100%">
 
       <div class="hud-guide-box">
+        <div class="guide-title">NEW IN v12 · YOUR OWN HERO, RIVAL SHOWDOWNS & EXECUTE</div>
+        <div class="card-desc" style="line-height:1.45">
+          <b style="color:#ffd166">✨ Create your own hero (#80)</b> — main menu → <b>CREATE YOUR OWN HERO</b> (or the top card of the roster). Free and always unlocked. Pick a name, Jedi / Sith / Grey, species (Human, Zabrak, Togruta, Twi'lek, Miraluka, Cyborg), skin, hair or hood, robes and cloak, a Force talent, and your sabers: <b>one saber, a saberstaff or DUAL SABERS</b>. Dual sabers are two separate weapons — each has its own hilt (10 hilts: Graflex, Jedi Knight, Ribbed Hermit, Dark Lord, Electrum, Curved Duelist, Shoto, Crossguard, Temple Guard, Scavenger), its own colour (10, including the Darksaber), its own level, level-up cards (#1 of 2 / #2 of 2) and Form stage. "Match #1" makes a mirrored pair. Choose a Fighting Form path and your hero climbs from Shii-Cho to its prime Form.<br>
+          <b style="color:#ff5252">⚔ Rival Showdown</b> — when a rival hero arrives, the crowd slowly backs off into a wide ring. One reckless grunt charges the rival and gets destroyed by its signature finisher, then it's you vs. the rival. The crowd watches and cheers and never attacks (your auto-aim, blades and squad ignore it). Beat the rival and the crowd is shaken before the brawl resumes. Titans and other rivals wait until the duel is over.<br>
+          <b style="color:#ff9100">☠ EXECUTE stays on</b> — after your first stagger the button stays on the HUD (dim when nothing is ready). Tap it, or press <b>E</b>, to finish the <b>highest-ranked</b> staggered elite in reach (rival → heavy → shield leader → trooper). Tap again during a finisher to chain straight into the next one. A red reticle marks who's next.<br>
+          <b style="color:#00e676">🧪 Debug All</b> now plays 14 live actions (adds Execute Chain + Rival Showdown).
+        </div>
+      </div>
+
+      <div class="hud-guide-box">
         <div class="guide-title">NEW IN v11 · LIGHTSABER FORMS & MUSIC</div>
         <div class="card-desc" style="line-height:1.45">
           <b style="color:#00e5ff">⚔️ Lightsaber Forms</b> — blades no longer spin: every saber fights with real strikes (guard → wind-up → cut → follow-through) aimed at an actual enemy, chaining from foe to foe. The seven canon Forms each move differently: <b>I Shii-Cho</b> wide sweeps (Sarlacc Sweep when surrounded) · <b>II Makashi</b> one-handed lunges · <b>III Soresu</b> tight parries + ripostes · <b>IV Ataru</b> leaping strikes, flips, saber swarms · <b>V Shien/Djem So</b> bolts sent back at the shooter, Falling Avalanche overhead chops · <b>VI Niman</b> Pushing Slash & Draw Closer · <b>VII Juyo/Vaapad</b> erratic staccato flurries.<br>
@@ -310,7 +334,7 @@
           <b style="color:#ff9100">☠ Glory kills</b> — wounded elites (heavies, shield leaders, rivals) get STAGGERED. Walk into them or tap EXECUTE for a hero-specific finisher: heal, cooldown refund, XP.<br>
           <b style="color:#ffd166">🗺️ Galactic Expedition</b> — the map replaces the stage list. Pick a route; the district you clear decides the next sector's faction, modifier, biome and warlord. The classic 50-stage list is one tap away.<br>
           <b style="color:#80deea">🌍 Adaptive biomes</b> — every universe has its own ground, props, weather and a hazard that hurts you AND enemies — lure them in.<br>
-          <b style="color:#00e676">🧪 Debug All</b> — main menu → Proving Ground plays 12 live actions with your hero and ticks each PASS/FAIL.
+          <b style="color:#00e676">🧪 Debug All</b> — main menu → Proving Ground plays 14 live actions with your hero (v12 adds Execute Chain + Rival Showdown) and ticks each PASS/FAIL.
         </div>
       </div>
 
@@ -405,25 +429,27 @@
 </div>
 
 <!-- ORDERED MODULAR SCRIPT LOADING (?v= busts stale GitHub Pages caches after an upload; bump it on every release) -->
-<script src="js/chaos.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
-<script src="js/data-factions.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
-<script src="js/data-heroes.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
-<script src="js/data-relics.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
-<script src="js/state.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
-<script src="js/world.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
-<script src="js/combat.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
-<script src="js/sim.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
-<script src="js/render.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
-<script src="js/fx.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/fx.js', true)"></script>
-<script src="js/rewind.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/rewind.js', true)"></script>
-<script src="js/arsenal.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/arsenal.js', true)"></script>
-<script src="js/squad.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/squad.js', true)"></script>
-<script src="js/glory.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/glory.js', true)"></script>
-<script src="js/biomes.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/biomes.js', true)"></script>
-<script src="js/campaign.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/campaign.js', true)"></script>
-<script src="js/proving.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/proving.js', true)"></script>
-<script src="js/saberforms.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/saberforms.js', true)"></script>
-<script src="js/ui.js?v=v11-2026-10-27" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
+<script src="js/chaos.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
+<script src="js/data-factions.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
+<script src="js/data-heroes.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
+<script src="js/data-relics.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
+<script src="js/state.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
+<script src="js/world.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
+<script src="js/combat.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
+<script src="js/sim.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
+<script src="js/render.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
+<script src="js/fx.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/fx.js', true)"></script>
+<script src="js/rewind.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/rewind.js', true)"></script>
+<script src="js/arsenal.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/arsenal.js', true)"></script>
+<script src="js/squad.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/squad.js', true)"></script>
+<script src="js/glory.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/glory.js', true)"></script>
+<script src="js/showdown.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/showdown.js', true)"></script>
+<script src="js/biomes.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/biomes.js', true)"></script>
+<script src="js/campaign.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/campaign.js', true)"></script>
+<script src="js/proving.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/proving.js', true)"></script>
+<script src="js/saberforms.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/saberforms.js', true)"></script>
+<script src="js/creator.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/creator.js', true)"></script>
+<script src="js/ui.js?v=v12-2026-10-27" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
 </body>
 </html>
 <!-- EOF:index.html -->

@@ -1,62 +1,188 @@
 # FILE: flowchart.md
 # PART: 2 of 14
-# DETAIL: Version 8.0 / 8.2 Current State Architecture & Execution Flowchart (Pre-v9.0 Baseline)
+# DETAIL: Current State Architecture & Execution Flowcharts (v12, 2026-10-27) — boot, menus, Hero Creator, run start, the 60 FPS loop, simulation, Saber Form Engine, Rival Showdown, glory kills / EXECUTE, rendering and end of run. The v8.2 baseline diagram is replaced; feature descriptions live in info.md.
+
+## 1. Whole-game flow
 
 ```mermaid
 flowchart TD
-  %% === 1. BOOT & DIAGNOSTIC SHELL (index.html + js/ui.js) ===
-  subgraph BOOT["1. PRE-BOOT & DOM SHELL (index.html + js/ui.js)"]
-    A["index.html: Safe Node.removeChild Wrapper & Live Debugger"] --> B["Ordered Script Loader (10 Modular JS Files)"]
-    B --> C["checkLoadedScripts() & runDynamicEOFScan()"]
-    C --> D["enableScreenCardScroll() (Touch-Drag pan-y Controller)"]
-    D --> E["loadMeta() -> localStorage (OMNISHIFT_META_V1)"]
-    E --> F["updateMenuUI() -> Main Menu (#scrMain)"]
+  %% === 1. BOOT (index.html + js/ui.js + js/state.js) ===
+  subgraph BOOT["1. BOOT & DOM SHELL"]
+    A["index.html: safe removeChild wrapper, live debugger, music player shell"] --> B["Ordered script loader: 21 files, cache-bust ?v=v12-2026-10-27"]
+    B --> B2["chaos, data-factions, data-heroes, data-relics, state, world, combat, sim, render"]
+    B2 --> B3["fx, rewind, arsenal, squad, glory, showdown (v12), biomes, campaign, proving, saberforms (v11), creator (v12), ui"]
+    B3 --> C["checkLoadedScripts() + runDynamicEOFScan()"]
+    C --> E["loadMeta(): localStorage OMNISHIFT_META_V1"]
+    E --> E2["v12: customHeroSanitize(meta.custom) + customHeroRegister() writes CHAR_RAW[80]"]
+    E2 --> F["updateMenuUI() -> Main Menu (#scrMain)"]
   end
 
-  %% === 2. MENU & ROSTER NAVIGATION (js/ui.js + js/state.js) ===
-  subgraph MENUS["2. MENU SCREENS & 350ms INSPECTOR (js/ui.js)"]
-    F -->|Tap Deploy| G["startRun() (js/combat.js)"]
-    F -->|Tap Roster| H["renderChars() (80 Heroes Sorted by 11 Genres)"]
-    F -->|Tap Sectors| I["renderStages() (50 Procedural Sectors)"]
-    F -->|Tap Shop| J["renderMeta() (Dark Matter Upgrades & 100% Respec)"]
-    F -->|Tap Diagnostics| K["renderHealth() (EOF Scanner + FPS/Corpse Telemetry)"]
-    H -->|Hold Card 350ms| L["openInspector() + renderOutfitCustomizer() (#custBox)"]
-    L -->|Cycle Head/Torso/Legs/Back/Blade| M["cycleOutfitPart() -> getOutfit() -> getDefaultBladeIdx()"]
+  %% === 2. MENUS ===
+  subgraph MENUS["2. MENU SCREENS"]
+    F -->|DEPLOY INTO NEXUS| G["startRun() (js/combat.js)"]
+    F -->|Character Roster| H["renderChars(): top card = Your Hero #80, then 80 heroes in 11 genres"]
+    F -->|CREATE YOUR OWN HERO| CR["openCreator() -> #scrCreate (js/creator.js)"]
+    H -->|EDIT / create card| CR
+    H -->|hold 350ms| L["openInspector() + outfit customizer"]
+    F -->|Galactic Expedition| CAMP["renderCampaign(): branching sector map, modifiers, warlords"]
+    CAMP --> G
+    F -->|Classic list| I["renderStages(): 50 sectors"]
+    F -->|Shop| J["renderMeta(): Dark Matter upgrades + 100% respec"]
+    F -->|Proving Ground| PG["startProvingGround(): 14 live actions, PASS / FAIL panel"]
+    PG --> G
+    F -->|Options / Codex / Health / Help| MISC["opts, codex, telemetry, HUD guide (NEW IN v12 box)"]
   end
 
-  %% === 3. RUN INITIALIZATION (js/combat.js + js/state.js) ===
-  subgraph INIT["3. RUN INITIALIZATION (js/combat.js)"]
-    G --> N["purgeRunMemory() (Clears SoA TypedArray Pools & Map Deltas)"]
-    N --> O["Initialize player Object (Stats, Limbs[6], Innate Visor, Dash Spec)"]
-    O --> P["Assign Starting Weapon with getWeaponColor(cid) -> bladeCol"]
-    P --> Q["syncHeroSpellbook() (Unlocks Cumulative Spells onto #spellBar)"]
-    Q --> R["Activate #hud & Enter 60 FPS requestAnimationFrame(loop)"]
+  %% === 3. HERO CREATOR (v12) ===
+  subgraph CREATE["3. HERO CREATOR #80 (js/creator.js)"]
+    CR --> CR1["Draft: name, allegiance, species, body, skin, hair/hood, robes, legs, cloak, talent"]
+    CR1 --> CR2["Saber setup: single / saberstaff / DUAL (two separate weapons)"]
+    CR2 --> CR3["Per saber: hilt selector (10) + blade colour (10, Darksaber) + Match #1"]
+    CR3 --> CR4["Fighting Form path -> SABER_PATHS[80] (Shii-Cho ... prime Form)"]
+    CR4 --> CR5["Live preview: drawHeroSprite(80) + hilt close-ups"]
+    CR5 -->|SAVE| CR6["meta.custom saved, selChar = 80, customHeroRegister()"]
+    CR6 --> F
   end
 
-  %% === 4. 60 FPS SIMULATION ENGINE (js/sim.js + js/world.js) ===
-  subgraph SIM["4. 60 FPS ZERO-GC SIMULATION LOOP (js/sim.js)"]
-    R --> S["updateSim(rawDt) -> simDt = rawDt * timeScale"]
-    S --> T["Weapon Drop Pickup Check (activeWeaponDrops)"]
-    T --> U["Player Kinematics, Acrobat Z-Hop & Obstacle Collision (js/world.js)"]
-    U --> V["Biographical Stance Engine: getHeroStanceSpec(cid, lvl, isDeflecting)"]
-    V --> W["Active Hand Slot Loop (armCap) & Holster Swap Timer"]
-    W -->|Melee / Orbit Saber| X["checkBladeSegmentSlice() (Limb Sever + Bisected Halves)"]
-    W -->|Ranged / Wand / Staff| Y["fireWeapon() -> spawnProj() / castArcaneSpell()"]
-    S --> Z["updateHeroSpecials() (CQC Gun-Fu, Sandevistan, V.A.T.S., Auto-Hardware)"]
-    S --> AA["updateMinionsSim() (MAX_MINION=36 Allied Undead / Knights / Hounds)"]
-    S --> AB["Enemy AI Loop (MAX_E=360): Formations, ChaosMath Steering, Bleed & Levitate"]
-    AB -->|Enemy Killed| AC["killEnemy() -> spawnCorpse() / spawnBisectedBodyHalves() + spawnOrb()"]
-    AC -->|If Rival (98) or Boss (99)| AD["spawnWeaponDrop() + grantRelic() + Protected Veteran Corpse"]
-    S --> AE["Projectile Loop (MAX_P=520): Saber Deflection, Ricochet & Hit Zones"]
-    S --> AF["XP Orb Loop (MAX_O=500): Magnet Pull -> triggerLevelUp() (#scrLevel)"]
+  %% === 4. RUN START ===
+  subgraph INIT["4. RUN INITIALIZATION (js/combat.js startRun)"]
+    G --> N["purgeRunMemory(): clear every SoA pool"]
+    N --> O["player object: stats, limbs[6], visor, dash spec, armCap, starting weapon + bladeCol"]
+    O --> O2["hero stat block (#00-#79)"]
+    O2 --> O3["v12: hero #80 -> customHeroApplyRun(): 1 or 2 saber weapons (own hilt / colour / level), talent, allegiance"]
+    O3 --> Q["syncHeroSpellbook()"]
+    Q --> HK["V10.onRunStart hooks: campaign modifiers, adaptive biome, squads, rewind buffer, fx, glory reset, showdown reset, saber reset"]
+    HK --> R["#hud active -> requestAnimationFrame(loop)"]
   end
 
-  %% === 5. VOXEL & SCENE RENDERER (js/render.js + js/ui.js) ===
-  subgraph RENDER["5. SCENE RENDERER & IN-PLACE HUD (js/render.js + js/ui.js)"]
-    R --> AG["renderScene() (Camera Transform & Zoom)"]
-    AG --> AH["renderBiomeAndWorld() (256px Procedural Chunks, Forts, Mines, Weapon Drops)"]
-    AG --> AI["Render Gore Pools: Blood Drips, Severed Limbs, Intact Corpses & Bisected Halves"]
-    AG --> AJ["Render Enemies, Rivals (drawHeroSprite) & Active Tactical Visor Overlay"]
-    AG --> AK["drawHeroSprite(player): Stature Scale (getHeroBodySpec) + Per-Weapon bladeCol"]
-    AG --> AL["updateHUD() (In-Place DOM Sync for #wpnSlots, #utilBar, #dashSlot, #spellBar, #bodyHud)"]
+  %% === 5. FRAME LOOP ===
+  subgraph LOOP["5. 60 FPS FRAME LOOP (js/ui.js loop + js/sim.js)"]
+    R --> LP["loop(ts): rawDt"]
+    LP -->|timeScale >= 0.1| US["updateSim(rawDt * timeScale * fxTimeMul) in sub-steps"]
+    LP -->|timeScale < 0| RW["rewindPlayback(): keyframe ring buffer, interpolation, echoes"]
+    US --> RS["renderScene()"]
+    RW --> RS
+    RS --> HUD["updateHUD(): in-place DOM (weapons, skills, dash, limbs, spellbar)"]
+    HUD --> OF["V10.onFrame hooks: EXECUTE button state, fx banners, proving panel, music UI"]
+    OF --> LP
   end
+
+  %% === 6. SIMULATION STEP ===
+  subgraph SIM["6. updateSim() - ONE STEP"]
+    US --> S1["Input + movement + obstacles + biome hazards"]
+    S1 --> S2["Auto-aim: nearest on-screen enemy, skips staggered elites and the showdown crowd"]
+    S2 --> S3["Hand-slot loop (armCap)"]
+    S3 -->|lightsaber / sword| SF["saberEngineStep(): guard -> wind-up -> strike -> recover, swept collision, deflect + redirect"]
+    S3 -->|gun / staff / wand| FW["fireWeapon() -> spawnProj() / castArcaneSpell()"]
+    S3 --> SP["updateHeroSpecials(): utilities, signature gear, dash, CQC"]
+    SP --> MN["squadMinionsSim(): fireteams + minions (skip the crowd)"]
+    MN --> SPN["Spawn director: wave population, Titan timer, rival timer (both wait during a showdown; spawns x0.35)"]
+    SPN -->|rival due| RIV["spawnEnemy(rival) -> showdownBegin()"]
+    SPN --> EN["Enemy AI loop (MAX_E = 360)"]
+    EN --> EN1["levitate / bleed / stagger / stun / grapple"]
+    EN1 --> EN2["v12 showdownEnemyStep(): spectators hold the ring, rival entrance, challenger charge"]
+    EN2 --> EN3["formations + ChaosMath steering + firing + contact damage"]
+    EN3 --> PRJ["Projectile loop (MAX_P = 520): hits, deflection, ricochet, homing"]
+    PRJ --> ORB["XP orbs -> triggerLevelUp() (#scrLevel, twin sabers get separate cards)"]
+    ORB --> STEP["V10.onStep hooks: glory stagger / execute, showdown phases, rewind capture, fx, squads, campaign, proving"]
+  end
+
+  %% === 7. KILL PIPELINE ===
+  subgraph KILL["7. killEnemy()"]
+    SF --> K["killEnemy(idx, headshot, sliceAngle, glow)"]
+    FW --> K
+    EN3 --> K
+    K --> K1["V10.onKill: rewind echo list, kill-streak fx, campaign counters"]
+    K1 --> K2["corpse / bisected halves / limbs + XP orb (none for echoes or no-pay kills)"]
+    K2 -->|Rival 98 or Titan 99| K3["weapon drop + relic + trophy corpse; rival death ends the showdown"]
+    K3 -->|Titan| K4["onSectorTitanDefeated(): sector cleared, Dark Matter banked"]
+  end
+
+  %% === 8. RENDER ===
+  subgraph RENDER["8. renderScene() (js/render.js)"]
+    RS --> R1["fx camera: shake, zoom, focus, letterbox"]
+    R1 --> R2["biome ground, props, hazards, world objects"]
+    R2 --> R3["gore pools: drips, limbs, corpses, bisected halves"]
+    R3 --> R4["enemies: grunts (spectators pump fists), rivals as hero sprites, stagger / echo markers"]
+    R4 --> R5["drawHeroSprite(player): outfit, species & hood (#80), Form-posed blades with hilts + trails, belt hilts"]
+    R5 --> R6["particles + projectiles + damage text"]
+    R6 --> R7["V10.onRenderWorld: EXECUTE reticle, showdown ring + finisher strike, squad markers"]
+    R7 --> R8["V10.onRenderScreen: rewind VHS overlay, banners, letterbox, vignette, perf pill"]
+  end
+
+  %% === 9. END OF RUN ===
+  subgraph END["9. END OF RUN"]
+    STEP -->|HP 0, no revives| X1["resolvePlayerDeath() -> endRun('death')"]
+    PAUSE["Pause -> END RUN"] --> X2["endRun('quit')"]
+    X1 --> X3["Dark Matter payout + summary screen (#scrSummary)"]
+    X2 --> X3
+    X3 -->|Deploy again / next sector / menu| F
+  end
+```
+
+## 2. Rival Showdown state machine (js/showdown.js)
+
+```mermaid
+stateDiagram-v2
+  [*] --> Idle
+  Idle --> Arrive: rival spawns (no Titan alive)
+  Arrive --> Challenge: 1.15 s - crowd has backed into the ring
+  Challenge --> Finisher: challenger reaches the rival (or 1.5 s)
+  Challenge --> Duel: challenger killed by a stray shot
+  Finisher --> Duel: 0.55 s after the rival's signature kill
+  Duel --> Idle: rival killed (crowd SHAKEN)
+  Arrive --> Idle: rival gone (rewind / levitated / killed)
+  Challenge --> Idle: rival gone
+  Finisher --> Idle: rival gone
+  Duel --> Idle: 90 s safety cap or run reset
+  note right of Arrive
+    Rival banner, camera focus.
+    Rival strides to ~125 px.
+    Grunts flagged as spectators
+    and walk back to ring slots.
+  end note
+  note right of Duel
+    Crowd cheers, never attacks.
+    Auto-aim, blades, squad, gear
+    and spells ignore it.
+    Titan / 2nd rival wait.
+    Spawns x0.35.
+  end note
+```
+
+## 3. EXECUTE button states (js/glory.js, v12)
+
+```mermaid
+stateDiagram-v2
+  [*] --> Hidden
+  Hidden --> Ready: first stagger in reach
+  Hidden --> Idle: first stagger (out of reach)
+  Idle --> Ready: staggered elite within 230 px
+  Ready --> Idle: no target in reach (button stays, dimmed)
+  Ready --> Busy: tap / E - execute highest rank (rival > heavy > leader > trooper)
+  Busy --> Busy: tap again - queue the chain
+  Busy --> Ready: finisher done (queued chain executes next target)
+  Busy --> Idle: finisher done, nothing left
+  Idle --> Hidden: run ends
+  Ready --> Hidden: run ends
+```
+
+## 4. Custom hero data flow (#80)
+
+```mermaid
+flowchart LR
+  D["meta.custom (localStorage)"] -->|loadMeta| S["customHeroSanitize()"]
+  S --> REG["customHeroRegister()"]
+  REG --> C1["CHAR_RAW[80]: name, weapon, supercharge, talent"]
+  REG --> C2["SABER_PATHS[80] + HERO_STANCE_TABLE[80]: chosen Form path"]
+  REG --> C3["HERO_SIG_GEAR / UTILS_56 / Q_56 [80]: allegiance kit"]
+  REG --> C4["SWORD_HEROES, FORCE_VACUUM_HEROES, BAD_HEROES (Sith), FEMALE_HEROES"]
+  REG --> C5["WPN_SVG_56[80] icon, customHeroOutfits() palette"]
+  C1 --> RUN["startRun(80) -> customHeroApplyRun()"]
+  RUN --> W1["weapon #1: id 80, hilt h1, colour c1, own level, own Form stage"]
+  RUN --> W2["weapon #2 (dual): id 80, hilt h2, colour c2, own level, own Form stage"]
+  W1 --> ENG["Saber Form Engine slot 0 (right hand)"]
+  W2 --> ENG2["Saber Form Engine slot 1 (left hand, relay timing, own target claim)"]
+  ENG --> DRAW["drawSaberBladePose -> drawWeaponModel(..., hilt)"]
+  ENG2 --> DRAW
+```
