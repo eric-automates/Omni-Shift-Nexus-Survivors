@@ -1,6 +1,6 @@
 # FILE: flowchart.md
 # PART: 2 of 14
-# DETAIL: Current State Architecture & Execution Flowcharts (v13, 2026-10-28) — boot, menus, Hero Creator v2, run start, the 60 FPS loop, simulation (Threat Sense clocks, Force-persuaded allies, Yoda's powers), Saber Form Engine, Rival Showdown, glory kills / EXECUTE, rendering and end of run. Feature descriptions live in info.md.
+# DETAIL: Current State Architecture & Execution Flowcharts (v14, 2026-10-31) — boot, menus, Hero Creator v2, run start, the 60 FPS loop, simulation (Threat Sense clocks, Force-persuaded allies, Yoda's powers), Saber Form Engine, Rival Showdown, glory kills / EXECUTE, rendering and end of run. Feature descriptions live in info.md.
 
 ## 1. Whole-game flow
 
@@ -54,7 +54,8 @@ flowchart TD
     O3 --> Q["syncHeroSpellbook()"]
     Q --> HK["V10.onRunStart hooks: campaign modifiers, adaptive biome, squads, rewind buffer, fx, glory reset, showdown reset, saber reset"]
     HK --> HK2["v13 hooks: senseReset (pre-rolled rival / Titan angles), forceReset (allies, Yoda timers), crKit reset"]
-    HK2 --> R["#hud active -> requestAnimationFrame(loop)"]
+    HK2 --> HK3["v14 cityRunStart (first hook): world = Nexus City unless classic / Proving Ground -> seed, hero theme, drop zone -> local (256,256), tile prewarm, stealth director reset"]
+    HK3 --> R["#hud active -> requestAnimationFrame(loop)"]
   end
 
   %% === 5. FRAME LOOP ===
@@ -71,7 +72,7 @@ flowchart TD
 
   %% === 6. SIMULATION STEP ===
   subgraph SIM["6. updateSim() - ONE STEP"]
-    US --> S1["Input + movement + obstacles + biome hazards (player.flying skips obstacles)"]
+    US --> S1["Input + movement + obstacles (city: wall collision, sneak speed, cars) + biome hazards (player.flying skips obstacles)"]
     S1 --> S2["Auto-aim: nearest on-screen enemy, skips staggered elites, the showdown crowd and allies"]
     S2 --> S3["Hand-slot loop (armCap)"]
     S3 -->|lightsaber / sword| SF["saberEngineStep(): guard -> wind-up -> strike -> recover, swept collision, deflect + redirect"]
@@ -236,4 +237,75 @@ flowchart LR
   W3 -->|below 30% HP| W5["obliterated"]
   W3 -->|everyone else| W6["turned: ally for 25 s"]
   ALL["any level: Force Persuade every 14 s (4-6 allies); Tutaminis ward 25-45% bigger"]
+```
+
+## 8. Nexus City pipeline (v14)
+
+```mermaid
+flowchart LR
+  SEED["meta.citySeed"] --> GEN["citygen.js: cityGenInit<br/>macro map, cities, interstates"]
+  GEN --> CELL["cityCell(mx,my)<br/>street lattice"]
+  CELL --> BLOCK["cityBlock: lots, buildings,<br/>props, surfaces, spawn records"]
+  BLOCK --> INT["cityInterior(b)<br/>rooms, doors, windows, furniture"]
+  BLOCK --> CHUNK["cityworld.js: 64 m chunk<br/>flags, kinds, building ids, doors"]
+  INT --> CHUNK
+  CHUNK --> COL["collision / rays /<br/>shadow-cast sight"]
+  CHUNK --> DIR["stealth.js director<br/>spawns rooms, posts, patrols"]
+  BLOCK --> BAKE["cityrender.js: 512 px tile bake<br/>ground, roads, floors, walls, furniture, litter"]
+  THEME["citythemes.js<br/>hero → universe look"] --> BAKE
+  BAKE --> FRAME["frame: tiles + live layer<br/>doors, decals, caches"]
+  COL --> FOG["roofs + LOS fog"]
+  FRAME --> FOG --> SENSE["vision.js senses,<br/>stealth icons, beacons"]
+  BLOCK --> MAP["minimap.js map tiles"]
+```
+
+## 9. Enemy AI states (js/stealth.js)
+
+```mermaid
+stateDiagram-v2
+  [*] --> Idle: room / guard post
+  [*] --> Patrol: street route
+  Idle --> Investigate: hears ≥ 66 dB / suspicion > 0.38
+  Patrol --> Investigate: hears ≥ 66 dB / suspicion > 0.38
+  Idle --> Idle: notice (turns, ? icon)
+  Investigate --> Investigate: new shot re-targets
+  Investigate --> Search: arrives / times out
+  Search --> Return: nothing found (≈10 s)
+  Return --> Idle
+  Return --> Patrol
+  Idle --> Alert: sees you (suspicion 1) / shot < 25 m ≥ 115 dB
+  Patrol --> Alert
+  Investigate --> Alert
+  Search --> Alert
+  Alert --> Alert: shoots with LOS, shouts contact
+  Alert --> Search: loses you > 7 s
+```
+
+## 10. How far a sound carries
+
+```mermaid
+flowchart TD
+  SHOT["player fires / impact / glass / footsteps"] --> L0["L0 from the hero's weapon profile<br/>(suppressor → 118 dB on real firearms)"]
+  L0 --> EACH["each enemy within the open-air notice range"]
+  EACH --> D["− 20·log10(d) − 0.012·d"]
+  D --> WALLS["− walls, doors, windows, fences on the straight path<br/>(buildings passed over: 10 dB, +3 each)"]
+  WALLS --> TH{"level at the listener"}
+  TH -- "≥ 115 and < 25 m" --> COMBAT["Alert"]
+  TH -- "≥ 88" --> URGENT["Investigate, running"]
+  TH -- "≥ 66" --> INV["Investigate"]
+  TH -- "≥ 50" --> NOTICE["Notice: turn, suspicion +0.22"]
+  TH -- "< 50" --> NONE["not heard"]
+  L0 -- "≥ 125 dB, from the hero" --> RESP["distant responders converge"]
+```
+
+## 11. Marker visibility (js/minimap.js)
+
+```mermaid
+flowchart LR
+  M["marker placed on the map<br/>(colour, symbol, note)"] --> FAR{"inside the minimap range?"}
+  FAR -- no --> EDGE["arrow on the minimap edge"]
+  FAR -- yes --> MINI["symbol on the minimap"]
+  MINI --> NEAR{"within ~160 m?"}
+  NEAR -- yes --> BEAM["beacon on the main screen<br/>(edge arrow when off-screen)"]
+  NEAR -- no --> MINI
 ```

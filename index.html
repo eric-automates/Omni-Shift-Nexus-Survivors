@@ -7,7 +7,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>OMNI-SHIFT: NEXUS SURVIVORS</title>
-<link rel="stylesheet" href="css/style.css?v=v13-2026-10-28">
+<link rel="stylesheet" href="css/style.css?v=v14-2026-10-31">
 <!-- PRE-BOOT BULLETPROOF DOM GUARD & LIVE DEBUGGER -->
 <script>
 (function() {
@@ -161,6 +161,7 @@
 <canvas id="cv"></canvas>
 <div id="ui">
   <!-- IN-RUN HUD -->
+  <div id="cityHud"></div>
   <div id="hud">
     <div class="hud-row">
       <div class="hp-wrap"><div id="hpBar"></div><div id="hpTxt">100/100</div></div>
@@ -308,6 +309,19 @@
     <div style="max-width:355px;margin:4px auto;display:flex;flex-direction:column;gap:8px;width:100%">
 
       <div class="hud-guide-box">
+        <div class="guide-title">NEW IN v14 · NEXUS CITY — A 64 × 64 KM WORLD</div>
+        <div class="card-desc" style="line-height:1.45">
+          <b style="color:#80deea">🌆 Nexus City</b> — every deploy drops you into a generated region with 55 cities and towns, interstates, suburbs, downtowns, farms, woods and lakes. Thousands of single-storey buildings — houses, gas stations, diners, banks, schools, police and fire stations, city halls, churches, motels, warehouses — and <b>every one has a full interior</b> you can walk into. Main menu → <b>WORLD</b> switches back to the classic arena.<br>
+          <b style="color:#ffd166">🎭 Dressed for your hero</b> — the same streets become a Tatooine adobe town, Coruscant durasteel, a neon megacity, Arrakeen, a Goa'uld temple city, an Imperial hive, the Old West, Middle-earth or Hogsmeade: buildings, furniture, floors, roofs, cars, trees, lamps, signs ("TIBANNA FUEL", "PROMETHIUM DEPOT", "FLOO POWDER CO.") and even the litter.<br>
+          <b style="color:#ff8a65">☠ Who hunts you</b> — 48 enemy rosters: Stormtroopers for the Rebels, Jaffa, Horus Guards, Replicators & Kull for SG-1, the Bratva and the High Table for John Wick… spread through rooms, guard posts and patrols instead of swarming.<br>
+          <b style="color:#b2ff59">👂 Sound is real</b> — a gunshot brings everyone who hears it; another shot re-targets them. Walls, doors and windows muffle it: an unsuppressed shot inside a house carries for hundreds of metres, a suppressed one barely leaves the yard, inside a sealed building it stays inside. Blades are almost silent. Ricochets and breaking glass make noise too — shoot a wall to pull a guard away. <b>V</b> = suppressor (real firearms only) · hold <b>Shift</b> = sneak (and hold fire until spotted).<br>
+          <b style="color:#ce93d8">👁 Line of sight</b> — what is behind walls and closed doors is greyed out; move to see. Roofs hide other buildings' interiors until you walk in. Each hero has a <b>unique sense</b>: Jedi feel presences, the Predator sees green particle ghosts, Marines hear the motion tracker, Moody & Samus see through walls up close, Neo reads the code, Harry follows the Marauder's Map, John Wick hears footsteps…<br>
+          <b style="color:#40c4ff">🗺 Map & markers</b> — minimap bottom-right (<b>[ ]</b> or the wheel to zoom). <b>M</b> opens the full map: click to drop a marker (6 colours × 8 symbols) with a note. Markers ride the minimap edge until you're close, then appear on it, then as a beacon on screen. From the main menu the map picks your <b>drop zone</b>.<br>
+          <b style="color:#ffab40">🚗 Drive</b> — walk up to a parked car (landspeeder, wagon, Anglia…) and press <b>F</b>. Supply caches hide inside buildings.
+        </div>
+      </div>
+
+      <div class="hud-guide-box">
         <div class="guide-title">NEW IN v13 · THREAT SENSE, THE LIGHT SIDE, YODA & CREATOR v2</div>
         <div class="card-desc" style="line-height:1.45">
           <b style="color:#4fc3f7">📡 Threat Sense meter</b> — under the XP bar: <b>0-100%</b> until the next <b>rival</b> or the <b>Sector Titan</b> (whichever comes first). At 100% it's here. It's dressed for your hero: Jedi feel a <i>Disturbance in the Force</i>, Sith feel <i>the Dark Side stir</i>, marines get a beeping <i>Motion Tracker</i>, Geralt's <i>medallion hums</i>, Harry's <i>scar burns</i>, bounty hunters feel the <i>heat</i>… The further you roam from the map centre, the faster it fills (×1.0 in the Outpost → ×2.1 at the Abyssal Core). At 90%+ an arrow on the screen edge shows where it will come from.<br>
@@ -439,29 +453,38 @@
 </div>
 
 <!-- ORDERED MODULAR SCRIPT LOADING (?v= busts stale GitHub Pages caches after an upload; bump it on every release) -->
-<script src="js/chaos.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
-<script src="js/data-factions.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
-<script src="js/data-heroes.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
-<script src="js/data-relics.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
-<script src="js/state.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
-<script src="js/world.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
-<script src="js/combat.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
-<script src="js/sim.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
-<script src="js/render.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
-<script src="js/fx.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/fx.js', true)"></script>
-<script src="js/rewind.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/rewind.js', true)"></script>
-<script src="js/arsenal.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/arsenal.js', true)"></script>
-<script src="js/squad.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/squad.js', true)"></script>
-<script src="js/glory.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/glory.js', true)"></script>
-<script src="js/showdown.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/showdown.js', true)"></script>
-<script src="js/sense.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/sense.js', true)"></script>
-<script src="js/force.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/force.js', true)"></script>
-<script src="js/biomes.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/biomes.js', true)"></script>
-<script src="js/campaign.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/campaign.js', true)"></script>
-<script src="js/proving.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/proving.js', true)"></script>
-<script src="js/saberforms.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/saberforms.js', true)"></script>
-<script src="js/creator.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/creator.js', true)"></script>
-<script src="js/ui.js?v=v13-2026-10-28" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
+<script src="js/chaos.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
+<script src="js/data-factions.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
+<script src="js/data-heroes.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
+<script src="js/data-relics.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
+<script src="js/state.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
+<script src="js/world.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
+<script src="js/combat.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
+<script src="js/sim.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
+<script src="js/render.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
+<script src="js/fx.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/fx.js', true)"></script>
+<script src="js/rewind.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/rewind.js', true)"></script>
+<script src="js/arsenal.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/arsenal.js', true)"></script>
+<script src="js/squad.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/squad.js', true)"></script>
+<script src="js/glory.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/glory.js', true)"></script>
+<script src="js/showdown.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/showdown.js', true)"></script>
+<script src="js/sense.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/sense.js', true)"></script>
+<script src="js/force.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/force.js', true)"></script>
+<script src="js/biomes.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/biomes.js', true)"></script>
+<script src="js/campaign.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/campaign.js', true)"></script>
+<script src="js/proving.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/proving.js', true)"></script>
+<script src="js/saberforms.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/saberforms.js', true)"></script>
+<script src="js/creator.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/creator.js', true)"></script>
+<script src="js/citygen.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/citygen.js', true)"></script>
+<script src="js/cityworld.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/cityworld.js', true)"></script>
+<script src="js/citythemes.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/citythemes.js', true)"></script>
+<script src="js/cityrender.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/cityrender.js', true)"></script>
+<script src="js/stealth.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/stealth.js', true)"></script>
+<script src="js/enemylook.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/enemylook.js', true)"></script>
+<script src="js/cityplay.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/cityplay.js', true)"></script>
+<script src="js/vision.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/vision.js', true)"></script>
+<script src="js/minimap.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/minimap.js', true)"></script>
+<script src="js/ui.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
 </body>
 </html>
 <!-- EOF:index.html -->

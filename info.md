@@ -1,10 +1,10 @@
 # FILE: info.md
 # PART: 1 of 14
-# DETAIL: Master design document, updated for v13 (2026-10-28). Covers what the game is now, everything built so far (v8.x → v13), how much of the Version 9.0 plan is done, and the roadmap for future iterations, including realism and cool-factor ideas. The architecture and execution diagrams are in flowchart.md.
+# DETAIL: Master design document, updated for v14 (2026-10-31). Covers what the game is now, everything built so far (v8.x → v14), how much of the Version 9.0 plan is done, and the roadmap for future iterations, including realism and cool-factor ideas. The architecture and execution diagrams are in flowchart.md.
 
 ---
 
-## 1. What the game is (current state, v13)
+## 1. What the game is (current state, v14)
 
 **OMNI-SHIFT: NEXUS SURVIVORS** is a touch-first multiverse survival roguelike built on HTML5 Canvas. It runs in mobile WebViews and desktop browsers and is played live on GitHub Pages.
 
@@ -13,7 +13,7 @@
   - Every high-frequency entity lives in pre-allocated Structure-of-Arrays typed-array pools: enemies, projectiles, orbs, particles, blood drips, severed limbs, corpses, bisected halves, squad and minion allies, Force-persuaded allies and rewind keyframes.
   - The sim runs at 60 FPS with sub-steps.
   - The HUD updates in place, so taps never drop.
-- **Modular code:** 23 files.
+- **Modular code:** 32 files.
   - **Core:** index.html, css/style.css.
   - **Data:** `chaos.js`, `data-factions.js`, `data-heroes.js`, `data-relics.js`.
   - **Engine:** `state.js`, `world.js`, `combat.js`, `sim.js`, `render.js`.
@@ -21,6 +21,7 @@
   - **v11 module:** `saberforms.js`.
   - **v12 modules:** `showdown.js`, `creator.js` (rewritten as Creator v2 in v13).
   - **v13 modules:** `sense.js` (Threat Sense), `force.js` (Force Persuasion + Yoda's powers).
+  - **v14 modules (Nexus City):** `citygen.js` (world generator), `cityworld.js` (chunks, collision, doors, sight), `citythemes.js` (14 universe looks), `cityrender.js` (baked city painter, roofs, fog), `stealth.js` (hearing, AI, director), `enemylook.js` (48 enemy rosters), `cityplay.js` (engine integration, cars), `vision.js` (per-hero senses), `minimap.js` (minimap, map, markers).
   - **UI:** `ui.js`.
   - Feature modules plug in through the `V10` hook lists:
     - `onRunStart` / `onRunReset`
@@ -31,6 +32,7 @@
 ### Content
 - **81 heroes:** 80 canon heroes (#00–#79) in 11 universe genres, plus **your own hero (#80)** — any kind of character since v13.
 - **The 11 genres:** Star-Sector, Chevron-Gate, Verse-Rim, Spice-Dune, Star-Citadel, Xeno-Hive, Grim-Imperium, Cyber-Noir, Anomaly-Lab, Eldritch-Ash and Arcane-Sanctum.
+- **World:** since v14 every deploy drops you into **Nexus City**, a generated 64 × 64 km region (55 cities & towns, interstates, thousands of enterable single-storey buildings), dressed for your hero's universe. The classic arena is one toggle away (main menu → WORLD, or `?world=classic`).
 - **Sectors:** 50 procedural sectors, plus the **Galactic Expedition** branching campaign map.
 - **Meta progression:**
   - Dark Matter shop with a 100 % respec.
@@ -39,7 +41,7 @@
   - The custom hero is free.
 
 ### Core loop
-Pick a hero → deploy into a sector → auto-fighting weapons, Forms and spells shred hordes. Then:
+Pick a hero → drop into Nexus City (or the classic arena) → sneak, scout and fight: weapons fire automatically at hostiles in sight, Forms and spells shred whoever comes. Gunfire draws everyone who hears it. Then:
 - Pick up XP orbs.
 - Level up and choose 1 of 3 cards (weapons, signature gear, passives, visors, vacuum).
 - Watch the **Threat Sense** meter: it fills toward the next rival or the **Sector Titan** (about 2:00 near the centre — sooner the further you roam).
@@ -238,6 +240,42 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 - **Lv.7 WILL OF THE FORCE** (his ultimate, automatic, ~45 s, needs 8+ enemies on screen): he **puts his lightsaber away and raises his hand**; the screen slows, and a wave of the Force rolls across the entire screen. **Every enemy it touches levitates.** The badly hurt (< 30 % HP) are **obliterated**; **everyone else turns to the light and fights for Yoda for 25 s**. Rivals and Titans resist (stunned). Anything that spawns afterwards is still hostile. A banner counts how many turned.
 - **Tutaminis:** his barrier now says "TUTAMINIS!" (no more "Protego Totalum"), is 25 % bigger (45 % at Lv.7) and lasts 40 % longer (70 % at Lv.7).
 
+### 2.10 Nexus City — the world (new in v14)
+- **Scale:** 64 × 64 km at 32 px per metre, generated from a seed in ~25 ms (`meta.citySeed`, default 1979 — everyone shares the same region, so markers stay valid; the drop-zone map can roll a NEW REGION).
+- **Macro map (1 km cells):** 1 capital ("Nexus City"), 6 more cities, 22 towns, 26 villages; land use Downtown / Urban / Suburbs / Rural / Farmland / Industrial / Woods / Lakes; 3–4 interstates each way (I-65, I-70…).
+- **Streets:** a ranked lattice (1 km / 500 m / 250 m / 125 m) with jitter; widths, sidewalks, curbs, lane markings and crosswalks follow rank and district; street names (Meridian Ave, 66th St, County Rd 300 E).
+- **Blocks & lots:** suburbs of ranch houses with driveways, garages, fences, pools and sheds; strip malls, gas stations (pumps, canopy, price sign), diners, banks, motels, apartments, downtown shop rows, warehouses with docks, farms with barns and silos; civic centres with **city hall**, police, fire station, school (sports field), clinic, library, church (graveyard).
+- **Interiors:** 20 templates, every building enterable: rooms by purpose (living, kitchens, bedrooms, baths, offices, classrooms, cells, armory, vault, council chamber, nave…), doors (swing / slide, open for anyone), windows (break, then climbable), ~75 furniture types placed so walkways and archways stay clear (validated: <2 % unreachable floor on average, every building has an exterior door).
+- **Runtime (`cityworld.js`):** 64 m chunks of 0.5 m tiles with flags (MOVE / SIGHT / SHOT / WINDOW / DOOR / INDOOR / LOW / WATER) and material kinds; circle collision with sliding, DDA ray casts, recursive shadow-cast line of sight, door simulation, window breaking. The drop zone maps to local (256, 256) so every v13 system keeps working.
+- **Rendering (`cityrender.js`):** 512 px tiles baked nearest-first within a 6 ms budget (LRU), procedural texture patterns per universe; live layer for doors, decals (bullet holes, scorch, glass, blood), supply caches; roofs (gable / hip / flat / dome / false front, chimneys, AC units, solar, windtraps, obelisks, spires, landing pads, neon trims) that fade out for the building you're in; signage with themed names; scattered litter everywhere.
+- **Universe dressing (`citythemes.js`):** 14 looks — Modern Earth, Neon Megacity, Outer Rim, Core-World ecumenopolis, Federation colony, Frontier colony base, Firefly rim world, Old West, Arrakeen, Goa'uld world, Imperial hive, Wasteland, Medieval kingdom, Wizarding village. Floors, walls, roofs, furniture style, cars (sedans, spinners, landspeeders, hovercars, APCs, mules, wagons, ornithopters, death gliders, Rhinos, rusted wrecks, carts, the flying Anglia), trees (palms, cacti, vaporators, holo-trees…), lamps, signs ("TIBANNA FUEL", "PROMETHIUM DEPOT", "FLOO POWDER CO."), city names (Mos Espa, Hogsmeade, Night City…), weather and litter.
+
+### 2.11 Stealth, hearing & the director (new in v14)
+- **Sound model:** `L = L0 − 20·log10(d) − 0.012·d − walls`. Every wall, door, window, fence on the straight path costs its transmission loss (wood 24, brick 32, masonry 35, metal 30, interior 20, closed door 15/24, window 20, broken 0); buildings the sound only passes over cost 10 dB (+3 each more). Thresholds: notice 50, investigate 66, urgent 88, combat 115 (< 25 m).
+- **Profiles:** each hero's weapon has a level and class (firearm 160–176, blaster 140, staff weapons 136, energy 88–150, magic ~104, blades 72). **V** fits a suppressor (118 dB) on real firearms only (revolvers, bolters, shotguns, the Deffgun… can't). Footsteps 58–66, sneaking 36, engines 92, glass 105, ricochets 100, explosions ~160–178.
+- **Reactions:** listeners investigate the (error-blurred) source, the next shot re-targets them, very loud close shots put them straight into combat; distant enemies beyond the simulated radius answer loud shots as responders. Ricochets and breaking glass make noise at the impact point (distraction).
+- **AI states:** idle (guard posts, rooms) · patrol (street patrols, routes) · investigate · search · alert (chase, shoot with LOS, call contacts) · return. View cones (wider when searching), suspicion that builds with distance, light, movement and muzzle flash; A* on a walkability snapshot, door opening, unsticking.
+- **Director:** spawns the generator's room / guard / patrol records within ~130 m (never in plain view), despawns far idle enemies, remembers kills; hunter squads sweep toward you periodically (faster in dangerous districts).
+- **Weapons-free rule:** guns fire automatically only at hostiles in sight and range; **Shift** = sneak (55 % speed, hold fire until spotted). Blades on unaware foes are silent takedowns.
+
+### 2.12 Line of sight & per-hero vision (new in v14)
+- A shadow-cast vision sphere (≈ 26 m, per hero): everything behind walls / closed doors is desaturated and darkened (adaptive: a cheaper grey wash on GPU-less devices); roofs hide other buildings' interiors.
+- 16 sense kinds across the 80 heroes, most without wall vision: Force aura (no droids), Predator particle ghosts, thermal, IR target boxes, motion tracker (movement only, with ping), scan pulses, close-range X-ray, the Matrix code, Marauder's Map footprints, prescient flashes, witcher scent trails, telepathy, hive links, rage haze, keen-hearing ripples, long scopes, and plain human eyes. Senses never allow shooting through walls.
+
+### 2.13 Enemy rosters (new in v14 — city and arena)
+- 48 rosters × 4 archetypes (grunt · fast · critter · heavy), chosen by hero: Stormtroopers / Scout & Death Troopers / probe droids hunt the Rebels; Serpent & Horus Jaffa, Replicators and Kull hunt SG-1; the Bratva (tracksuit gunmen, Tarasov enforcers, attack dogs, High Table heavies) hunt John Wick; the Covenant hunt the Chief; Death Eaters hunt Harry…
+- Detailed renderer: walk cycles, outfit details and per-person variations, ~70 headgear types, weapons that track the aim (sabers swing), plus droids, beasts, bugs, drones, Daleks and Xenomorphs. Ranged / kinetic flags drive AI and ricochets.
+
+### 2.14 Map, minimap & markers (new in v14)
+- Minimap (bottom-right, 5 zoom levels) in the universe's map style (paper road map, holo-map, parchment); shows visible / sensed enemies.
+- **M** opens the full map: pan / zoom to the whole region, street names, interstate shields, city names, cursor read-out. Click to drop a marker (6 colours × 8 symbols) with a note; markers & notes persist per region.
+- Markers ride the minimap edge while far, sit on the minimap when in range, and become a coloured beacon (plus edge arrow) on the main screen within ~160 m. From the main menu the map picks the drop zone.
+
+### 2.15 Vehicles, caches & districts (new in v14)
+- **F** next to a parked car drives it (themed vehicle, ~4× speed, too wide for doorways, rams enemies, loud engine); it stays parked where you leave it.
+- Supply caches inside buildings heal and give XP. City kills are worth 30 % more XP.
+- Threat Sense and the HUD follow the district (Suburbs ×1.15 … Downtown ×1.85); arena biome hazards are off in the city.
+
 ---
 
 ## 3. Version history
@@ -250,7 +288,8 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 | **v9.01 → v10** (`bac8b41`) | v9.01 items a–h: close-range blade immunity fixed, missile fire/smoke trails, Mandalorian IB-94 + Whistling Birds, temporal ladder + rewind, seed-locked corpse faces, relic objects, music button / perf HUD layout. Roadmap A–E: Proving Ground, squad wheel, adaptive biomes, glory kills, Galactic Expedition. Polish: game-feel layer. |
 | **v11** (`6095850`) | Lightsaber Form Engine (no more spinning; canon Forms; film progression per hero). 17 new royalty-free tracks → 20-track soundtrack with credits. |
 | **v12** (`1bfed0e` … `9ccf8e0`) | Custom Hero Creator #80 (single / staff / dual sabers, hilt selector, 10 colours, Form paths, species). Rival Showdown. Always-on EXECUTE with rank targeting and chains. Film hilts for canon saber heroes. Darksaber. Proving Ground 14 actions. |
-| **v13** (this update) | **Threat Sense** meter (per-hero style, distance-scaled rival / Titan clocks, edge arrow). **Force Persuasion** (light-side Force users turn enemies into allies). **Yoda:** Force Lift & Hurl, Ataru bounding, **Will of the Force**, Tutaminis. **Hero Creator v2:** any character — 26 weapons, twins with own cylinders / targets, 2 skills, gear, mobility, armor, headgear, **jetpack flight**, 8 presets, v12 migration. |
+| **v13** (`65c212e`) | **Threat Sense** meter (per-hero style, distance-scaled rival / Titan clocks, edge arrow). **Force Persuasion** (light-side Force users turn enemies into allies). **Yoda:** Force Lift & Hurl, Ataru bounding, **Will of the Force**, Tutaminis. **Hero Creator v2:** any character — 26 weapons, twins with own cylinders / targets, 2 skills, gear, mobility, armor, headgear, **jetpack flight**, 8 presets, v12 migration. |
+| **v14** (this update) | **Nexus City:** generated 64 × 64 km region with 55 settlements, interstates and thousands of enterable single-storey buildings with full interiors; 14 universe looks; line-of-sight fog and roofs; **stealth AI** with realistic hearing (walls, doors, suppressors, ricochets, glass), director, street patrols and hunters; **48 detailed enemy rosters** (city and arena); **per-hero vision** (16 senses); minimap, full map, markers & notes, drop zone; drivable cars; supply caches; district threat; 18-test suite. |
 
 ---
 
@@ -266,7 +305,7 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 | Interactive post-run **Memory Purge screen** (`#scrPurge`) | ⏳ not built (the purge itself works; the animated screen does not exist) |
 | Roster overhaul: Die Hard (McClane, Gruber), Hitman, Léon, Heat crew, SWAT BearCat, Special Forces transport, Abrams tank + co-gunner, Waters' SEAL team, Sam Fisher / Shinobi shadow-meld, Avengers, Thanos, TimeShift | ⏳ not built (Dune and Warhammer genres are still in place) |
 | Predator **spine-rip finisher** | ✅ v10 (glory kill) |
-| Predator **active cloak** (enemies lose you, "?") | ⏳ not built |
+| Predator **active cloak** (enemies lose you, "?") | 🟡 v14: enemies really lose you (stealth AI, "?" / "!"), Predator bio-mask vision and a harder-to-spot shimmer; a dedicated cloak button is still open |
 | "Get 'Em Space!" Rival crowd deference + show of force | ✅ v12 Rival Showdown |
 | DPS telemetry badges on level-up cards + Tactical DPS & Arsenal matrix | ⏳ not built |
 | Active-only weapon levelling | ✅ bug-fix pass |
@@ -278,20 +317,14 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 
 ## 5. Future iterations (roadmap)
 
-### 5.1 Next up (v14 candidates)
-1. **Dark-side mirror of Persuasion — "Fear":** Sith heroes make nearby enemies kneel or flee in terror for a few seconds (kneeling ones can be executed for a heal). Automatic, like Persuasion.
-2. **Ally orders without extra buttons:** allies follow the squad wheel's existing orders (Hold / Focus / Advance / Regroup), and a Yoda ally army gets a short "For the Republic!" charge when the Titan arrives.
-3. **Saber-vs-saber Showdowns.**
-   - When the rival is a lightsaber hero, the duel uses the Form Engine on both sides: blade locks (bind → push-off), clashes, parry-riposte, Force-push breaks.
-   - A "duel camera" that frames both fighters.
-4. **Creator, part 3:** several save slots (#80–#82), gun finish / grip / muzzle-flash colour, wand wood & core, cyborg implants, house crest, cape physics; share a build as a short code.
-5. **Threat Sense extras:** the meter also warns of elite squads (shield walls) and hazards; a Force user can "meditate" (stand still for 2 s) to read the exact arrival time.
-6. **Form-specific Force powers**, all automatic, no extra buttons: Soresu *Circle of Shelter* bubble, Niman Force-push wave, Juyo / Vaapad rage burst at low HP, Makashi disarm.
-7. **The rest of the v9.0 roster:** Die Hard, Hitman, Léon, Heat crew, SWAT / Spec-Ops vehicles with AI co-gunners, Waters' SEAL team, Sam Fisher / Ninja stealth, Avengers, Thanos (Infinity Gauntlet), TimeShift.
-8. **Predator active cloak**, plus a stealth meter for ninja / Sam Fisher heroes.
-9. **DPS telemetry:** Δ-DPS badges on level-up cards and a Tactical DPS & Arsenal matrix in the pause menu.
-10. **Post-run Memory Purge & Diagnostics screen** (`#scrPurge`) and an in-game **credits screen** for the music.
-11. **Proving Ground batch mode:** run all 81 heroes (and the 8 creator presets) back to back.
+### 5.1 Next up (v15 candidates)
+1. **Civilians & evacuation** (the city is evacuated "for now"): stragglers to escort, convoys, rescue objectives; enemies that take hostages.
+2. **Day / night & lighting:** street lamps, flashlights, lit windows; night vision for the heroes who have it; stealth bonus in the dark.
+3. **Smarter squads:** enemies that use cover, flank around buildings, breach doors, throw grenades through windows, radio for backup (reinforcement trucks on the roads).
+4. **Destructible city:** doors that can be kicked / blown, walls that crumble to rockets, cars that explode.
+5. **Traffic & mounts:** AI vehicles on the interstates, horses / speeder bikes, fast travel between towns you've discovered.
+6. **Missions on the map:** caches marked by intel, bounties, a Titan lair downtown, capture the city hall.
+7. **The v13 list still stands:** dark-side "Fear", ally orders, saber-vs-saber showdowns, Creator part 3, Form-specific Force powers, the rest of the v9.0 roster, DPS telemetry, Memory Purge screen, Proving Ground batch mode.
 
 ### 5.2 Showdown, EXECUTE and ally follow-ups (after playtesting)
 - Rival intro variations: the rival Force-chokes or shoots the challenger from range; a bounty hunter tosses a thermal detonator into the crowd; two challengers at higher difficulties.
@@ -344,6 +377,7 @@ The goal is to make the player *feel like the character* while the game stays a 
 ---
 
 ## 6. Technical notes for future work
+- **v14 city frame:** world px = local px + (CITY.orx, CITY.ory); the drop zone is local (256, 256). Tiles are 16 px (0.5 m), chunks 128 tiles (64 m), render tiles 512 px, macro cells 1 km. Engine hooks patched in `cityplay.js`: `getChunk` / `getNearbyObstacles` (empty in the city), `isPointBlockedByObstacle` (city collision), `isEnemyOnScreen` (adds line of sight), `allocEnemySlot` (walkable spawn + AI reset), `fxOnPlayerShot` (noise), `findInteractTarget` / `triggerWorldInteract` (cars), `threatMult` / `getDistBiome` (districts). `sim.js` asks `stealthEnemyStep` to move city enemies, `cityProjWall` for walls, `cityHoldFire` before firing. `?world=classic|city` overrides the menu toggle (old test suites run with `?world=classic`).
 - **Hero data:**
   - `CHAR_RAW[cid] = [id, genre, price DM, name, Lv.1 weapon, Lv.10 supercharge, style, passive, passive text]`.
   - Per-hero tables are indexed by `cid`: `HERO_SIG_GEAR`, `UTILS_56`, `Q_56`, `HERO_STANCE_TABLE`, `SABER_PATHS`, `WPN_SVG_56`, `CANON_56`.
