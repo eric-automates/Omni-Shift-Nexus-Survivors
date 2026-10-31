@@ -569,7 +569,7 @@ V10.onRunStart.push(function biomeRunStart(p) {
   biomeState.th = BIOME_THEMES[biomeState.key];
   biomeState.vigKey = ""; biomeState.hazLabelT = 0; biomeState.shockT = 0;
   biomeWeatherReset();
-  if (typeof fxBanner === "function" && !p.noSpawns) setTimeout(() => { if (player === p) fxBanner(biomeState.th.name.toUpperCase(), "Hazard: " + biomeState.th.hazard.name, biomeState.th.accent, 2.6); }, 400);
+  if (typeof fxBanner === "function" && !p.noSpawns && !(typeof CITY !== "undefined" && CITY.on)) setTimeout(() => { if (player === p) fxBanner(biomeState.th.name.toUpperCase(), "Hazard: " + biomeState.th.hazard.name, biomeState.th.accent, 2.6); }, 400);
 });
 V10.onStep.push(biomeStep);
 V10.onRenderScreen.unshift(biomeRenderScreen);   // weather & grade go UNDER the other overlays

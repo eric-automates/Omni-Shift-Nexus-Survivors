@@ -850,6 +850,10 @@ function renderBiomeAndWorld() {
   const left = player.x - viewW * 0.5;
   const top = player.y - viewH * 0.5;
 
+  // v14 Nexus City (js/cityrender.js) paints the generated city instead of the arena ground & rocks
+  const cityOn = typeof CITY !== "undefined" && CITY.on;
+  if (cityOn) cityRenderGround(left, top, viewW, viewH);
+  if (!cityOn) {
   // v10 adaptive biomes (js/biomes.js) paint the ground, decals and hazards for the hero's universe.
   const themed = (typeof biomeRenderGround === "function") && biomeRenderGround(left, top, viewW, viewH, bRing);
   if (!themed) {
@@ -935,6 +939,7 @@ function renderBiomeAndWorld() {
       }
     }
   }
+  }   // v14: end of the arena-only ground
 
   if (typeof movedBarricades !== "undefined") {
     for (let i = 0; i < movedBarricades.length; i++) {
@@ -1302,6 +1307,9 @@ function renderScene() {
       const rFac = FACTIONS[CHAR_RAW[eRivalCid[i]][1]] || player.fac;
       const faceOv = sdOn ? showdownFaceAng(i) : null;     // v12: the rival turns to its challenger during its entrance
       drawHeroSprite(ex, ey, rFac, eRivalCid[i], runTime * 4, faceOv !== null ? faceOv : Math.atan2(player.y - ey, player.x - ex), 0, ctx, -1);
+    } else if (!ally && !spect && typeof drawEnemyDetailed === "function" && (visorMode !== 3 || (ctx.fillStyle = "rgba(255, 110, 40, 0.22)", ctx.beginPath(), ctx.arc(ex, ey, baseR + 5, 0, Math.PI * 2), ctx.fill(), true)) && drawEnemyDetailed(i, ex, ey, baseR, ally, isKneeling, isLevitating, spect)) {
+      // v14: detailed per-hero roster enemies (js/enemylook.js); tracker visors keep a heat halo
+      if (eGrapple[i] > 0) { ctx.strokeStyle = "#00e5ff"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(ex, ey); ctx.stroke(); }
     } else {
       if (visorMode === 3) {
         ctx.fillStyle = "rgba(48, 79, 254, 0.45)";
@@ -1373,7 +1381,7 @@ function renderScene() {
   if (visorMode > 0 && bestTarget >= 0) {
     const bx = eX[bestTarget], by = eY[bestTarget];
     const bType = eType[bestTarget];
-    const tName = bType === 99 ? "APEX TITAN BOSS" : (bType === 98 ? "RIVAL BOUNTY HUNTER" : (ENEMY_NAMES[bType % 4] || "HOSTILE"));
+    const tName = bType === 99 ? "APEX TITAN BOSS" : (bType === 98 ? "RIVAL BOUNTY HUNTER" : (typeof enemyDisplayName === "function" ? enemyDisplayName(bestTarget) : (ENEMY_NAMES[bType % 4] || "HOSTILE")));
     const headPct = Math.max(1, Math.round((eHP[bestTarget] / Math.max(1, eMax[bestTarget])) * 100));
     const pulse = 20 + Math.sin(runTime * 8) * 3;
 

@@ -67,7 +67,12 @@ function checkLoadedScripts() {
     ["arsenal.js", typeof castWhistlingBirds === "function"], ["squad.js", typeof squadMinionsSim === "function"],
     ["glory.js", typeof gloryExecute === "function"], ["showdown.js", typeof showdownBegin === "function"], ["biomes.js", typeof biomeRenderGround === "function"],
     ["campaign.js", typeof renderCampaign === "function"], ["proving.js", typeof startProvingGround === "function"],
-    ["saberforms.js", typeof saberEngineStep === "function"], ["creator.js", typeof openCreator === "function"]
+    ["saberforms.js", typeof saberEngineStep === "function"], ["creator.js", typeof openCreator === "function"],
+    ["citygen.js", typeof cityGenInit === "function"], ["cityworld.js", typeof cityCircleBlocked === "function"],
+    ["citythemes.js", typeof cityApplyTheme === "function"], ["cityrender.js", typeof cityRenderGround === "function"],
+    ["stealth.js", typeof stealthEnemyStep === "function"], ["enemylook.js", typeof drawEnemyDetailed === "function"],
+    ["cityplay.js", typeof cityRunStart === "function"], ["vision.js", typeof visionRenderWorld === "function"],
+    ["minimap.js", typeof mapOpen === "function"]
   ];
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
   if (failed.length > 0) {
@@ -565,7 +570,7 @@ function updateHUD() {
     document.getElementById("hpTxt").textContent = `${Math.ceil(player.hp)}/${Math.ceil(player.maxHp)}${player.inVehicle ? " [VEH]" : ""}`;
     document.getElementById("xpBar").style.width = Math.min(100, (player.xp / player.nextXp) * 100) + "%";
     const bRing = getDistBiome(player.x, player.y);
-    document.getElementById("hudStage").textContent = `${player.fac.worlds[player.stg.tier]}-${player.stg.id} • W${waveNum} • ${bRing.name.split(" ")[0]}`;
+    document.getElementById("hudStage").textContent = `${(typeof CITY !== "undefined" && CITY.on && typeof cityShortName === "function") ? cityShortName() : player.fac.worlds[player.stg.tier] + "-" + player.stg.id} • W${waveNum} • ${bRing.name.split(" ")[0]}`;
     document.getElementById("hudDM").textContent = `DM: ${availDM()}`;
     updateTimeLabel();   // v9.01 step ladder label (shows REWIND / BUFFER START states)
 
@@ -1126,7 +1131,7 @@ function loop(ts) {
   if (typeof flashAlpha !== "undefined" && flashAlpha > 0) flashAlpha = Math.max(0, flashAlpha - rawDt * 2.5);
   try {
     if (typeof updateSim === "function") updateSim(rawDt);
-    if (typeof renderScene === "function") renderScene();
+    if (typeof renderScene === "function" && !(typeof MAPV !== "undefined" && MAPV.open)) renderScene();   // v14: the city map covers the screen
   } catch (err) {
     try { ctx.restore(); } catch (e) {}
     if (window.trackProgress) window.trackProgress("LOOP ERR: " + err.message, true);

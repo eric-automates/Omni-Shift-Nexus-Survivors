@@ -189,7 +189,7 @@ const CUSTOM_SETUPS = {
   staff:  { name: "Saberstaff", desc: "Double-bladed staff, cuts front & back" }
 };
 const CUSTOM_DEFAULT = {
-  v: 2, created: false, name: "Nexus Wanderer", align: "light", force: "strong", talent: "swift",
+  v: 2, created: false, name: "Nexus Wanderer", align: "light", force: "strong", talent: "swift", universe: "auto",
   weapons: [{ k: "saber", hilt: 0, col: 0 }, { k: "saber", hilt: 6, col: 2 }], path: "jarkai",
   skills: ["saberThrow", "forcePush"], gear: "forcePush", dash: "forceDash", armor: "robes",
   species: 0, body: 0, skin: 0, hair: 0, head: "none", robe: 0, legs: 0, cloak: 0
@@ -281,6 +281,7 @@ function customHeroSanitize(d) {
   if (!CUSTOM_FORCE[o.force]) o.force = "strong";
   if (!CUSTOM_TALENTS[o.talent]) o.talent = "swift";
   if (!CUSTOM_ARMOR[o.armor]) o.armor = "robes";
+  if (typeof CITY_UNIVERSES !== "undefined" ? !CITY_UNIVERSES[o.universe] : typeof o.universe !== "string") o.universe = "auto";   // v14 Nexus City universe
   o.species = crClampI(o.species, CUSTOM_SPECIES.length); o.body = crClampI(o.body, 2); o.skin = crClampI(o.skin, CUSTOM_SKINS.length);
   o.hair = crClampI(o.hair, CUSTOM_HAIR.length); o.robe = crClampI(o.robe, CUSTOM_ROBES.length);
   o.legs = crClampI(o.legs, CUSTOM_LEGS.length); o.cloak = crClampI(o.cloak, CUSTOM_CLOAKS.length);
@@ -919,6 +920,7 @@ function renderCreator() {
     <div class="cr-row"><div class="cr-lbl">ALLEGIANCE</div><div class="cr-chips">${chips("align", CUSTOM_ALIGN, d.align)}</div><small>${CUSTOM_ALIGN[d.align].desc}</small></div>
     <div class="cr-row"><div class="cr-lbl">THE FORCE</div><div class="cr-chips">${chips("force", CUSTOM_FORCE, d.force)}</div><small>${CUSTOM_FORCE[d.force].desc}</small></div>
     <div class="cr-row"><div class="cr-lbl">TALENT</div><div class="cr-chips">${chips("talent", CUSTOM_TALENTS, d.talent)}</div><small>${CUSTOM_TALENTS[d.talent].desc}</small></div>
+    ${typeof CITY_UNIVERSES !== "undefined" ? `<div class="cr-row"><div class="cr-lbl">UNIVERSE · NEXUS CITY</div><div class="cr-chips">${chips("universe", CITY_UNIVERSES, d.universe || "auto")}</div><small>${(CITY_UNIVERSES[d.universe] || CITY_UNIVERSES.auto).desc}</small></div>` : ""}
     <div class="cr-cap">LOADOUT ${cap}</div>
     ${wRows}
     <div class="cr-row"><div class="cr-chips">${d.weapons.length < 3 ? `<button class="btn gold cr-chip" id="crAdd">＋ ADD WEAPON (${d.weapons.length}/3)</button>` : ""}

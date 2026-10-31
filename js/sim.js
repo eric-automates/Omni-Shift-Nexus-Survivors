@@ -818,10 +818,11 @@ function stepSimulation(rawDt) {
   const legFactor = 0.35 + 0.65 * ((player.limbs[4] + player.limbs[5]) / 200);
   const legImbalance = (player.limbs[4] - player.limbs[5]) / 100;
   const vehBoost = (typeof player.vehBoostMul === "number") ? player.vehBoostMul : 1.0;
-  const vehMul = player.inVehicle === 1 ? (1.42 * vehBoost) : (player.inVehicle === 2 ? 0.88 : 1.0);
+  const vehMul = player.inVehicle === 1 ? (1.42 * vehBoost) : (player.inVehicle === 2 ? 0.88 : (player.inVehicle === 3 ? 4.0 : 1.0));   // v14: 3 = city car
   const rushSpdMul = (player.overclockTimer > 0 ? 2.0 : 1.0) * (player.sandTimer > 0 ? 1.8 : 1.0);
   const hazSlow = (player.hazSlowT > 0 && typeof biomeActive === "function") ? (1 - (biomeActive().hazard.slow || 0)) : 1.0;   // v10 biome hazards
-  const effSpd = (player.spd || 110) * legFactor * vehMul * rushSpdMul * (player.guardZone >= 0 ? 0.82 : 1.0) * hazSlow;
+  const sneakMul = (typeof CITY !== "undefined" && CITY.on && typeof ST !== "undefined" && ST.sneak) ? 0.55 : 1.0;   // v14: Shift = sneak
+  const effSpd = (player.spd || 110) * legFactor * vehMul * rushSpdMul * (player.guardZone >= 0 ? 0.82 : 1.0) * hazSlow * sneakMul;
 
   if (mag > 0.04) {
     const moveAng = Math.atan2(my, mx) + legImbalance * 0.28;
@@ -1041,6 +1042,8 @@ function stepSimulation(rawDt) {
     }
 
     if (player.swapPause > 0.05) continue;
+    // v14 Nexus City: guns only fire when a hostile is actually in sight (Shift = sneak & hold fire until spotted)
+    if (!isMeleeBlade && typeof CITY !== "undefined" && CITY.on && typeof cityHoldFire === "function" && cityHoldFire()) continue;
 
     if (w.id === 52) {
       // v13: every six-shooter has its OWN cylinder, so twin revolvers fire, run dry and reload independently
@@ -1084,7 +1087,9 @@ function stepSimulation(rawDt) {
   const sdOn = typeof showdownBusy === "function" && showdownBusy();   // v12 Rival Showdown in progress
   const spawnRateMul = (player.spawnMul || 1) * (sdOn ? 0.35 : 1);
   if (!player.noSpawns) {
-    if (activeEnemies < 5 && runTime < 2.5) {
+    if (typeof CITY !== "undefined" && CITY.on) {
+      // v14 Nexus City: js/stealth.js populates rooms, guard posts & patrols (and sends hunters) instead of ring swarms
+    } else if (activeEnemies < 5 && runTime < 2.5) {
       spawnEnemy(false, false);
     } else if (activeEnemies < Math.min(MAX_E - 12, targetPop * spawnRateMul) && Math.random() < (2.6 + waveNum * 0.38) * spawnRateMul * simDt) {
       spawnEnemy(false, false);
@@ -1161,6 +1166,11 @@ function stepSimulation(rawDt) {
     // v12 Rival Showdown (js/showdown.js): spectators hold the ring, the rival stalks / executes its challenger
     if (sdOn && showdownEnemyStep(i, simDt)) continue;
 
+    // v14 Nexus City: the stealth AI (js/stealth.js) walks the enemy through streets & doors.
+    // 1 = handled (idle / patrolling / investigating), 2 = moved while hunting you (contact checks below still apply)
+    let cityMoved = false;
+    if (typeof CITY !== "undefined" && CITY.on && typeof stealthEnemyStep === "function") { if (stealthEnemyStep(i, simDt) === 1) continue; cityMoved = true; }
+
     let goalX = player.x, goalY = player.y;
     const ldr = eFormLeader[i];
     if (eFormType[i] === 1 && ldr >= 0 && eAct[ldr]) {
@@ -1179,6 +1189,7 @@ function stepSimulation(rawDt) {
       if (allyTgt >= 0) { goalX = eX[allyTgt]; goalY = eY[allyTgt]; }
     }
 
+    if (!cityMoved) {
     const baseAng = Math.atan2(goalY - eY[i], goalX - eX[i]);
     const patAng = ChaosMath.movePattern(eMoveStyle[i], baseAng, runTime, eSeed[i]);
     const steered = ChaosMath.steerAround(eX[i], eY[i], eX[i] + Math.cos(patAng) * 60, eY[i] + Math.sin(patAng) * 60, nearObs, 0.95, eSeed[i]);
@@ -1197,9 +1208,10 @@ function stepSimulation(rawDt) {
 
     eVX[i] = Math.cos(useHeading) * spd; eVY[i] = Math.sin(useHeading) * spd;
     eX[i] += eVX[i] * simDt; eY[i] += eVY[i] * simDt;
+    }
 
     const distP = Math.hypot(player.x - eX[i], player.y - eY[i]);
-    if ((eType[i] === 3 || eType[i] >= 98) && distP < 275 && eArmsLost[i] < 2) {
+    if (!cityMoved && (eType[i] === 3 || eType[i] >= 98) && distP < 275 && eArmsLost[i] < 2) {
       eFireCD[i] -= simDt;
       if (eFireCD[i] <= 0) {
         eFireCD[i] = eType[i] >= 98 ? 1.15 : 2.35;
@@ -1311,6 +1323,8 @@ function stepSimulation(rawDt) {
       pX[i] += pVX[i] * simDt; pY[i] += pVY[i] * simDt;
       // emitted AFTER the move so the exhaust starts right at the nozzle (no gap behind the flame)
       if (pStyle[i] === 2 && !pEnemy[i]) emitRocketTrail(pX[i], pY[i], Math.atan2(pVY[i], pVX[i]), simDt, pSup[i] ? 1.25 : 1.0, pSup[i] > 0, Math.hypot(pVX[i], pVY[i]));
+      // v14 Nexus City: walls stop bullets (ricochets, glass, rockets detonate) - js/cityplay.js
+      if (typeof CITY !== "undefined" && CITY.on && cityProjWall(i, simDt)) continue;
     }
 
     if (pEnemy[i]) {
