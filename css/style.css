@@ -527,3 +527,47 @@ h2 {
   background: rgba(6,10,16,0.82); border: 1px solid rgba(128,222,234,0.5); border-radius: 12px; padding: 8px 14px; color: #e0f7fa;
   font: 600 13px 'Segoe UI', sans-serif; opacity: 0; transition: opacity 0.4s; box-shadow: 0 4px 18px rgba(0,0,0,0.5); }
 #cityTip b { color: #80deea; }
+
+/* v14.1 vehicle HUD: speed, fuel (themed), damage silhouette, seats */
+#vehHud { position: fixed; left: 10px; bottom: 64px; z-index: 46; display: none; gap: 8px; align-items: center; padding: 6px 10px 6px 6px; border-radius: 12px;
+  background: rgba(6,12,20,0.78); border: 1px solid rgba(128,222,234,0.45); box-shadow: 0 4px 18px rgba(0,0,0,0.45); color: #e0f7fa; font: 600 11px 'Segoe UI', sans-serif;
+  pointer-events: auto; cursor: pointer; user-select: none; min-width: 210px; transform-origin: left bottom; }
+#vehHud.warn { border-color: #ff5252; box-shadow: 0 0 14px rgba(255,82,82,0.45); }
+#vehHud canvas { width: 46px; height: 66px; flex-shrink: 0; }
+#vehHud .vh-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+#vehHud .vh-name { font: 800 10px monospace; letter-spacing: 0.08em; color: #80deea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#vehHud .vh-spd { display: flex; align-items: baseline; gap: 4px; }
+#vehHud .vh-spd b { font: 900 24px 'Segoe UI', sans-serif; color: #fff; line-height: 1; min-width: 38px; }
+#vehHud .vh-spd span { font: 700 10px monospace; color: #b0bec5; }
+#vehHud .vh-gear { font: 900 12px monospace; font-style: normal; color: #ffd166; margin-left: auto; border: 1px solid rgba(255,209,102,0.5); border-radius: 4px; padding: 0 5px; }
+#vehHud .vh-fuel { display: flex; align-items: center; gap: 5px; font: 800 9px monospace; letter-spacing: 0.05em; }
+#vehHud .vh-fl { color: #b2dfdb; white-space: nowrap; max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
+#vehHud .vh-bar { flex: 1; height: 6px; min-width: 50px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; }
+#vehHud .vh-bar i { display: block; height: 100%; width: 50%; background: #69f0ae; transition: width 0.3s, background 0.3s; }
+#vehHud .vh-fp { color: #fff; min-width: 28px; text-align: right; }
+#vehHud .vh-st { font: 700 9px monospace; color: #b0bec5; white-space: nowrap; }
+#vehHud .vh-nav { font: 800 9px monospace; color: #ffd166; white-space: nowrap; display: none; }
+
+/* v14.1 HUD layout options (priority order, Don't shrink, Hide, size, live preview) */
+#hudOpts { position: fixed; inset: 0; z-index: 1000001; display: none; align-items: center; justify-content: center; background: rgba(2,6,12,0.72); }
+#hudOpts .ho-panel { width: min(860px, 96vw); max-height: 94vh; overflow: auto; background: rgba(8,14,22,0.97); border: 1px solid #00e5ff88; border-radius: 12px; padding: 12px 14px; color: #e0f7fa; font: 600 12px 'Segoe UI', sans-serif; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+#hudOpts .ho-title { font-size: 16px; font-weight: 800; letter-spacing: 0.06em; color: #80deea; margin-bottom: 2px; }
+#hudOpts .ho-head em { font-style: normal; color: #ffd166; font-weight: 700; }
+#hudOpts .ho-head span { color: #b0bec5; font-weight: 500; }
+#hudOpts .ho-top { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0; }
+#hudOpts .ho-lbl { margin-left: 8px; color: #80deea; font: 800 10px monospace; letter-spacing: 0.08em; }
+#hudOpts .ho-body { display: flex; gap: 12px; flex-wrap: wrap; }
+#hudOpts .ho-list { flex: 1 1 420px; display: flex; flex-direction: column; gap: 3px; }
+#hudOpts .ho-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); }
+#hudOpts .ho-rank { width: 18px; text-align: center; font: 900 11px monospace; color: #ffd166; }
+#hudOpts .ho-mv { padding: 1px 7px; font-size: 10px; }
+#hudOpts .ho-mv[disabled] { opacity: 0.3; }
+#hudOpts .ho-name { flex: 1; min-width: 120px; }
+#hudOpts .ho-chk { display: flex; align-items: center; gap: 3px; font: 700 10px monospace; color: #b2dfdb; white-space: nowrap; cursor: pointer; }
+#hudOpts .ho-prev { flex: 0 1 300px; display: flex; flex-direction: column; gap: 6px; }
+#hudOpts .ho-prev canvas { width: 300px; max-width: 100%; height: auto; border-radius: 8px; background: #050a10; }
+#hudOpts .ho-note { font: 600 10.5px 'Segoe UI', sans-serif; color: #b0bec5; line-height: 1.35; }
+#hudOpts .ho-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
+#cityHud, #cityHud b, #cityHud span { white-space: nowrap; }
+#vehHud .vh-btns { display: flex; flex-direction: column; gap: 4px; margin-left: 2px; }
+#vehHud .vh-btns .btn { padding: 4px 7px; font-size: 12px; min-width: 34px; touch-action: none; }
