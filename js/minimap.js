@@ -118,14 +118,18 @@ function mapSave() { if (typeof saveMeta === "function") saveMeta(); }
 function mapPlayerM() { return cityWorldM(player.x, player.y); }
 
 /* --- minimap (screen space) ------------------------------------------------------------- */
-function miniRect() { const S = Math.round(Math.min(210, Math.max(132, Math.min(W, H) * 0.26))); return { S, x: W - S - 10, y: H - S - 30 }; }
+function miniRect() {
+  if (typeof HUDL !== "undefined" && HUDL.enabled && HUDL.mini) return HUDL.mini;   // v14.1: placed by the HUD layout manager
+  const S = Math.round(Math.min(210, Math.max(132, Math.min(W, H) * 0.26))); return { S, x: W - S - 10, y: H - S - 30 };
+}
 function miniLayout() {
-  const r = miniRect(), hud = document.getElementById("cityHud"), ctl = document.getElementById("mmCtl");
-  if (hud) hud.style.bottom = (30 + r.S + 30) + "px";
-  if (ctl) { ctl.style.bottom = (30 + r.S + 6) + "px"; ctl.style.right = "10px"; ctl.style.display = CITY.on && runActive ? "flex" : "none"; }
+  const r = miniRect(), hud = document.getElementById("cityHud"), ctl = document.getElementById("mmCtl"), managed = typeof HUDL !== "undefined" && HUDL.enabled;
+  if (hud && !managed) hud.style.bottom = (30 + r.S + 30) + "px";
+  if (ctl) { if (!managed) { ctl.style.bottom = (30 + r.S + 6) + "px"; ctl.style.right = "10px"; } ctl.style.display = CITY.on && runActive ? "flex" : "none"; }
 }
 function minimapRender(g) {
   if (!CITY.on || !player || !runActive || MAPV.open) return;
+  if (typeof HUDL !== "undefined" && HUDL.enabled && HUDL.miniHidden) return;
   const { S, x: x0, y: y0 } = miniRect(), mpp = MAPV.miniSizes[MAPV.mini], [pxm, pym] = mapPlayerM(), St = mapStyle();
   g.save();
   g.fillStyle = "rgba(4,8,14,0.55)"; crRR(g, x0 - 4, y0 - 4, S + 8, S + 8, 12); g.fill();
@@ -144,6 +148,7 @@ function minimapRender(g) {
     g.fillStyle = ally ? "#69f0ae" : (vis ? (typeof ST !== "undefined" && ST.state[j] === 4 ? "#ff1744" : "#ff8a65") : vp[1]);
     g.beginPath(); g.arc(sx, sy, eType[j] >= 3 ? 3.2 : 2.3, 0, 7); g.fill();
   }
+  if (typeof miniOverlay141 === "function") miniOverlay141(g, toS, x0, y0, S, mpp);   // v14.1: stations, convoy, doors, ladders
   g.restore();
   // markers: inside -> symbol, outside -> clamped to the edge with an arrow
   g.save();
@@ -156,8 +161,10 @@ function minimapRender(g) {
       g.save(); g.translate(sx, sy); g.rotate(a); g.fillStyle = col; g.beginPath(); g.moveTo(7, 0); g.lineTo(-3, -5); g.lineTo(-3, 5); g.closePath(); g.fill(); g.restore();
     } else mapDrawSymbol(g, sx, sy, m, 0.85);
   }
+  if (typeof miniEdge141 === "function") miniEdge141(g, toS, x0, y0, S);   // v14.1: nearest station when fuel is low
   // you
   const a = typeof player.aim === "number" ? player.aim : 0, cx = x0 + S / 2, cy = y0 + S / 2;
+  if (player.roof) { g.save(); g.font = "900 8px 'Segoe UI', sans-serif"; g.textAlign = "center"; g.fillStyle = "#ffd166"; g.strokeStyle = "rgba(0,0,0,0.8)"; g.lineWidth = 3; g.strokeText("ROOF", cx, cy + 16); g.fillText("ROOF", cx, cy + 16); g.restore(); }
   g.translate(cx, cy); g.rotate(a); g.fillStyle = "#ffffff"; g.strokeStyle = "#0d47a1"; g.lineWidth = 1.5;
   g.beginPath(); g.moveTo(7, 0); g.lineTo(-5, -4.5); g.lineTo(-2.5, 0); g.lineTo(-5, 4.5); g.closePath(); g.fill(); g.stroke();
   g.restore();
@@ -456,4 +463,42 @@ V10.onRenderWorld.push((g) => { if (CITY.on) mapBeaconsWorld(g); });
 V10.onRenderScreen.push((g) => { if (CITY.on) { minimapRender(g); mapBeaconsScreen(g); } miniLayout(); });
 V10.onRunStart.push(() => { MAPV.tiles.clear(); miniLayout(); });
 V10.onRunReset.push(() => { mapClose(); miniLayout(); });
+/* --- v14.1 minimap layers: gas stations (fuel low / driving), your convoy, your last car, doors & ladders up close --- */
+function miniOverlay141(g, toS, x0, y0, S, mpp) {
+  const near = (sx, sy) => sx > x0 - 6 && sx < x0 + S + 6 && sy > y0 - 6 && sy < y0 + S + 6;
+  // doors and roof access when zoomed in (≤ 2 m per pixel)
+  if (mpp <= 2 && typeof accNearBuildings === "function") {
+    const R = mpp * S * 0.6 * 32;
+    for (const b of accNearBuildings(Math.min(1400, R))) {
+      for (const e of accEntrances(b)) { const [sx, sy] = toS(e.x / 2 + (e.axis === "x" ? e.len / 4 : 0.25), e.y / 2 + (e.axis === "x" ? 0.25 : e.len / 4)); if (!near(sx, sy)) continue; g.fillStyle = e.kind === "door" ? "#ffe082" : "#b0bec5"; const L = Math.max(2.5, e.len * 0.5 / mpp); if (e.axis === "x") g.fillRect(sx - L / 2, sy - 1.2, L, 2.4); else g.fillRect(sx - 1.2, sy - L / 2, 2.4, L); }
+      if (mpp <= 1) for (const q of accLadders(b)) { const [sx, sy] = toS((q.bx + CITY.orx) / 32, (q.by + CITY.ory) / 32); if (!near(sx, sy)) continue; g.strokeStyle = "#ffd166"; g.lineWidth = 1; g.strokeRect(sx - 2, sy - 3, 4, 6); g.beginPath(); g.moveTo(sx - 2, sy); g.lineTo(sx + 2, sy); g.stroke(); }
+    }
+  }
+  if (typeof VEH === "undefined") return;
+  // gas stations: shown while you drive (all of them in range) or on foot when your last car runs low
+  const v = VEH.me, fv = v || VEH.lastMine, fuel = fv ? (fv.S.horse ? fv.stamina : fv.fuel) : 1;
+  if (fv && fuel < 0.5 && typeof VSTA !== "undefined") {   // only when it matters: below half a tank (brighter below 30 %)
+    for (const st of VSTA.list) { const [sx, sy] = toS(st.x / 2, st.y / 2); if (!near(sx, sy)) continue; g.globalAlpha = fuel < 0.3 ? 1 : 0.65; g.font = (fuel < 0.3 ? 11 : 9) + "px sans-serif"; g.textAlign = "center"; g.fillText("⛽", sx, sy + 4); g.globalAlpha = 1; }
+  }
+  // your convoy and your parked car
+  if (typeof CONVOY !== "undefined") for (const u of CONVOY.vehicles) {
+    const [sx, sy] = toS((u.x + CITY.orx) / 32, (u.y + CITY.ory) / 32); if (!near(sx, sy)) continue;
+    g.save(); g.translate(sx, sy); g.rotate(u.ang); g.fillStyle = "#4fc3f7"; g.beginPath(); g.moveTo(5, 0); g.lineTo(-4, -3.5); g.lineTo(-4, 3.5); g.closePath(); g.fill(); g.restore();
+    g.font = "800 7px 'Segoe UI', sans-serif"; g.textAlign = "center"; g.fillStyle = "#b3e5fc"; g.fillText("V" + (u.convoyN || ""), sx, sy - 6);
+  }
+  const lm = VEH.lastMine;
+  if (lm && !VEH.me && VEH.list.includes(lm) && !lm.burnt) { const [sx, sy] = toS((lm.x + CITY.orx) / 32, (lm.y + CITY.ory) / 32); if (near(sx, sy)) { g.fillStyle = "#80deea"; g.font = "10px sans-serif"; g.textAlign = "center"; g.fillText("🚗", sx, sy + 4); } }
+}
+function miniEdge141(g, toS, x0, y0, S) {
+  if (typeof VEH === "undefined" || typeof VSTA === "undefined") return;
+  const v = VEH.me || VEH.lastMine; if (!v || !VSTA.nearest) return;
+  const val = v.S.horse ? v.stamina : v.fuel; if (val > 0.3) return;
+  const st = VSTA.nearest; let [sx, sy] = toS(st.x / 2, st.y / 2);
+  if (sx > x0 + 8 && sx < x0 + S - 8 && sy > y0 + 8 && sy < y0 + S - 8) return;
+  const a = Math.atan2(sy - (y0 + S / 2), sx - (x0 + S / 2)), hw = S / 2 - 8, t = Math.min(hw / Math.abs(Math.cos(a) || 1e-6), hw / Math.abs(Math.sin(a) || 1e-6));
+  sx = x0 + S / 2 + Math.cos(a) * t; sy = y0 + S / 2 + Math.sin(a) * t;
+  const p = 0.6 + 0.4 * Math.sin((runTime || 0) * 5);
+  g.save(); g.globalAlpha = p; g.font = "12px sans-serif"; g.textAlign = "center"; g.fillText("⛽", sx - Math.cos(a) * 9, sy - Math.sin(a) * 9 + 4);
+  g.translate(sx, sy); g.rotate(a); g.fillStyle = "#ffd166"; g.beginPath(); g.moveTo(6, 0); g.lineTo(-3, -4.5); g.lineTo(-3, 4.5); g.closePath(); g.fill(); g.restore();
+}
 // EOF:js/minimap.js

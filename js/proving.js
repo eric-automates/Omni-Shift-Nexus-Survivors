@@ -150,10 +150,11 @@ const PROVING_TESTS = [
         if (eHP[D.tgt] < D.hp0 - 1 && squadState.focusIdx === D.tgt) { D.stage = 2; D.t2 = D.t; D.d0 = ms.reduce((a, m) => a + Math.hypot(mX[m] - player.x, mY[m] - player.y), 0) / ms.length; squadIssueOrder(0); }
         else if (D.t - D.t1 > 3.5) return "focus target not engaged";
       }
-      if (D.stage === 2 && D.t - D.t2 > 1.2) {
+      if (D.stage === 2 && D.t - D.t2 > 0.6) {   // v14.1: poll up to 2.5 s (one sample at 1.2 s was a coin flip while they finished the volley)
         const d1 = ms.reduce((a, m) => a + Math.hypot(mX[m] - player.x, mY[m] - player.y), 0) / ms.length;
         D.note = `regroup ${Math.round(D.d0)}→${Math.round(d1)}px`;
-        return d1 < D.d0 - 10 || d1 < 70 ? true : "squad did not regroup";
+        if (d1 < D.d0 - 10 || d1 < 70) return true;
+        if (D.t - D.t2 > 2.5) return "squad did not regroup";
       }
       return D.t > 8 ? "timeout" : null;
     },
@@ -237,8 +238,9 @@ const PROVING_TESTS = [
     tick(D) {
       if (D.stage === 0 && D.t > 1.6) { D.tKill = runTime; killEnemy(D.d, false); D.stage = 1; D.t1 = D.t; }
       if (D.stage === 1 && D.t - D.t1 > 0.4) { setTimeScaleExact(-1.0); D.stage = 2; D.t2 = D.t; }
-      if (D.stage === 2 && D.t - D.t2 > 1.0) {
+      if (D.stage === 2 && D.t - D.t2 > 0.5) {   // v14.1: keep rewinding until the kill is undone (≤ 2.2 s) — a slow frame no longer fails it
         let back = -1; for (let i = 0; i < MAX_E; i++) if (eAct[i] && eUid[i] === D.uid) back = i;
+        if ((back < 0 || !(runTime < D.tKill)) && D.t - D.t2 < 2.2) return null;
         D.rt = runTime; setTimeScaleExact(1.0); D.stage = 3; D.t3 = D.t;
         if (back < 0) return "killed dummy did not come back";
         if (!eEcho[back]) return "resurrected dummy is not flagged as an echo";

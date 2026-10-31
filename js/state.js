@@ -20,7 +20,9 @@ let opts = {
   zoom: 1.0, dmgNums: true, flash: true, lowPart: false, hiCon: true,
   fps: true, vol: 0.45, amb: true, joySize: 44, ttDelay: 350, hudFlip: false,
   persistCount: 100, doubleTapDash: true, timeScale: 1.0,
-  shake: true, perfHud: true, weather: true   // v10 game-feel options
+  shake: true, perfHud: true, weather: true,   // v10 game-feel options
+  hud: { auto: true, scale: 1, order: [], keep: {}, hide: {} },   // v14.1 HUD layout manager (js/hudlayout.js)
+  vehSteer: "point", vehUnits: "mph"                              // v14.1 vehicles (js/vehicles.js)
 };
 
 // v9.01 Temporal Nexus step ladder (HUD "-" / "1.0x" / "+" buttons and the Options menu share it).
@@ -224,8 +226,9 @@ let player = null, joy = { act: false, id: -1, ox: 0, oy: 0, dx: 0, dy: 0 }, pin
 /* === 3. STRICT ON-SCREEN TARGET LOCK & CORPSE-CONSUMPTION HELPERS === */
 function isEnemyOnScreen(j) {
   if (!eAct[j] || !player) return false;
-  const screenW = (W / (opts.zoom || 1)) * 0.52, screenH = (H / (opts.zoom || 1)) * 0.52;
-  return Math.abs(eX[j] - player.x) <= screenW && Math.abs(eY[j] - player.y) <= screenH;
+  const vz = (typeof VEH !== "undefined" && VEH.camZoom) ? VEH.camZoom : 1, cx = player.x + (vz < 1 ? VEH.camFx || 0 : 0), cy = player.y + (vz < 1 ? VEH.camFy || 0 : 0);   // v14.1 driving camera
+  const screenW = (W / ((opts.zoom || 1) * vz)) * 0.52, screenH = (H / ((opts.zoom || 1) * vz)) * 0.52;
+  return Math.abs(eX[j] - cx) <= screenW && Math.abs(eY[j] - cy) <= screenH;
 }
 
 function countActiveCorpsesNear(x, y, maxDist = 280) {

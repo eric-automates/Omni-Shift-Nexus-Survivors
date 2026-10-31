@@ -824,7 +824,11 @@ function stepSimulation(rawDt) {
   const sneakMul = (typeof CITY !== "undefined" && CITY.on && typeof ST !== "undefined" && ST.sneak) ? 0.55 : 1.0;   // v14: Shift = sneak
   const effSpd = (player.spd || 110) * legFactor * vehMul * rushSpdMul * (player.guardZone >= 0 ? 0.82 : 1.0) * hazSlow * sneakMul;
 
-  if (mag > 0.04) {
+  // v14.1: in a Nexus City vehicle the stick drives a real rigid body (js/vehicles.js) instead of walking
+  const vehDrive = player.inVehicle === 3 && typeof vehDriveInput === "function" && vehDriveInput(simDt, mx, my, mag);
+  if (vehDrive) {
+    player.walk += 0;
+  } else if (mag > 0.04) {
     const moveAng = Math.atan2(my, mx) + legImbalance * 0.28;
     const vx = Math.cos(moveAng) * effSpd * Math.min(1, mag);
     const vy = Math.sin(moveAng) * effSpd * Math.min(1, mag);
@@ -836,6 +840,7 @@ function stepSimulation(rawDt) {
     const nx = player.x + vx * simDt, ny = player.y + vy * simDt;
     const ignoreLow = player.hover || (player.acrobatZ > 4) || player.inVehicle > 0 || [1, 16, 21, 25, 47, 54, 70, 73, 74, 79].includes(player.cid);
     if (player.flying) { player.x = nx; player.y = ny; }          // v13 creator jetpack: real flight over rocks, walls & water
+    else if (player.roof && typeof accRoofMove === "function") accRoofMove(nx, ny, simDt);   // v14.1: walking on a roof
     else {
       if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(nx, player.y, ignoreLow)) player.x = nx;
       if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(player.x, ny, ignoreLow)) player.y = ny;
@@ -1224,7 +1229,7 @@ function stepSimulation(rawDt) {
       if (Math.hypot(eX[allyTgt] - eX[i], eY[allyTgt] - eY[i]) < (eType[i] === 99 ? 30 : 19) && typeof allyTakeHit === "function") allyTakeHit(allyTgt, i, simDt);
       if (distP >= (eType[i] === 99 ? 26 : 16)) continue;   // busy brawling with the ally
     }
-    if (distP < (eType[i] === 99 ? 26 : 16)) {
+    if (distP < (eType[i] === 99 ? 26 : 16) && !(typeof CITY !== "undefined" && CITY.on && !!player.roof !== (typeof accEnemyOnRoof === "function" && accEnemyOnRoof(i)))) {   // v14.1: roof vs street
       player.combatAlertTimer = 2.0;
       if (player.cid === 30) {
         const acidDmg = 80 * simDt * 3.0;
@@ -1261,7 +1266,10 @@ function stepSimulation(rawDt) {
         const effArmor = (player.armor || 0) + (player.adaptTimer > 0 ? 5 : 0);
         const netDmg = Math.max(0.4, rawDmg * (100 / (100 + effArmor * 8)));
 
-        if (player.inVehicle > 0) {
+        if (player.inVehicle === 3 && typeof vehDamage === "function" && VEH.me) {
+          // v14.1: city vehicles take hits on the body where they land (js/vehicles.js)
+          const [lx, ly] = vehToLocal(VEH.me, eX[i], eY[i]); vehDamage(VEH.me, lx, ly, netDmg * 3, "melee", 0, 0, null);
+        } else if (player.inVehicle > 0) {
           player.vehicleHp -= netDmg;
           if (player.vehicleHp <= 0) { player.inVehicle = 0; spawnBlastWave(player.x, player.y, 75, "#00e5ff"); sfx(120, 45, 0.25); }
         } else {
@@ -1373,7 +1381,9 @@ function stepSimulation(rawDt) {
         player.combatAlertTimer = 2.0;
         const effArmor = (player.armor || 0) + (player.adaptTimer > 0 ? 5 : 0);
         const boltDmg = Math.max(1, pDmg[i] * (100 / (100 + effArmor * 8)));
-        if (player.inVehicle > 0) {
+        if (player.inVehicle === 3 && typeof vehDamage === "function" && VEH.me) {
+          const [lx, ly] = vehToLocal(VEH.me, pX[i] - pVX[i] * 0.02, pY[i] - pVY[i] * 0.02); vehDamage(VEH.me, lx, ly, boltDmg, "bullet", 0, 0, null);
+        } else if (player.inVehicle > 0) {
           // Vehicles soak enemy bolts the same way they soak melee contact.
           player.vehicleHp -= boltDmg;
           if (player.vehicleHp <= 0) { player.inVehicle = 0; spawnBlastWave(player.x, player.y, 75, "#00e5ff"); sfx(120, 45, 0.25); }

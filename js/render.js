@@ -839,16 +839,20 @@ function drawPolyPath(tCtx, poly, fallbackR) {
   }
 }
 
+// v14.1: the world rectangle the camera really shows (zoom × cinematic/driving zoom, look-ahead offset)
+function camView(pad) {
+  const c = typeof fxCamOut !== "undefined" ? fxCamOut : null, z = opts.zoom * (c ? Math.min(1, c.zoom || 1) : 1), p = pad == null ? 140 : pad;
+  const vw = W / z + p, vh = H / z + p;
+  return { left: player.x + (c ? c.fx || 0 : 0) - vw * 0.5, top: player.y + (c ? c.fy || 0 : 0) - vh * 0.5, vw, vh, z };
+}
 function renderBiomeAndWorld() {
   const bRing = (typeof getDistBiome === "function") ? getDistBiome(player.x, player.y) : null;
   const bgCol = (player.fac && player.fac.bg) ? player.fac.bg : "#0c1624";
   const gridCol = (player.fac && player.fac.c1) ? player.fac.c1 : "#00e5ff";
   const accCol = (player.fac && player.fac.c2) ? player.fac.c2 : "#ffd166";
 
-  const viewW = (W / opts.zoom) + 140;
-  const viewH = (H / opts.zoom) + 140;
-  const left = player.x - viewW * 0.5;
-  const top = player.y - viewH * 0.5;
+  // v14.1: cull with the real camera (cinematic / driving zoom-out and look-ahead)
+  const CV = camView(140), viewW = CV.vw, viewH = CV.vh, left = CV.left, top = CV.top;
 
   // v14 Nexus City (js/cityrender.js) paints the generated city instead of the arena ground & rocks
   const cityOn = typeof CITY !== "undefined" && CITY.on;
@@ -1028,8 +1032,13 @@ function renderBiomeAndWorld() {
       ctx.save();
       ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 2.0;
       ctx.beginPath(); ctx.arc(tgt.x, tgt.y, pulse, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = "#ffd166"; ctx.font = "bold 8.5px monospace"; ctx.textAlign = "center";
-      ctx.fillText(tgt.label || "[INTERACT]", tgt.x, tgt.y - pulse - 5);
+      // v14.1: the full label is the HUD button (#btnInteract) — the world shows only a keycap, never the same text twice
+      if (window.__coarsePtr === undefined) window.__coarsePtr = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+      const cap = window.__coarsePtr ? "TAP" : "F", cw = window.__coarsePtr ? 22 : 12, cy = tgt.y - pulse - 15;
+      ctx.fillStyle = "rgba(10,12,18,0.85)"; ctx.beginPath(); ctx.moveTo(tgt.x - cw / 2 + 3, cy); ctx.arcTo(tgt.x + cw / 2, cy, tgt.x + cw / 2, cy + 11, 3); ctx.arcTo(tgt.x + cw / 2, cy + 11, tgt.x - cw / 2, cy + 11, 3); ctx.arcTo(tgt.x - cw / 2, cy + 11, tgt.x - cw / 2, cy, 3); ctx.arcTo(tgt.x - cw / 2, cy, tgt.x + cw / 2, cy, 3); ctx.closePath(); ctx.fill();
+      ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = "#ffd166"; ctx.font = "bold 8px monospace"; ctx.textAlign = "center";
+      ctx.fillText(cap, tgt.x, cy + 8.3);
       ctx.restore();
     }
   }

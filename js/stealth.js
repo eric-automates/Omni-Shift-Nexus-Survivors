@@ -709,11 +709,14 @@ function stealthRenderScreen(g) {
   if (typeof visionProfile === "function") tags.push("👁 " + visionProfile(player.cid)[3]);
   if (p[1] === "g") tags.push(p[2] ? (ST.suppressed ? "SUPPRESSED [V]" : "LOUD [V]") : "LOUD");
   else if (p[1] === "x") tags.push("BLADE · QUIET");
-  g.save(); g.font = "800 12px 'Segoe UI', sans-serif"; g.textAlign = "center";
-  const txt = label + (tags.length ? "   " + tags.join(" · ") : ""), tw = g.measureText(txt).width + 22, y0 = H - 64;
-  g.fillStyle = "rgba(6,10,16,0.62)"; crRR(g, W / 2 - tw / 2, y0, tw, 22, 11); g.fill();
+  const HL = typeof HUDL !== "undefined" && HUDL.enabled ? HUDL : null;   // v14.1: placed / scaled by the HUD layout manager
+  if (HL && HL.stealthHidden) return;
+  g.save(); const hs = HL ? HL.stealthS || 1 : 1;
+  g.font = "800 " + (12 * hs).toFixed(1) + "px 'Segoe UI', sans-serif"; g.textAlign = "center";
+  const txt = label + (tags.length ? "   " + tags.join(" · ") : ""), tw = g.measureText(txt).width + 22 * hs, y0 = HL && HL.stealthY != null ? HL.stealthY : H - 64;
+  g.fillStyle = "rgba(6,10,16,0.62)"; crRR(g, W / 2 - tw / 2, y0, tw, 22 * hs, 11 * hs); g.fill();
   g.strokeStyle = col; g.lineWidth = 1; g.globalAlpha = 0.7; g.stroke(); g.globalAlpha = 1;
-  g.fillStyle = col; g.fillText(txt, W / 2, y0 + 15.5);
+  g.fillStyle = col; g.fillText(txt, W / 2, y0 + 15.5 * hs);
   g.restore();
 }
 // EOF:js/stealth.js

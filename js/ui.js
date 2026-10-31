@@ -961,7 +961,10 @@ function renderOpts() {
     ["Floating Damage / Speech", opts.dmgNums ? "ON" : "OFF", () => { opts.dmgNums = !opts.dmgNums; }],
     ["Screen Flash Effects", opts.flash ? "ON" : "OFF", () => { opts.flash = !opts.flash; }],
     ["Master Synth Volume", Math.round(opts.vol * 100) + "%", () => { opts.vol = opts.vol >= 0.8 ? 0 : +(opts.vol + 0.2).toFixed(2); }],
-    ["HUD Handedness Layout", opts.hudFlip ? "LEFT-HANDED" : "STANDARD", () => { opts.hudFlip = !opts.hudFlip; }]
+    ["HUD Handedness Layout", opts.hudFlip ? "LEFT-HANDED" : "STANDARD", () => { opts.hudFlip = !opts.hudFlip; if (typeof HUDL !== "undefined") HUDL.dirty = true; }],
+    ["🧩 HUD Layout, Priority & Sizes", (opts.hud && opts.hud.auto === false ? "AUTO-FIT OFF" : "AUTO-FIT ON") + " · " + Math.round(((opts.hud && opts.hud.scale) || 1) * 100) + "%", () => { if (typeof hudOptsOpen === "function") setTimeout(hudOptsOpen, 0); }],
+    ["Vehicle Steering", opts.vehSteer === "classic" ? "CLASSIC (W/S THROTTLE · A/D STEER)" : "POINT-TO-STEER (PUSH WHERE YOU WANT TO GO)", () => { opts.vehSteer = opts.vehSteer === "classic" ? "point" : "classic"; }],
+    ["Vehicle Speed Units", opts.vehUnits === "kmh" ? "KM/H" : "MPH", () => { opts.vehUnits = opts.vehUnits === "kmh" ? "mph" : "kmh"; }]
   ];
   rows.forEach(r => {
     const btn = document.createElement("button"); btn.className = "btn"; btn.textContent = `${r[0]}: ${r[1]}`;

@@ -61,6 +61,9 @@ function cRng(seed) {
   };
 }
 function cPick(r, arr) { return arr[Math.floor(r() * arr.length) % arr.length]; }
+// v14.1: seeded Fisher–Yates. NEVER use arr.sort(() => r() - 0.5): V8's sort with an inconsistent comparator is not
+// repeatable (the same building could re-furnish differently after a cache eviction → mismatched chunk seams)
+function cShuffle(r, a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
 function cRange(r, a, b) { return a + r() * (b - a); }
 function cInt(r, a, b) { return a + Math.floor(r() * (b - a + 1)); }
 // smooth value noise in [0,1) (period 64 cells, used on the macro grid)
@@ -368,7 +371,7 @@ function icMark(G, x, y, w, h, v = 3) { for (let j = y; j < y + h; j++) for (let
 function icAdd(G, t, x, y, w, h, o, s, v = 0) { const f = { t, x, y, w, h, o, s, v }; G.furn.push(f); return f; }
 // against a wall: w = length along the wall, d = depth into the room. sides: 0 top,1 right,2 bottom,3 left
 function icWall(G, room, r, t, w, d, s, sides = [0, 1, 2, 3], opt = {}) {
-  const order = opt.keep ? sides : sides.slice().sort(() => r() - 0.5);
+  const order = opt.keep ? sides : cShuffle(r, sides.slice());
   for (const side of order) {
     const L = side % 2 === 0 ? room.w : room.h, ww = w, dd = d;
     if (ww > L) continue;
@@ -376,7 +379,7 @@ function icWall(G, room, r, t, w, d, s, sides = [0, 1, 2, 3], opt = {}) {
     for (let p = 0; p <= L - ww; p++) pos.push(p);
     if (opt.center) pos.sort((a, b) => Math.abs(a - (L - ww) / 2) - Math.abs(b - (L - ww) / 2));
     else if (opt.corner) pos.sort((a, b) => Math.min(a, L - ww - a) - Math.min(b, L - ww - b));
-    else pos.sort(() => r() - 0.5);
+    else cShuffle(r, pos);
     for (const p of pos) {
       let x, y, fw, fh, o;
       if (side === 0) { x = room.x + p; y = room.y; fw = ww; fh = dd; o = 0; }

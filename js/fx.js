@@ -70,6 +70,7 @@ function fxCamera() {
     sx = (Math.random() * 2 - 1) * m; sy = (Math.random() * 2 - 1) * m;
   }
   fxCamOut.sx = sx; fxCamOut.sy = sy; fxCamOut.zoom = f.zoomCur; fxCamOut.fx = f.focusOffX; fxCamOut.fy = f.focusOffY;
+  if (typeof VEH !== "undefined" && VEH.camZoom) { fxCamOut.zoom *= VEH.camZoom; fxCamOut.fx += VEH.camFx || 0; fxCamOut.fy += VEH.camFy || 0; }   // v14.1 driving camera
   return fxCamOut;
 }
 
@@ -224,7 +225,7 @@ function fxRenderScreen(c) {
   }
   // banners (kill streaks, boss intro, glory kills, sector clear)
   c.save(); c.textAlign = "center";
-  let yOff = H * 0.3;
+  let yOff = Math.max(H * 0.3, (typeof HUDL !== "undefined" && HUDL.enabled ? HUDL.topH + 40 : 0));   // v14.1: below the top bar
   for (let i = 0; i < f.banners.length; i++) {
     const b = f.banners[i], t = b.t, k = Math.min(1, t / 0.12), out = Math.max(0, (t - (b.dur - 0.35)) / 0.35);
     const scale = (b.big ? 1.0 : 0.82) * (1.35 - 0.35 * k);

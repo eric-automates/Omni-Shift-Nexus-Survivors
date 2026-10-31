@@ -150,7 +150,7 @@ function squadMinionsSim(simDt) {
   if (S.order === 2 && (S.focusIdx < 0 || !eAct[S.focusIdx] || eUid[S.focusIdx] !== S.focusUid)) squadPickFocus();
   const aimX = Math.cos(player.aim || 0), aimY = Math.sin(player.aim || 0);
   let alive = 0, soldiers = 0, coGunner = -1;
-  if (player.inVehicle > 0) {
+  if (player.inVehicle > 0 && !(typeof CITY !== "undefined" && CITY.on)) {   // v14.1: in Nexus City riders take real seats (js/convoy.js)
     for (let m = 0; m < MAX_MINION; m++) if (mAct[m] && mKind[m] >= 5 && mKind[m] <= 7) { coGunner = m; break; }
   }
   S.coGunner = coGunner;
@@ -168,6 +168,7 @@ function squadMinionsSim(simDt) {
     if (mAtkCD[m] > 0) mAtkCD[m] = Math.max(0, mAtkCD[m] - simDt);
     const kind = mKind[m], soldier = kind >= 5;
     if (soldier) soldiers++;
+    if (typeof convoyMinionStep === "function" && convoyMinionStep(m, simDt)) continue;   // v14.1: riding / boarding a vehicle
 
     // --- vehicle co-gunner rides with the player and mans the gun
     if (m === coGunner) {
@@ -190,6 +191,8 @@ function squadMinionsSim(simDt) {
       const rx = player.x + aimX * 230, ry = player.y + aimY * 230;
       hx = rx + Math.cos(formAng) * 40; hy = ry + Math.sin(formAng) * 40; engageR = 430; leashR = 1e9;
     } else { hx = player.x + Math.cos(formAng) * 44; hy = player.y + Math.sin(formAng) * 44; engageR = 360; leashR = 270; }
+    const holdP = typeof convoyHoldPoint === "function" ? convoyHoldPoint(m) : null;   // v14.1: no seat left - hold the spot
+    if (holdP) { hx = holdP.x + Math.cos(formAng) * 26; hy = holdP.y + Math.sin(formAng) * 26; engageR = 300; leashR = 140; }
 
     let bestE = -1, bestD = engageR;
     if (S.order === 2 && S.focusIdx >= 0) { bestE = S.focusIdx; bestD = Math.hypot(eX[bestE] - mX[m], eY[bestE] - mY[m]); }
@@ -311,6 +314,7 @@ function squadRenderMinions() {
   const th = FIRETEAM_THEMES[squadState.theme] || FIRETEAM_THEMES.marine;
   for (let i = 0; i < MAX_MINION; i++) {
     if (!mAct[i]) continue;
+    if (typeof mSeatOf === "function" && mSeatOf(i)) continue;   // v14.1: riders are drawn by their vehicle
     const kind = mKind[i], rad = mRad[i] || 10;
     ctx.save();
     ctx.translate(mX[i], mY[i]);

@@ -47,6 +47,7 @@ function cityRunStart(p) {
   cityApplyTheme(cityThemeKeyForHero(p.cid));
   cityRT.chunks.clear(); cityRT.last = null; cityRT.lastKey = -1; cityRT.doors.clear(); cityRT.broken.clear();
   cityRT.used.clear(); cityRT.dyn.length = 0; cityRT.spawnState.clear(); cityRT.nearDoors = []; cityRT.visGen++;
+  if (cityRT.gopen) cityRT.gopen.clear(); if (cityRT.fenceBroken) cityRT.fenceBroken.clear();
   // find a walkable outdoor spot at the drop zone and make it local (256, 256)
   const d = cityPickDrop();
   CITY.orx = d[0] - 256; CITY.ory = d[1] - 256;
@@ -73,7 +74,7 @@ function cityTips(p) {
   const tips = [
     "🌆 <b>NEXUS CITY</b> — enemies hide in buildings and patrol the streets. Every gunshot is heard.",
     "🥷 Hold <b>Shift</b> to sneak (and hold fire) · <b>V</b> fits a suppressor on real firearms · blades are nearly silent.",
-    "🗺 <b>M</b> map & markers · <b>[ ]</b> zoom the minimap · <b>F</b> drive a parked car · caches hide indoors.",
+    "🗺 <b>M</b> map & markers · <b>[ ]</b> zoom the minimap · <b>F</b> drive ANY vehicle (even army trucks), climb ladders 🪜 to the roof · ⛽ refuel at gas stations.",
     vp ? "👁 <b>" + vp[3] + "</b> — " + (typeof VIS_DESC !== "undefined" ? VIS_DESC[vp[0]] || "" : "") : ""
   ].filter(Boolean);
   let k = 0;
@@ -214,8 +215,8 @@ function cityUpdateBanner(force) {
   for (const l of S.vx) { const d = Math.abs(l.x - xm); if (d < bd) { bd = d; best = l; ax = 0; } }
   for (const l of S.hy) { const d = Math.abs(l.y - ym); if (d < bd) { bd = d; best = l; ax = 1; } }
   const street = best && bd < 60 ? cityStreetName(ax, best, mx, my) : "";
-  const b = cityBuildingAt(player.x, player.y), inside = b ? (cityBuildingLabel(b) || (b.type === "house" || b.type === "farmhouse" ? "House" : b.type === "apartment" ? "Apartments" : b.type.charAt(0).toUpperCase() + b.type.slice(1))) : "";
-  const top = city + " · " + CL_NAMES[cls], sub = inside ? "Inside: " + inside : street;
+  const onRoof = !!player.roof, b = onRoof ? cityBldT(cityTX(player.x), cityTY(player.y)) : cityBuildingAt(player.x, player.y), inside = b ? (cityBuildingLabel(b) || (b.type === "house" || b.type === "farmhouse" ? "House" : b.type === "apartment" ? "Apartments" : b.type.charAt(0).toUpperCase() + b.type.slice(1))) : "";
+  const top = city + " · " + CL_NAMES[cls], sub = inside ? (onRoof ? "On the roof: " : "Inside: ") + inside : street;   // v14.1 roofs
   const el = document.getElementById("cityHud");
   if (!el) return;
   el.style.display = "block";

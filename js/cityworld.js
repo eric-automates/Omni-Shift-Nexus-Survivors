@@ -30,6 +30,8 @@ const cityRT = {
   doors: new Map(),            // door id -> runtime door
   broken: new Set(),           // broken window tile keys
   used: new Set(),             // used / removed prop keys (cars you drove off, looted caches)
+  gopen: new Set(),            // v14.1: buildings whose garage doors are rolled up / smashed
+  fenceBroken: new Set(),      // v14.1: fence tiles a vehicle smashed through
   dyn: [],                     // dynamic props (parked vehicles you left behind)
   spawnState: new Map(),       // spawn id -> { left, active }
   visGen: 0, buildMs: 0, built: 0
@@ -95,7 +97,10 @@ function cityBuildChunk(cx, cy) {
       C.fences.push(f);
       const fl = f.kind === "wood" ? F_MOVE | F_SIGHT : f.kind === "stone" ? F_MOVE | F_SIGHT | F_SHOT : F_MOVE;
       const kd = f.kind === "wood" ? K_FENCE_WOOD : f.kind === "chain" ? K_FENCE_CHAIN : f.kind === "stone" ? K_STONE : K_FENCE_PICKET;
-      stamp(f.x0, f.y0, w, h, fl, kd, true);
+      if (cityRT.fenceBroken && cityRT.fenceBroken.size) {   // v14.1: sections a vehicle smashed through stay open
+        const xa = Math.max(x0, f.x0), ya = Math.max(y0, f.y0), xb = Math.min(x0 + CH, f.x0 + w), yb = Math.min(y0 + CH, f.y0 + h);
+        for (let yy = ya; yy < yb; yy++) for (let xx = xa; xx < xb; xx++) { if (cityRT.fenceBroken.has(cityKeyT(xx, yy))) continue; const i = ((yy - y0) << 7) | (xx - x0); if (C.flags[i] & (F_MOVE | F_IN)) continue; C.flags[i] |= fl; C.kind[i] = kd; }
+      } else stamp(f.x0, f.y0, w, h, fl, kd, true);
     }
     // props
     for (let pi = 0; pi < B.props.length; pi++) {
@@ -131,15 +136,16 @@ function cityBuildChunk(cx, cy) {
           case IC_DOOR: fl |= F_DOOR; kd = K_DOOR; break;
           case IC_EDOOR: fl |= F_DOOR; kd = K_EDOOR; break;
           case IC_WIN: if (cityRT.broken.has(cityKeyT(xx, yy))) { fl |= F_LOW; kd = K_WIN; } else { fl |= F_MOVE | F_WIN; kd = K_WIN; } break;   // broken panes can be climbed through
-          case IC_GDOOR: fl |= F_MOVE | F_SIGHT | F_SHOT; kd = K_GDOOR; break;
+          case IC_GDOOR: if (cityRT.gopen && cityRT.gopen.has(b.uid)) kd = K_GDOOR; else { fl |= F_MOVE | F_SIGHT | F_SHOT; kd = K_GDOOR; } break;   // v14.1: open garage = drive out
           case IC_BARS: fl |= F_MOVE; kd = K_BARS; break;
           case IC_COUNTER: fl |= F_MOVE | F_LOW; kd = K_COUNTER; break;
           default: break;
         }
         C.flags[i] = fl; C.kind[i] = kd;
       }
-      for (const f of G.furn) {
-        if (!f.s) continue;
+      for (let fi = 0; fi < G.furn.length; fi++) {
+        const f = G.furn[fi];
+        if (!f.s || cityRT.used.has(b.uid + ":f" + fi)) continue;   // v14.1: interior vehicles that drove away
         const fx = b.x + f.x, fy = b.y + f.y;
         if (!inC(fx, fy, f.w, f.h)) continue;
         const fl = f.s === FS_TALL ? F_MOVE | F_SIGHT | F_SHOT : f.s === FS_COVER ? F_MOVE | F_SHOT : F_MOVE | F_LOW;
@@ -205,7 +211,8 @@ function cityBuildChunk(cx, cy) {
 function cityRebuildAt(wtx, wty) {
   const cx = wtx >> 7, cy = wty >> 7, key = cx * 4096 + cy;
   cityRT.chunks.delete(key); if (cityRT.lastKey === key) { cityRT.last = null; cityRT.lastKey = -1; }
-  if (typeof cityRenderInvalidate === "function") cityRenderInvalidate(wtx * 16 - CITY.orx - 600, wty * 16 - CITY.ory - 600, 1200, 1200);
+  if (typeof cityRenderRefresh === "function") cityRenderRefresh(wtx * 16 - CITY.orx - 400, wty * 16 - CITY.ory - 400, 800, 800);
+  else if (typeof cityRenderInvalidate === "function") cityRenderInvalidate(wtx * 16 - CITY.orx - 600, wty * 16 - CITY.ory - 600, 1200, 1200);
 }
 
 /* --- 2. TILE QUERIES -------------------------------------------------------- */
@@ -385,6 +392,8 @@ function cityWindowBroken(tx, ty) { return cityRT.broken.has(cityKeyT(tx, ty)); 
 
 /* --- 6. LINE-OF-SIGHT GRID (recursive shadow casting) ------------------------- */
 const cityVis = { r: 0, n: 0, ox: 0, oy: 0, grid: null, roof: new Set(), pBid: null, gen: -1, px: 1e9, py: 1e9, t: 0 };
+// sight blockers that are only ~2 m tall (v14.1 eye-height vision)
+const K_LOWSIGHT = new Uint8Array(32); K_LOWSIGHT[K_FENCE_WOOD] = 1; K_LOWSIGHT[K_HEDGE] = 1; K_LOWSIGHT[K_STONE] = 1;
 function cityComputeVis(radiusTiles) {
   if (!player) return cityVis;
   const R = Math.max(8, Math.min(90, radiusTiles | 0)), N = R * 2 + 1;
@@ -396,7 +405,10 @@ function cityComputeVis(radiusTiles) {
   // local opacity cache for speed
   if (!cityVis.op || cityVis.op.length !== N * N) cityVis.op = new Uint8Array(N * N);
   const OP = cityVis.op;
-  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) OP[j * N + i] = (cityFlagsT(ox + i, oy + j) & F_SIGHT) ? 1 : 0;
+  // v14.1: eyes above fence height (tall cab, jetpack, half-giant, mid-leap) see over privacy fences, hedges and stone walls
+  const seeOver = typeof accEyeHigh === "function" && accEyeHigh();
+  if (seeOver) { for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) OP[j * N + i] = (cityFlagsT(ox + i, oy + j) & F_SIGHT) && !K_LOWSIGHT[cityKindT(ox + i, oy + j)] ? 1 : 0; }
+  else for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) OP[j * N + i] = (cityFlagsT(ox + i, oy + j) & F_SIGHT) ? 1 : 0;
   G[R * N + R] = 255;
   const R2 = R * R;
   const cast = (row, start, end, xx, xy, yx, yy) => {

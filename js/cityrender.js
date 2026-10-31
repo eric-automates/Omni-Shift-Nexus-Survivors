@@ -108,6 +108,14 @@ function cityRenderReset() {
   CR.tiles.clear(); CR.roofs.clear(); CR.roofA.clear(); CR.decals.length = 0; CR.fogGen = -1; CR.pats.clear();
   CR.key = CITY.themeKey + "|" + CITY.seed;
 }
+// v14.1: mark tiles stale but keep drawing them until the re-bake lands (no flat-colour flashes when a car wakes up)
+function cityRenderRefresh(lx, ly, w, h) {
+  const x0 = Math.floor((lx + CITY.orx) / CR.TS), x1 = Math.floor((lx + w + CITY.orx) / CR.TS);
+  const y0 = Math.floor((ly + CITY.ory) / CR.TS), y1 = Math.floor((ly + h + CITY.ory) / CR.TS);
+  CR.stale = CR.stale || new Set();
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const k = x * 65536 + y; if (CR.tiles.has(k)) CR.stale.add(k); }
+  for (const [uid, R] of CR.roofs) if (R.x1 >= x0 * CR.TS && R.x0 <= (x1 + 1) * CR.TS && R.y1 >= y0 * CR.TS && R.y0 <= (y1 + 1) * CR.TS) CR.roofs.delete(uid);
+}
 function cityRenderInvalidate(lx, ly, w, h) {   // local px rect
   const x0 = Math.floor((lx + CITY.orx) / CR.TS), x1 = Math.floor((lx + w + CITY.orx) / CR.TS);
   const y0 = Math.floor((ly + CITY.ory) / CR.TS), y1 = Math.floor((ly + h + CITY.ory) / CR.TS);
@@ -357,6 +365,11 @@ function crBuilding(g, b, tx0, ty0, tx1, ty1, layer) {
     }
     if (v === IC_GDOOR) {
       const hx = crCellAxis(G, x, y);
+      if (cityRT.gopen && cityRT.gopen.has(b.uid)) {   // v14.1: rolled up (or smashed) - dark threshold + door edge
+        g.fillStyle = "rgba(12,12,14,0.55)"; if (hx) g.fillRect(X, Y + 3, 16, 10); else g.fillRect(X + 3, Y, 10, 16);
+        g.fillStyle = crSh(T.w.metal, -0.25); if (hx) g.fillRect(X, Y + 2, 16, 2); else g.fillRect(X + 2, Y, 2, 16);
+        continue;
+      }
       g.fillStyle = crSh(T.w.metal, 0.25); g.fillRect(X, Y + (hx ? 3 : 0), hx ? 16 : 16, hx ? 10 : 16);
       g.fillStyle = crSh(T.w.metal, -0.15);
       if (hx) { for (let k = 0; k < 3; k++) g.fillRect(X, Y + 5 + k * 3, 16, 1); } else { g.fillRect(X + 3, Y, 10, 16); g.fillStyle = crSh(T.w.metal, 0.25); for (let k = 0; k < 3; k++) g.fillRect(X + 5 + k * 3, Y, 1, 16); }
@@ -645,11 +658,54 @@ function crHorse(g, x, y, s, col) { g.fillStyle = col || "#6d4c2f"; g.beginPath(
 function crWheel(g, x, y, r, spoke) { g.fillStyle = "#3a2a1a"; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); if (spoke) { g.strokeStyle = "#8a6a3a"; g.lineWidth = 0.8; g.beginPath(); for (let k = 0; k < 4; k++) { g.moveTo(x, y); g.lineTo(x + Math.cos(k * 0.785 * 2) * r, y + Math.sin(k * 0.785 * 2) * r); } g.stroke(); } }
 function crVehicle(g, kind, L, D, v, h, themed, wreck) {
   const T = CITY.theme, fam = crFam(), x0 = -L / 2, y0 = -D / 2;
-  if (themed && kind === "car") kind = T.car || "sedan";
-  let col = CR_CARCOL[v & 7];
-  g.fillStyle = "rgba(0,0,0,0.28)"; crRR(g, x0 + 3, y0 + 4, L, D, L * 0.25); g.fill();
+  if (themed && kind === "car") {
+    kind = T.car || "sedan";
+    if (kind === "sedan") { if (v === 8) kind = "police"; else if ((v & 7) === 6) kind = "pickup"; else if ((v & 7) === 3) kind = "suv"; }   // v14.1 variety
+  }
+  let col = crVehicle.col || CR_CARCOL[v & 7];
+  if (!crVehicle.noShadow) { g.fillStyle = "rgba(0,0,0,0.28)"; crRR(g, x0 + 3, y0 + 4, L, D, L * 0.25); g.fill(); }
   if (wreck) col = "#3a3530";
   switch (kind) {
+    case "police": {   // v14.1: black-and-white cruiser, push bar, lightbar
+      const ns = crVehicle.noShadow; crVehicle.noShadow = true; crVehicle.col = wreck ? null : "#f2f2f2";
+      try { crVehicle(g, "sedan", L, D, v, h, false, wreck); } finally { crVehicle.noShadow = ns; crVehicle.col = null; }
+      if (!wreck) {
+        g.fillStyle = "#16181b"; crRR(g, x0 + 1, y0 + 1, L - 2, D * 0.27, L * 0.26); g.fill(); crRR(g, x0 + 2, y0 + D * 0.8, L - 4, D * 0.19, L * 0.22); g.fill();
+        g.fillStyle = "#fffde7"; g.fillRect(x0 + 2, y0 + 1, 4, 2); g.fillRect(x0 + L - 6, y0 + 1, 4, 2); g.fillStyle = "#e53935"; g.fillRect(x0 + 2, y0 + D - 3, 4, 2); g.fillRect(x0 + L - 6, y0 + D - 3, 4, 2);
+        g.fillStyle = "#2a2d31"; g.fillRect(x0 + 7, y0 - 2.5, L - 14, 3);
+        g.fillStyle = "#26292d"; g.fillRect(x0 + 6, y0 + D * 0.5, L - 12, 4); g.fillStyle = "#e53935"; g.fillRect(x0 + 7, y0 + D * 0.5 + 0.8, (L - 14) / 2 - 1, 2.4); g.fillStyle = "#1e63e9"; g.fillRect(1, y0 + D * 0.5 + 0.8, (L - 14) / 2 - 1, 2.4);
+        g.fillStyle = "#1a1c20"; g.font = "bold 6px sans-serif"; g.textAlign = "center"; g.fillText(String(10 + (h % 89)), 0, y0 + D * 0.66);
+      }
+      break;
+    }
+    case "pickup": {   // v14.1: cab + open bed (riders can stand in it)
+      g.fillStyle = crSh(col, -0.35); crRR(g, x0, y0, L, D, L * 0.22); g.fill();
+      g.fillStyle = col; crRR(g, x0 + 1, y0 + 1, L - 2, D * 0.55, L * 0.2); g.fill();
+      const glass = wreck ? "#1a1a1a" : "#22323f";
+      g.fillStyle = glass; g.beginPath(); g.moveTo(x0 + 3, y0 + D * 0.24); g.lineTo(x0 + L - 3, y0 + D * 0.24); g.lineTo(x0 + L - 5, y0 + D * 0.33); g.lineTo(x0 + 5, y0 + D * 0.33); g.fill();
+      g.fillStyle = crSh(col, -0.08); crRR(g, x0 + 4, y0 + D * 0.33, L - 8, D * 0.17, 3); g.fill();
+      g.fillStyle = glass; g.fillRect(x0 + 5, y0 + D * 0.5, L - 10, D * 0.03);
+      g.fillStyle = crSh(col, -0.22); g.fillRect(x0 + 1, y0 + D * 0.57, L - 2, D * 0.42);
+      g.fillStyle = "#2b2c2e"; g.fillRect(x0 + 4, y0 + D * 0.59, L - 8, D * 0.37); g.fillStyle = "rgba(255,255,255,0.07)"; for (let k = 1; k < 5; k++) g.fillRect(x0 + 4 + k * (L - 8) / 5, y0 + D * 0.59, 1, D * 0.37);
+      g.fillStyle = "rgba(255,255,255,0.25)"; g.fillRect(x0 + 5, y0 + D * 0.25, (L - 10) * 0.35, 1.5);
+      if (!wreck) { g.fillStyle = "#fffde7"; g.fillRect(x0 + 2, y0 + 1, 4, 2); g.fillRect(x0 + L - 6, y0 + 1, 4, 2); g.fillStyle = "#e53935"; g.fillRect(x0 + 2, y0 + D - 3, 4, 2); g.fillRect(x0 + L - 6, y0 + D - 3, 4, 2); }
+      g.fillStyle = crSh(col, -0.3); g.fillRect(x0 - 1.5, y0 + D * 0.27, 2, 3); g.fillRect(x0 + L - 0.5, y0 + D * 0.27, 2, 3);
+      break;
+    }
+    case "suv": {   // v14.1: boxy, long roof, roof rails
+      g.fillStyle = crSh(col, -0.35); crRR(g, x0, y0, L, D, L * 0.18); g.fill();
+      g.fillStyle = col; crRR(g, x0 + 1, y0 + 1, L - 2, D - 2, L * 0.16); g.fill();
+      const glass = wreck ? "#1a1a1a" : "#22323f";
+      g.fillStyle = crSh(col, 0.12); crRR(g, x0 + 3, y0 + 2, L - 6, D * 0.18, 3); g.fill();
+      g.fillStyle = glass; g.beginPath(); g.moveTo(x0 + 3, y0 + D * 0.24); g.lineTo(x0 + L - 3, y0 + D * 0.24); g.lineTo(x0 + L - 5, y0 + D * 0.34); g.lineTo(x0 + 5, y0 + D * 0.34); g.fill();
+      g.fillStyle = crSh(col, -0.1); crRR(g, x0 + 4, y0 + D * 0.34, L - 8, D * 0.52, 3); g.fill();
+      g.fillStyle = "#2a2c30"; g.fillRect(x0 + 6, y0 + D * 0.38, 1.6, D * 0.44); g.fillRect(x0 + L - 7.6, y0 + D * 0.38, 1.6, D * 0.44);
+      g.fillStyle = glass; g.fillRect(x0 + 5, y0 + D * 0.88, L - 10, D * 0.06);
+      g.fillStyle = "rgba(255,255,255,0.25)"; g.fillRect(x0 + 5, y0 + D * 0.25, (L - 10) * 0.35, 1.5);
+      if (!wreck) { g.fillStyle = "#fffde7"; g.fillRect(x0 + 2, y0 + 1, 4, 2); g.fillRect(x0 + L - 6, y0 + 1, 4, 2); g.fillStyle = "#e53935"; g.fillRect(x0 + 2, y0 + D - 3, 4, 2); g.fillRect(x0 + L - 6, y0 + D - 3, 4, 2); }
+      g.fillStyle = crSh(col, -0.3); g.fillRect(x0 - 1.5, y0 + D * 0.27, 2, 3); g.fillRect(x0 + L - 0.5, y0 + D * 0.27, 2, 3);
+      break;
+    }
     case "sedan": case "rusted": case "anglia": {
       if (kind === "anglia") col = "#7fc8c8";
       if (kind === "rusted") col = ["#7a5a3a", "#5a6a6a", "#8a7a5a", "#6a4a3a"][v & 3];
@@ -739,7 +795,17 @@ function crVehicle(g, kind, L, D, v, h, themed, wreck) {
       if (knight) { g.fillStyle = "#ffd54f"; g.font = "bold 7px serif"; g.textAlign = "center"; g.save(); g.rotate(Math.PI / 2); g.fillText("KNIGHT BUS", 0, 2.5); g.restore(); }
       break;
     }
-    case "trailer": { g.fillStyle = "#cfd2d4"; crRR(g, x0, y0, L, D, 2); g.fill(); g.fillStyle = "rgba(0,0,0,0.12)"; for (let k = 1; k < 10; k++) g.fillRect(x0 + 1, y0 + k * D / 10, L - 2, 1); g.fillStyle = "#212121"; g.fillRect(-1.5, y0 - 4, 3, 5); break; }
+    case "trailer": {   // v14.1: a semi - cab up front, so every truck in the yard can be driven
+      const cab = Math.min(D * 0.2, 84), cc = fam === "scifi" ? (T.fu.white || "#e8eef2") : ["#c62828", "#1565c0", "#eceff1", "#2e7d32"][h & 3];
+      g.fillStyle = "#cfd2d4"; crRR(g, x0, y0 + cab + 4, L, D - cab - 4, 2); g.fill(); g.fillStyle = "rgba(0,0,0,0.12)"; for (let k = 1; k < 10; k++) g.fillRect(x0 + 1, y0 + cab + 4 + k * (D - cab - 4) / 10, L - 2, 1);
+      g.fillStyle = "#3a3a3a"; g.fillRect(-6, y0 + cab - 2, 12, 8);
+      g.fillStyle = crSh(cc, -0.35); crRR(g, x0 + 1, y0, L - 2, cab, 5); g.fill(); g.fillStyle = cc; crRR(g, x0 + 2, y0 + 1, L - 4, cab - 2, 4); g.fill();
+      g.fillStyle = "#22323f"; g.fillRect(x0 + 4, y0 + cab * 0.2, L - 8, cab * 0.16); g.fillStyle = crSh(cc, -0.15); g.fillRect(x0 + 4, y0 + cab * 0.45, L - 8, cab * 0.45);
+      g.fillStyle = "#b0b6bb"; g.fillRect(x0 + 3, y0 + 1, L - 6, 2.5); g.fillStyle = "#fffde7"; g.fillRect(x0 + 3, y0 + 0.5, 4, 2); g.fillRect(x0 + L - 7, y0 + 0.5, 4, 2);
+      g.fillStyle = "#9aa0a6"; g.fillRect(x0 - 1.5, y0 + cab * 0.25, 2, 5); g.fillRect(x0 + L - 0.5, y0 + cab * 0.25, 2, 5);
+      g.fillStyle = "#e53935"; g.fillRect(x0 + 2, y0 + D - 3, 5, 2); g.fillRect(x0 + L - 7, y0 + D - 3, 5, 2);
+      break;
+    }
     default: crVehicle(g, "sedan", L, D, v, h, false, wreck);
   }
 }
@@ -930,19 +996,100 @@ function crProp(g, p, h) {
     default: { g.fillStyle = "#7a7f86"; g.fillRect(X, Y, Math.max(4, W), Math.max(4, H)); }
   }
 }
+// v14.1: fences read as fences - a standing face with height (boards / chain mesh / pickets / stone courses), posts,
+// a cast shadow, sections a vehicle (or a T-800) smashed through, and a gate at every opening
+const CR_FENCE_H = { wood: 11, chain: 10, picket: 6, stone: 7 };
+// v14.1 chain-link mesh: a pixel-exact 4×4 diamond lattice (seamless across tiles; crisp at 1×, unlike hairline strokes)
+function crChainPat(col) {
+  const key = "chainmesh|" + col; let p = CR.pats.get(key);
+  if (p) return p;
+  const c = crCanvas(4, 4), q = c.getContext("2d");
+  q.fillStyle = col; for (let i = 0; i < 4; i++) { q.fillRect(i, i, 1, 1); q.fillRect(3 - i, i, 1, 1); }
+  p = q.createPattern(c, "repeat"); CR.pats.set(key, p);
+  return p;
+}
+function crFenceOnAny(B, tx, ty) {
+  for (const q of B.fences) { const w = Math.max(1, q.x1 - q.x0), h = Math.max(1, q.y1 - q.y0); if (tx >= q.x0 && tx < q.x0 + w && ty >= q.y0 && ty < q.y0 + h) return true; }
+  for (const b of B.blds) if (tx >= b.x && tx < b.x + b.w && ty >= b.y && ty < b.y + b.h) return true;
+  return false;
+}
 function crFence(g, f) {
-  const fam = crFam(), X = f.x0 * 16, Y = f.y0 * 16, horiz = f.y1 === f.y0, len = (horiz ? f.x1 - f.x0 : f.y1 - f.y0) * 16;
-  const draw = (c, th, posts, gapped) => {
-    g.fillStyle = "rgba(0,0,0,0.2)"; if (horiz) g.fillRect(X + 2, Y + 8 - th / 2 + 3, len, th); else g.fillRect(X + 8 - th / 2 + 2, Y + 3, th, len);
-    g.fillStyle = c;
-    if (gapped) { for (let k = 0; k < len; k += 4) { if (horiz) g.fillRect(X + k, Y + 8 - th / 2, 2.5, th); else g.fillRect(X + 8 - th / 2, Y + k, th, 2.5); } }
-    else if (horiz) g.fillRect(X, Y + 8 - th / 2, len, th); else g.fillRect(X + 8 - th / 2, Y, th, len);
-    if (posts) { g.fillStyle = crSh(c, -0.3); for (let k = 0; k <= len; k += posts) { if (horiz) g.fillRect(X + k - 1.5, Y + 8 - th / 2 - 1, 3, th + 2); else g.fillRect(X + 8 - th / 2 - 1, Y + k - 1.5, th + 2, 3); } }
-  };
-  if (f.kind === "wood") draw(fam === "scifi" ? "#5a6068" : (CITY.themeKey === "wasteland" ? "#6a5a4a" : "#8a6a48"), 4, 48, false);
-  else if (f.kind === "picket") draw(fam === "rustic" ? "#c8b898" : "#f2f2ee", 3, 32, true);
-  else if (f.kind === "stone") draw("#8a8478", 7, 0, false);
-  else { g.strokeStyle = fam === "scifi" ? crA(CITY.theme.fu.glow || "#9aa3ab", 0.55) : "rgba(170,178,186,0.75)"; g.lineWidth = 1; g.setLineDash([2, 2]); g.beginPath(); if (horiz) { g.moveTo(X, Y + 8); g.lineTo(X + len, Y + 8); } else { g.moveTo(X + 8, Y); g.lineTo(X + 8, Y + len); } g.stroke(); g.setLineDash([]); g.fillStyle = "#7a8288"; for (let k = 0; k <= len; k += 48) { if (horiz) g.fillRect(X + k - 1.5, Y + 6.5, 3, 3); else g.fillRect(X + 6.5, Y + k - 1.5, 3, 3); } }
+  const fam = crFam(), T = CITY.theme, key = CITY.themeKey, horiz = f.y1 === f.y0, n = Math.max(1, horiz ? f.x1 - f.x0 : f.y1 - f.y0);
+  const kind = f.kind, h = CR_FENCE_H[kind] || 8, broken = cityRT.fenceBroken;
+  const col = kind === "wood" ? (fam === "scifi" ? "#5a6068" : key === "wasteland" ? "#6a5a4a" : key === "western" || key === "frontier" ? "#8a6236" : "#8f6c48")
+    : kind === "picket" ? (fam === "rustic" ? "#c8b898" : "#f2f2ee") : kind === "stone" ? (key === "gothic" ? "#6a645c" : "#8a8478") : (fam === "scifi" ? "#8fa3b3" : "#a9b1b8");
+  const barbed = kind === "chain" && !!(f._B && f._B.cls === CL_INDUSTRIAL);   // v14.1: security fencing around yards & depots
+  const dark = crSh(col, -0.32), lite = crSh(col, 0.22), postEvery = kind === "wood" ? 4 : kind === "chain" ? 6 : kind === "picket" ? 4 : 0;   // chain-link: ~3 m spans
+  // per tile: base line sits low in the tile, the face rises toward the top of the tile (no bleed into the next tile)
+  for (let i = 0; i < n; i++) {
+    const tx = horiz ? f.x0 + i : f.x0, ty = horiz ? f.y0 : f.y0 + i, X = tx * 16, Y = ty * 16;
+    if (broken && broken.has(cityKeyT(tx, ty))) {   // smashed: splintered stubs + boards on the ground
+      g.fillStyle = dark; if (horiz) { g.fillRect(X + 1, Y + 10, 2, 3); g.fillRect(X + 12, Y + 11, 2, 2); } else { g.fillRect(X + 7, Y + 1, 3, 2); g.fillRect(X + 8, Y + 12, 2, 2); }
+      g.save(); g.translate(X + 8, Y + 8); g.rotate(((tx * 7 + ty * 3) % 5) * 0.6); g.fillStyle = crA(col, 0.8); g.fillRect(-7, -1, 14, 2.2); g.restore();
+      continue;
+    }
+    if (horiz) {
+      const by = Y + 13, top = by - h;
+      g.fillStyle = "rgba(0,0,0,0.22)"; g.beginPath(); g.moveTo(X, by); g.lineTo(X + 16, by); g.lineTo(X + 19, by + 4); g.lineTo(X + 3, by + 4); g.fill();   // shadow
+      if (kind === "wood") {
+        g.fillStyle = col; g.fillRect(X, top, 16, h); g.fillStyle = dark; for (let k = 0; k < 16; k += 4) g.fillRect(X + k, top, 0.9, h);
+        g.fillStyle = lite; g.fillRect(X, top, 16, 1.5); g.fillStyle = "rgba(0,0,0,0.25)"; g.fillRect(X, by - 2, 16, 2);
+      } else if (kind === "chain") {   // a see-through steel screen: faint fill, dense diamond mesh, top rail, tension wire (+ barbed wire in industrial blocks)
+        g.fillStyle = crA(col, 0.14); g.fillRect(X, top, 16, h);
+        g.fillStyle = crChainPat(crA(lite, 0.85)); g.fillRect(X, top, 16, h);
+        g.fillStyle = lite; g.fillRect(X, top - 0.8, 16, 1.8); g.fillStyle = crSh(col, -0.25); g.fillRect(X, top + 1, 16, 0.5);
+        g.fillStyle = crA(col, 0.9); g.fillRect(X, by - 1.2, 16, 0.9);
+        if (barbed) { g.strokeStyle = "rgba(40,40,44,0.85)"; g.lineWidth = 0.5; g.beginPath(); g.moveTo(X, top - 1.6); g.lineTo(X + 16, top - 1.6); g.moveTo(X, top - 2.9); g.lineTo(X + 16, top - 2.9); g.stroke(); g.fillStyle = "rgba(40,40,44,0.9)"; for (let k = (tx & 1) * 2 + 1; k < 16; k += 4) { g.fillRect(X + k, top - 3.4, 1, 1); g.fillRect(X + k + 2, top - 2.1, 1, 1); } }
+      } else if (kind === "picket") {
+        g.fillStyle = dark; g.fillRect(X, top + 2, 16, 1); g.fillRect(X, by - 2, 16, 1);
+        g.fillStyle = col; for (let k = 1; k < 16; k += 4) { g.fillRect(X + k, top + 1, 2.2, h - 1); g.beginPath(); g.moveTo(X + k, top + 1); g.lineTo(X + k + 1.1, top - 0.8); g.lineTo(X + k + 2.2, top + 1); g.fill(); }
+      } else {   // stone garden wall: courses + coping
+        g.fillStyle = col; g.fillRect(X, top, 16, h); g.fillStyle = dark; g.fillRect(X, top + h * 0.5, 16, 0.8); for (let k = (ty & 1) * 4; k < 16; k += 8) g.fillRect(X + k, top + 1, 0.8, h * 0.5 - 1); for (let k = 4 - (ty & 1) * 4; k < 16; k += 8) g.fillRect(X + k, top + h * 0.5, 0.8, h * 0.5);
+        g.fillStyle = lite; g.fillRect(X - 0.5, top - 1, 17, 1.8);
+      }
+      if (postEvery && (i % postEvery === 0 || i === n - 1)) { const px = i === n - 1 && i % postEvery ? X + 14 : X; g.fillStyle = kind === "chain" ? crSh(col, -0.2) : dark; g.fillRect(px, top - 1.5, 2, h + 1.5); g.fillStyle = lite; g.fillRect(px, top - 1.5, 2, 1); }
+    } else {
+      // running north-south: the face leans up-left (oblique), boards / mesh across it, cap on top, shadow to the east
+      const bx = X + 12, off = Math.max(4, h * 0.8);
+      g.fillStyle = "rgba(0,0,0,0.28)"; g.fillRect(bx, Y, 2.5, 16); g.fillStyle = "rgba(0,0,0,0.13)"; g.fillRect(bx + 2.5, Y, 2, 16);   // cast shadow: a tall thing, not a kerb
+      if (kind === "chain") {
+        g.fillStyle = crA(col, 0.14); g.fillRect(bx - off, Y, off, 16);
+        g.fillStyle = crChainPat(crA(lite, 0.85)); g.fillRect(bx - off, Y, off, 16);
+        g.fillStyle = lite; g.fillRect(bx - off - 0.8, Y, 1.8, 16); g.fillStyle = crA(col, 0.9); g.fillRect(bx - 0.6, Y, 0.9, 16);
+        if (barbed) { g.fillStyle = "rgba(40,40,44,0.85)"; g.fillRect(bx - off - 2.4, Y, 0.5, 16); for (let k = (ty & 1) * 2 + 1; k < 16; k += 4) g.fillRect(bx - off - 2.9, Y + k, 1, 1); }
+      } else if (kind === "picket") {
+        g.fillStyle = dark; g.fillRect(bx - 1, Y, 1, 16); g.fillRect(bx - off + 1, Y, 1, 16); g.fillStyle = col; for (let k = 1; k < 16; k += 4) { g.fillRect(bx - off, Y + k, off, 2.2); g.beginPath(); g.moveTo(bx - off, Y + k); g.lineTo(bx - off - 1.6, Y + k + 1.1); g.lineTo(bx - off, Y + k + 2.2); g.fill(); }
+      } else {
+        g.fillStyle = col; g.fillRect(bx - off, Y, off, 16);
+        if (kind === "wood") { g.fillStyle = dark; for (let k = 0; k < 16; k += 4) g.fillRect(bx - off, Y + k, off, 0.9); g.fillStyle = lite; g.fillRect(bx - off - 1.2, Y, 1.6, 16); g.fillStyle = "rgba(0,0,0,0.22)"; g.fillRect(bx - 1.6, Y, 1.6, 16); }
+        else { g.fillStyle = dark; for (let k = (tx & 1) * 4; k < 16; k += 8) g.fillRect(bx - off, Y + k, off, 0.8); g.fillRect(bx - off * 0.5, Y, 0.8, 16); g.fillStyle = lite; g.fillRect(bx - off - 1.4, Y, 1.8, 16); }
+      }
+      if (postEvery && (i % postEvery === 0 || i === n - 1)) { const py = Y + (i === n - 1 && i % postEvery ? 13 : 0); g.fillStyle = kind === "chain" ? crSh(col, -0.2) : dark; g.fillRect(bx - off - 1.5, py, off + 2.5, 2.8); g.fillStyle = lite; g.fillRect(bx - off - 1.5, py, 2.2, 1.2); }
+    }
+  }
+  // gates: an end of this run that opens onto nothing (until another fence / building closes it) is a gate opening
+  const B = f._B; if (!B) return;
+  for (const end of [0, 1]) {
+    const ex = horiz ? (end ? f.x0 + n : f.x0 - 1) : f.x0, ey = horiz ? f.y0 : (end ? f.y0 + n : f.y0 - 1), sx = horiz ? (end ? 1 : -1) : 0, sy = horiz ? 0 : (end ? 1 : -1);
+    if (crFenceOnAny(B, ex, ey)) continue;
+    let gap = 0; for (let k = 0; k < 15; k++) { if (crFenceOnAny(B, ex + sx * k, ey + sy * k)) { gap = k; break; } }
+    const PX = (horiz ? (end ? f.x0 + n : f.x0) : f.x0) * 16, PY = (horiz ? f.y0 : (end ? f.y0 + n : f.y0)) * 16;
+    g.fillStyle = crSh(col, -0.45);   // gate / end post, a bit taller
+    if (horiz) g.fillRect(PX - 1.5, PY + 13 - h - 3, 3, h + 3); else g.fillRect(PX + 9 - 3, PY - 1.5, 5, 3);
+    if (!gap) continue;
+    g.save();
+    const leaf = Math.min(gap, 3) * 16 * (gap <= 3 ? 0.9 : 0.5), ang = (gap <= 3 ? 1.15 : 1.35) * (end ? 1 : -1);
+    g.translate(horiz ? PX : PX + 9, horiz ? PY + 11 : PY);
+    g.rotate(horiz ? (end ? -ang : Math.PI + ang) * -1 + (end ? 0 : Math.PI) : Math.PI / 2 + (end ? -ang : ang));
+    g.fillStyle = "rgba(0,0,0,0.2)"; g.fillRect(2, 1, leaf, 3);
+    g.fillStyle = kind === "chain" ? crA(col, 0.85) : col; g.fillRect(0, -1.5, leaf, 3);
+    g.fillStyle = crSh(col, -0.3); g.fillRect(0, -1.5, leaf, 0.8); g.fillRect(leaf - 1.5, -2, 1.5, 4);
+    g.restore();
+    if (gap > 3) {   // the far post of a wide (vehicle) gate
+      const FX = PX + sx * gap * 16, FY = PY + sy * gap * 16;
+      g.fillStyle = crSh(col, -0.45); if (horiz) g.fillRect(FX - 1.5, FY + 13 - h - 3, 3, h + 3); else g.fillRect(FX + 6, FY - 1.5, 5, 3);
+    }
+  }
 }
 
 /* --- litter of an evacuated city ---------------------------------------------- */
@@ -1039,7 +1186,7 @@ function crBake(rx, ry) {
       for (const s of B.surf) if (s.x1 >= tx0 - 3 && s.x0 <= tx1 + 3 && s.y1 >= ty0 - 3 && s.y0 <= ty1 + 3) surfs.push(s);
       for (const b of B.blds) if (b.x + b.w >= tx0 - 1 && b.x <= tx1 + 1 && b.y + b.h >= ty0 - 1 && b.y <= ty1 + 1) blds.push(b);
       for (let pi = 0; pi < B.props.length; pi++) { const p = B.props[pi]; if (p.t === "tree" || p.x + p.w < tx0 - 4 || p.x > tx1 + 4 || p.y + p.h < ty0 - 4 || p.y > ty1 + 4) continue; if (cityRT.used.has(B.key + "|" + pi)) continue; props.push(p); }
-      for (const f of B.fences) if (f.x1 >= tx0 - 1 && f.x0 <= tx1 + 1 && f.y1 >= ty0 - 1 && f.y0 <= ty1 + 1) fences.push(f);
+      for (const f of B.fences) if (f.x1 >= tx0 - 1 && f.x0 <= tx1 + 1 && f.y1 >= ty0 - 1 && f.y0 <= ty1 + 1) { f._B = B; fences.push(f); }
     }
     surfs.sort((a, b) => (CR_SURF_ORDER[a.t] || 0) - (CR_SURF_ORDER[b.t] || 0));
     for (const s of surfs) crSurface(g, s);
@@ -1051,7 +1198,7 @@ function crBake(rx, ry) {
     const P = CITY.theme.fu, fam = crFam(), st = P.style;
     for (const b of blds) {
       const G = b.int;
-      for (const f of G.furn) { if (b.x + f.x + f.w < tx0 - 1 || b.x + f.x > tx1 + 1 || b.y + f.y + f.h < ty0 - 1 || b.y + f.y > ty1 + 1) continue; crFurn(g, f, b, P, fam, st); }
+      for (let fi = 0; fi < G.furn.length; fi++) { const f = G.furn[fi]; if (b.x + f.x + f.w < tx0 - 1 || b.x + f.x > tx1 + 1 || b.y + f.y + f.h < ty0 - 1 || b.y + f.y > ty1 + 1) continue; if (cityRT.used.has(b.uid + ":f" + fi)) continue; crFurn(g, f, b, P, fam, st); }
     }
     for (const f of fences) crFence(g, f);
     for (const p of props) if (p.t !== "stall" && p.t !== "streetlight" && p.t !== "pole") crProp(g, p, cH(CITY.seed, p.x | 0, p.y | 0, 5));
@@ -1084,6 +1231,15 @@ function cityRenderGround(left, top, vw, vh) {
     if (t) t.used = CR.frame; else (need || (need = [])).push([rx, ry, (rx - pcx) * (rx - pcx) + (ry - pcy) * (ry - pcy)]);
   }
   const t0 = performance.now();
+  if (CR.stale && CR.stale.size) {   // v14.1: stale tiles re-bake first (at least one per frame), old art stays up meanwhile
+    let n = 0;
+    for (const k of CR.stale) {
+      if (n > 0 && performance.now() - t0 > CR.bakeBudget) break;
+      const t = CR.tiles.get(k); CR.stale.delete(k);
+      if (!t) continue;
+      t.c = crBake(Math.floor(k / 65536), k % 65536); t.used = CR.frame; n++;
+    }
+  }
   if (need) {
     need.sort((a, b) => a[2] - b[2]);
     for (let i = 0; i < need.length; i++) {
@@ -1152,6 +1308,8 @@ function crLiveLayer(left, top, vw, vh) {
     if (X > left + vw + 40 || X + len < left - 40 || Y > top + vh + 40 || Y + len < top - 40) continue;
     crDrawDoor(ctx, D, X, Y, len, T, fam);
   }
+  if (typeof vehRenderLayer === "function") vehRenderLayer(ctx, left, top, vw, vh);   // v14.1 live vehicles, debris, skid marks
+  if (typeof accRenderRoofUnder === "function") accRenderRoofUnder();                  // v14.1 the roof you stand on
 }
 function crDrawDoor(g, D, X, Y, len, T, fam) {
   const open = Math.max(0, Math.min(1, D.open)), hx = D.axis === "x";
@@ -1303,11 +1461,14 @@ function crViewBuildings(left, top, vw, vh) {
 }
 function cityRenderOverlay() {
   if (!CITY.on || !player) return;
-  const viewW = (W / opts.zoom) + 140, viewH = (H / opts.zoom) + 140, left = player.x - viewW * 0.5, top = player.y - viewH * 0.5;
+  const CV = typeof camView === "function" ? camView(140) : null;
+  const viewW = CV ? CV.vw : (W / opts.zoom) + 140, viewH = CV ? CV.vh : (H / opts.zoom) + 140, left = CV ? CV.left : player.x - viewW * 0.5, top = CV ? CV.top : player.y - viewH * 0.5;
   const list = crViewBuildings(left, top, viewW, viewH), dt = Math.min(0.05, (typeof frameDt === "number" ? frameDt : 0.016));
   const seenRoof = cityVis.roof, pb = cityVis.pBid, late = [];
+  const under = typeof ACC !== "undefined" && player.roof ? ACC.drawnRoofs : null;   // v14.1: already drawn under the characters
   for (const b of list) {
     if (b.canopy) { late.push(b); continue; }
+    if (under && under.has(b.uid)) continue;
     const tgt = b.uid === pb ? 0 : 1;
     let a = CR.roofA.get(b.uid); if (a === undefined) a = tgt;
     a += (tgt - a) * Math.min(1, dt * 9); if (Math.abs(tgt - a) < 0.01) a = tgt;
@@ -1332,6 +1493,8 @@ function cityRenderOverlay() {
     crDrawRoof(b, a);
     if (a > 0.4) crLabel(b, a);
   }
+  ctx.globalAlpha = 1;
+  if (typeof accRenderOverlay === "function") accRenderOverlay(list);   // v14.1 entrances, ladders, gesture reticle
 }
 function crFog(left, top, vw, vh) {
   const V = cityVis;
