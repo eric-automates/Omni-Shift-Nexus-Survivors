@@ -1,10 +1,10 @@
 # FILE: info.md
 # PART: 1 of 14
-# DETAIL: Master design document, updated for v14 (2026-10-31). Covers what the game is now, everything built so far (v8.x → v14), how much of the Version 9.0 plan is done, and the roadmap for future iterations, including realism and cool-factor ideas. The architecture and execution diagrams are in flowchart.md.
+# DETAIL: Master design document, updated for the v14.1 patch (2026-10-31). Covers what the game is now, everything built so far (v8.x → v14.1), how much of the Version 9.0 plan is done, and the roadmap for future iterations, including realism and cool-factor ideas. The architecture and execution diagrams are in flowchart.md.
 
 ---
 
-## 1. What the game is (current state, v14)
+## 1. What the game is (current state, v14.1)
 
 **OMNI-SHIFT: NEXUS SURVIVORS** is a touch-first multiverse survival roguelike built on HTML5 Canvas. It runs in mobile WebViews and desktop browsers and is played live on GitHub Pages.
 
@@ -13,7 +13,7 @@
   - Every high-frequency entity lives in pre-allocated Structure-of-Arrays typed-array pools: enemies, projectiles, orbs, particles, blood drips, severed limbs, corpses, bisected halves, squad and minion allies, Force-persuaded allies and rewind keyframes.
   - The sim runs at 60 FPS with sub-steps.
   - The HUD updates in place, so taps never drop.
-- **Modular code:** 32 files.
+- **Modular code:** 36 files.
   - **Core:** index.html, css/style.css.
   - **Data:** `chaos.js`, `data-factions.js`, `data-heroes.js`, `data-relics.js`.
   - **Engine:** `state.js`, `world.js`, `combat.js`, `sim.js`, `render.js`.
@@ -22,6 +22,7 @@
   - **v12 modules:** `showdown.js`, `creator.js` (rewritten as Creator v2 in v13).
   - **v13 modules:** `sense.js` (Threat Sense), `force.js` (Force Persuasion + Yoda's powers).
   - **v14 modules (Nexus City):** `citygen.js` (world generator), `cityworld.js` (chunks, collision, doors, sight), `citythemes.js` (14 universe looks), `cityrender.js` (baked city painter, roofs, fog), `stealth.js` (hearing, AI, director), `enemylook.js` (48 enemy rosters), `cityplay.js` (engine integration, cars), `vision.js` (per-hero senses), `minimap.js` (minimap, map, markers).
+  - **v14.1 modules:** `vehicles.js` (rigid-body vehicles, crumple damage, parts, fuel, driving), `convoy.js` (squad seats, gunners, tactical convoy), `cityaccess.js` (entrances, ladders, roofs, fence crossing, tap gestures, eye height), `hudlayout.js` (HUD layout manager + options).
   - **UI:** `ui.js`.
   - Feature modules plug in through the `V10` hook lists:
     - `onRunStart` / `onRunReset`
@@ -272,9 +273,39 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 - Markers ride the minimap edge while far, sit on the minimap when in range, and become a coloured beacon (plus edge arrow) on the main screen within ~160 m. From the main menu the map picks the drop zone.
 
 ### 2.15 Vehicles, caches & districts (new in v14)
-- **F** next to a parked car drives it (themed vehicle, ~4× speed, too wide for doorways, rams enemies, loud engine); it stays parked where you leave it.
+- **F** next to a parked car drives it (themed vehicle, too wide for doorways, loud engine); it stays where you leave it. Since v14.1 every vehicle is a real rigid body — see §2.16.
 - Supply caches inside buildings heal and give XP. City kills are worth 30 % more XP.
 - Threat Sense and the HUD follow the district (Suburbs ×1.15 … Downtown ×1.85); arena biome hazards are off in the city.
+
+### 2.16 Vehicles — physics, crashes & damage (v14.1)
+- **Every vehicle drives (23 kinds):** sedans, police cruisers (light bar), pickups, SUVs, the universe rides (landspeeder, spinner, hovercar, ornithopter, death glider, mule, Rhino, APC, rusted wreck-runner, flying Anglia), wagons, stagecoaches and carts (horses = stamina instead of fuel), buses, **the army trucks of the evacuation roadblocks**, tractors, semis, fire engines (inside fire stations), forklifts (warehouses) and garage cars (the garage door rolls up when you get in).
+- **Live rigid bodies:** a parked prop / furniture vehicle is *promoted* to a live body the moment it's entered, hit, shot or caught in a blast — exactly where and as it was parked; its tile collision is cleared and the art re-bakes without a flash. Bicycle steering model (speed-sensitive), tyre grip, hover kinds slide and cross water.
+- **Collisions:** deformed-perimeter samples against walls / props; OBB–OBB separating-axis tests between vehicles with impulses (mass matters: a bus shoves a car, a parked car with locked wheels resists). Cars never merge any more.
+- **Crumple zones:** damage depends on where the hit lands — 24 perimeter cells dent inwards (front / rear up to 22 % of the length, sides 18 %), the sprite deforms, glass cracks then breaks. A 50 km/h wall hit costs a sedan ~21 % structure and tears off the bumper and a light — **never dead on the first hit**, but three more 80 km/h hits kill it.
+- **Attachment points:** bumpers, hood, trunk / tailgate, doors, mirrors, lights, glass, wheels / pods, sunroof, light bar, canvas cover, forks, wings, tracks and horses each have their own HP; past it they **fall off and stay on the road** (from crashes *and* from enemy fire, blades and blasts).
+- **Damage from everything:** bumping a person (a little), bullets (holes, part hits, glass; rounds through glass or a missing door reach the occupants), melee bashing, saber cuts (glowing slashes), blasts (push + damage), the Force (push), fire. Engine smoke < 35 %, black smoke < 15 %, 0 = disabled; a disabled vehicle may burn → explodes after ~7 s (debris, scorch, chain reactions). The driver bails out automatically when it burns; riders get out with you.
+- **Noise:** engines, horns, crashes and explosions feed the v14 hearing model (a car is loud).
+- **Controls:** F in / out · point-to-steer (push where you want to go, pull back = reverse) or classic W/S + A/D (Options) · Space / X handbrake · H horn (+ squad mount-up) · touch HB / horn buttons on phones · speed in mph or km/h (Options).
+
+### 2.17 Fuel & gas stations (v14.1)
+- Each vehicle starts with 15–85 % (parked cars aren't full); use ∝ throttle (~9–10 % per minute flat out). The gauge shows the universe's fuel name (FUEL CELL, REPULSOR FUEL, NAQUADAH, PROMETHIUM, GUZZOLINE, HORSES…).
+- Stop next to a pump (≤ 2.5 m) to refill at 8 %/s (horses: water & hay). Convoy vehicles refuel at the same stop. Below half a tank the minimap shows stations; below 30 % an arrow points to the nearest. Coverage check: every land class has a station within ~3 km.
+
+### 2.18 Squad riders & tactical convoys (v14.1)
+- **Mount up:** when you get in (or press H), followers within ~44 m board: gunners take window / bed / hatch / sunroof seats, a hound rides with its head out of the window, a bone golem goes in the bed. Riders lean out and shoot **only on their side**; a missing door shows the whole rider; a sunroof (35 % of sedans, 50 % of SUVs) or hatch puts a gunner up top. Allies (Force-persuaded) ride too.
+- **Overflow → convoy:** riders who don't fit take the nearest drivable vehicles and follow your exact path (pure pursuit on your trail). Doctrine (FM 55-65, US Army Tactical Convoy Handbook, ANA/FM 4-01.45): close column in towns, interval ≈ 2 × speed (mph) in metres scaled to the screen (8 m town / 14 m open, cap 30 m, tighter under fire), catch-up speed, lead 12 o'clock · alternating 9 / 3 · trail 6 o'clock gun sectors, drive through the kill zone, **herringbone** at halts (alternate 45° pull-offs, road kept clear), **cross-load** from disabled vehicles; crews with no seats hold the spot with a map marker until picked up. Stuck recovery, unpark manoeuvres and three look-ahead feelers keep them out of parked cars.
+
+### 2.19 Doors, roofs, fences & eye height (v14.1)
+- **Entrances you can see:** every exterior door has a step, frame, porch light and an arrow; garages and loading bays too; EXIT markers inside.
+- **Roofs:** every building has a ladder (grav-lift in sci-fi looks) — **F** to climb. On a roof you see 25 % further and over everything, the street can see you, the room below can't; melee hunters climb after you and come down when you do. Mobility classes per hero (tele / jet / leap / climb / giant / smash / none): climbers pull themselves up without a ladder.
+- **Teleport / leap gestures:** double-tap a building = inside (apparate) or dive through a window (leapers / jetpacks), **triple-tap = roof**; tapping the street from a roof drops you there.
+- **Fences:** drawn tall in every look (wood / durasteel privacy panels, chain-link with a crisp diamond mesh — barbed wire in industrial blocks — pickets, stone garden walls, hedges), with gates. Leapers vault, jetpacks fly over, climbers scale, teleporters phase, the half-giant steps over, the T-800 and Vader smash through; heroes without mobility use gates.
+- **Sight through fences:** privacy fences, hedges and stone walls block sight (that's the grey beyond them); chain-link and pickets don't. **Eye height:** from a tall cab (bus, army truck, fire engine, semi, tractor, APC / Rhino hatch, stagecoach box), on a jetpack, as the half-giant or at the top of a leap you see over those ~2 m obstacles — and can be seen.
+
+### 2.20 HUD layout manager (v14.1)
+- A solver places 12 HUD elements (health bar, EXECUTE, vehicle gauge, minimap, stealth pill, squad radio, minimap buttons, tips, district banner, debug / music, music toast, FPS) by priority so **nothing ever overlaps** — verified at 7 screen sizes from 360 × 740 phones to 1080p, while driving with a tip, EXECUTE and the toast up. Lower-priority items shrink first (each down to its own minimum), then hide-able items step aside.
+- **Options → HUD LAYOUT:** priority order (▲▼), **Don't shrink** per item, Hide per item, overall HUD size, auto-compact on phones, live preview.
+- The world shows only an **F / TAP keycap** over the thing you can use; the full prompt lives in one HUD button (no duplicate text).
 
 ---
 
@@ -289,7 +320,8 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 | **v11** (`6095850`) | Lightsaber Form Engine (no more spinning; canon Forms; film progression per hero). 17 new royalty-free tracks → 20-track soundtrack with credits. |
 | **v12** (`1bfed0e` … `9ccf8e0`) | Custom Hero Creator #80 (single / staff / dual sabers, hilt selector, 10 colours, Form paths, species). Rival Showdown. Always-on EXECUTE with rank targeting and chains. Film hilts for canon saber heroes. Darksaber. Proving Ground 14 actions. |
 | **v13** (`65c212e`) | **Threat Sense** meter (per-hero style, distance-scaled rival / Titan clocks, edge arrow). **Force Persuasion** (light-side Force users turn enemies into allies). **Yoda:** Force Lift & Hurl, Ataru bounding, **Will of the Force**, Tutaminis. **Hero Creator v2:** any character — 26 weapons, twins with own cylinders / targets, 2 skills, gear, mobility, armor, headgear, **jetpack flight**, 8 presets, v12 migration. |
-| **v14** (this update) | **Nexus City:** generated 64 × 64 km region with 55 settlements, interstates and thousands of enterable single-storey buildings with full interiors; 14 universe looks; line-of-sight fog and roofs; **stealth AI** with realistic hearing (walls, doors, suppressors, ricochets, glass), director, street patrols and hunters; **48 detailed enemy rosters** (city and arena); **per-hero vision** (16 senses); minimap, full map, markers & notes, drop zone; drivable cars; supply caches; district threat; 18-test suite. |
+| **v14** (`74a5b73`) | **Nexus City:** generated 64 × 64 km region with 55 settlements, interstates and thousands of enterable single-storey buildings with full interiors; 14 universe looks; line-of-sight fog and roofs; **stealth AI** with realistic hearing (walls, doors, suppressors, ricochets, glass), director, street patrols and hunters; **48 detailed enemy rosters** (city and arena); **per-hero vision** (16 senses); minimap, full map, markers & notes, drop zone; drivable cars; supply caches; district threat; 18-test suite. |
+| **v14.1 patch** (this update) | **Vehicles:** every vehicle drivable (incl. roadblock army trucks, buses, semis, fire engines, forklifts, garage cars), rigid-body collisions, location-based crumple zones, detachable parts, damage from every source, fire & explosions; **fuel** with themed stations. **Squad riders** shooting from their side, sunroof / hatch gunners, **doctrine convoys** (intervals, sectors, herringbone, cross-load, hold markers). **Visible doors, roofs** (ladders, tap gestures), **tall fences** by hero mobility, **eye-height** vision. **HUD layout manager** (no overlaps, priority / Don't shrink options). Fix: interiors are now repeatable (a random-comparator sort made ~1 % of buildings re-furnish differently after cache evictions). 20-test suite. |
 
 ---
 
@@ -321,10 +353,11 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 1. **Civilians & evacuation** (the city is evacuated "for now"): stragglers to escort, convoys, rescue objectives; enemies that take hostages.
 2. **Day / night & lighting:** street lamps, flashlights, lit windows; night vision for the heroes who have it; stealth bonus in the dark.
 3. **Smarter squads:** enemies that use cover, flank around buildings, breach doors, throw grenades through windows, radio for backup (reinforcement trucks on the roads).
-4. **Destructible city:** doors that can be kicked / blown, walls that crumble to rockets, cars that explode.
-5. **Traffic & mounts:** AI vehicles on the interstates, horses / speeder bikes, fast travel between towns you've discovered.
-6. **Missions on the map:** caches marked by intel, bounties, a Titan lair downtown, capture the city hall.
-7. **The v13 list still stands:** dark-side "Fear", ally orders, saber-vs-saber showdowns, Creator part 3, Form-specific Force powers, the rest of the v9.0 roster, DPS telemetry, Memory Purge screen, Proving Ground batch mode.
+4. **Destructible city:** doors that can be kicked / blown, walls that crumble to rockets (cars that crumple, burn and explode: ✅ v14.1).
+5. **Enemy vehicles & traffic (v14.1 follow-up):** enemies that drive — pursuit cars, manned roadblocks, technicals with mounted guns, reinforcement trucks that unload a squad; AI traffic on the interstates; speeder bikes; fast travel between discovered towns.
+6. **Vehicle follow-ups:** repair at a garage / fire station bay (re-hang doors and bumpers), mounted weapons (turrets on APCs, the Rhino's storm bolter) crewed by a squad gunner, towing a wreck clear with a truck, two-storey buildings with stairs (roof → upper floor).
+7. **Missions on the map:** caches marked by intel, bounties, a Titan lair downtown, capture the city hall.
+8. **The v13 list still stands:** dark-side "Fear", ally orders, saber-vs-saber showdowns, Creator part 3, Form-specific Force powers, the rest of the v9.0 roster, DPS telemetry, Memory Purge screen, Proving Ground batch mode.
 
 ### 5.2 Showdown, EXECUTE and ally follow-ups (after playtesting)
 - Rival intro variations: the rival Force-chokes or shoots the challenger from range; a bounty hunter tosses a thermal detonator into the crowd; two challengers at higher difficulties.
@@ -395,7 +428,12 @@ The goal is to make the player *feel like the character* while the game stays a 
   - Execution-style abilities should also skip staggered enemies (`eStagger[j] > 0`).
 - **EXECUTE API:** `gloryRequest()` (button / E key / Proving Ground), `gloryRank(i)`, `gloryState.best / inRange / queued / chain`.
 - **Saves:** the `localStorage` key `OMNISHIFT_META_V1` holds `chars`, `selChar`, `outfits`, `custom` (v2 since v13), `campaign`, `stages`, `cleared`, the Dark Matter totals and options.
-- **Cache-busting:** every script tag carries `?v=v13-2026-10-28`; bump it on each release so GitHub Pages serves fresh files.
+- **v14.1 vehicles (`js/vehicles.js`):** `VEH` (`list`, `me`, `camZoom`), `VK` specs, `VSEATS` seat layouts (`d` driver · `w` window · `m` middle · `b` bed · `r` roof gunner — sunroof or hatch · `t` tail, rear-facing), `vehNew(kind, x, y, ang, L, D, o)`, `vehPromoteProp` (key `B.key|pi`) / `vehPromoteFurn` (key `b.uid:f<index>`), `cityRT.used`, `vehQueueRebuild` (rebuilds every chunk a footprint overlaps), `vehDamage(v, lx, ly, dv, type, nx, ny, src)` with types crash / person / bullet / blast / melee / scrape, `vehDetach`, `vehExplode`, `vehEnter` / `vehExit(forced)`, `vehProjHit` (projectiles), `vehNearestStation`. Damage paths in `sim.js` (melee ~L1264, bolts ~L1376) call into it; `cityCircleBlocked` / `cityResolve` are wrapped so live bodies block people.
+- **v14.1 convoy (`js/convoy.js`):** `mSeat` / `mBoard` / `mHold` per minion, `convoyMinionStep` (called from `squadMinionsSim`), `convoyHoldPoint`, `convoyOnExit`, `convoyEjectAll`, `CONVOY.vehicles`, `CV_MOUNT_R` = 1400 px.
+- **v14.1 access (`js/cityaccess.js`):** `ACC_MOB` (mobility class per hero), `accMob()`, `accEyeHigh()` + `accLOSHigh()` (the `cityLOS` wrapper uses it when the hero's head is above ~2 m obstacles; `cityComputeVis` treats `K_LOWSIGHT` kinds as transparent then), `player.roof`, `accRoofSeen`, ladders `accLadders(b)`, gestures through `executeHeroDash`.
+- **v14.1 HUD (`js/hudlayout.js`):** `HUDL_DEF` (id, label, prio, min, hideable), `opts.hud = { auto, scale, order, keep, hide }`, `HUDL.rects`, `HUDL.overlaps`, `HUDL.topH`; fx banners sit below `HUDL.topH`, the stealth pill reads `HUDL.stealthY / stealthS`.
+- **Generator determinism rule:** never shuffle with `arr.sort(() => r() - 0.5)` — V8's sort with an inconsistent comparator is not repeatable, which made ~1 % of interiors differ after a block-cache eviction (mismatched chunk seams, invalid furniture keys). Use `cShuffle(r, arr)` (seeded Fisher–Yates) in `citygen.js`.
+- **Cache-busting:** every script tag carries `?v=v14.1-2026-10-31`; bump it on each release so GitHub Pages serves fresh files.
 - **Testing:**
-  - The in-game **Debug All · Proving Ground** covers 14 live actions.
+  - The in-game **Debug All · Proving Ground** covers 14 live actions (v14.1: the squad-regroup and time-rewind checks poll instead of taking a single sample, so they no longer fail on a slow frame).
   - The offline QA suites used for each release (not part of the repo) cover the Form Engine, showdowns, the creator (v12 + v13), Threat Sense, allies and Yoda, all 81 heroes plus the 8 creator presets, and 3-minute soak runs.

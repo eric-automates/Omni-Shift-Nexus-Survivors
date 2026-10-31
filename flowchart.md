@@ -1,6 +1,6 @@
 # FILE: flowchart.md
 # PART: 2 of 14
-# DETAIL: Current State Architecture & Execution Flowcharts (v14, 2026-10-31) — boot, menus, Hero Creator v2, run start, the 60 FPS loop, simulation (Threat Sense clocks, Force-persuaded allies, Yoda's powers), Saber Form Engine, Rival Showdown, glory kills / EXECUTE, rendering and end of run. Feature descriptions live in info.md.
+# DETAIL: Current State Architecture & Execution Flowcharts (v14.1 patch, 2026-10-31) — boot, menus, Hero Creator v2, run start, the 60 FPS loop, simulation (Threat Sense clocks, Force-persuaded allies, Yoda's powers), Saber Form Engine, Rival Showdown, glory kills / EXECUTE, Nexus City, vehicles & convoys, roofs / fences / eye height, the HUD layout manager, rendering and end of run. Feature descriptions live in info.md.
 
 ## 1. Whole-game flow
 
@@ -66,13 +66,13 @@ flowchart TD
     US --> RS["renderScene()"]
     RW --> RS
     RS --> HUD["updateHUD(): in-place DOM (weapons, skills, dash, limbs, spellbar)"]
-    HUD --> OF["V10.onFrame hooks: EXECUTE button state, Threat Sense HUD meter, fx banners, proving panel, music UI"]
+    HUD --> OF["V10.onFrame hooks: EXECUTE button state, Threat Sense HUD meter, fx banners, proving panel, music UI; v14.1: vehicle gauge, HUD layout solver"]
     OF --> LP
   end
 
   %% === 6. SIMULATION STEP ===
   subgraph SIM["6. updateSim() - ONE STEP"]
-    US --> S1["Input + movement + obstacles (city: wall collision, sneak speed, cars) + biome hazards (player.flying skips obstacles)"]
+    US --> S1["Input + movement + obstacles (city: wall collision, sneak speed; v14.1: vehDriveInput when driving, accRoofMove on a roof) + biome hazards (player.flying skips obstacles)"]
     S1 --> S2["Auto-aim: nearest on-screen enemy, skips staggered elites, the showdown crowd and allies"]
     S2 --> S3["Hand-slot loop (armCap)"]
     S3 -->|lightsaber / sword| SF["saberEngineStep(): guard -> wind-up -> strike -> recover, swept collision, deflect + redirect"]
@@ -88,7 +88,7 @@ flowchart TD
     EN2 --> EN3["formations + ChaosMath steering (brawl with an ally within 62 px) + firing + contact damage"]
     EN3 --> PRJ["Projectile loop (MAX_P = 520): hits, deflection, ricochet, homing"]
     PRJ --> ORB["XP orbs -> triggerLevelUp() (#scrLevel, twin sabers get separate cards)"]
-    ORB --> STEP["V10.onStep hooks: glory, showdown, Threat Sense (bands, cues), Force (persuade, Yoda lift / Will), creator kit (detonators, chokes), rewind, fx, squads, campaign, proving"]
+    ORB --> STEP["V10.onStep hooks: glory, showdown, Threat Sense (bands, cues), Force (persuade, Yoda lift / Will), creator kit (detonators, chokes), rewind, fx, squads, campaign, proving; v14.1: vehicle physics + fuel + noise, convoy AI, roof / fence / ladder steps, eye height"]
   end
 
   %% === 7. KILL PIPELINE ===
@@ -308,4 +308,94 @@ flowchart LR
   MINI --> NEAR{"within ~160 m?"}
   NEAR -- yes --> BEAM["beacon on the main screen<br/>(edge arrow when off-screen)"]
   NEAR -- no --> MINI
+```
+
+## 12. A vehicle's life (js/vehicles.js, v14.1)
+
+```mermaid
+stateDiagram-v2
+  [*] --> Parked: prop / interior furniture, baked into the tile (K_CAR collision)
+  Parked --> Live: entered (F) / hit / shot / blast / picked by the convoy
+  Live --> Live: rigid body, crumples where it is hit, parts fall off, sleeps when still
+  Live --> Smoking: structure below 35 %
+  Smoking --> Disabled: structure 0 (engine dead)
+  Disabled --> Burning: fire roll (explosive kinds always)
+  Burning --> Wreck: ~7 s, explodes (debris, scorch, blast, chain reactions)
+  Disabled --> Disabled: crew dismounts, convoy cross-loads / holds
+  Wreck --> [*]: burnt shell stays where it died
+  note right of Live
+    promotion clears the tile stamp in every chunk the footprint overlaps
+    and re-bakes the art stale-while-rebake (no flash)
+  end note
+```
+
+## 13. One hit on a vehicle (vehDamage)
+
+```mermaid
+flowchart TD
+  SRC["crash (Δv at the contact) · person · bullet · blast · melee / saber · scrape"] --> LOC["local hit point + normal on the deformed perimeter"]
+  LOC --> HP["structure: (Δv − 96)·0.075·armour for crashes; per-type amounts for the rest"]
+  LOC --> DENT["crumple the nearest of 24 perimeter cells (front / rear ≤ 22 % of the length, sides ≤ 18 %)"]
+  LOC --> PART{"part under the hit point?"}
+  PART -- "bumper / hood / door / mirror / light / wheel / sunroof / light bar / canvas…" --> PHP["part HP − damage (bumpers absorb 80 %)"]
+  PHP -- "≤ 0" --> OFF["part falls off and stays on the road"]
+  PART -- glass --> GL["crack → break (2.5D: shots from the front reach the windshield)"]
+  GL --> OCC["rounds through broken glass / a missing door hurt the occupants"]
+  HP --> STATE["smoke < 35 % · black smoke < 15 % · 0 = disabled → maybe fire"]
+  DENT --> SPR["sprite re-drawn dented (sprDirty)"]
+```
+
+## 14. Squad riders & the tactical convoy (js/convoy.js, v14.1)
+
+```mermaid
+flowchart TD
+  IN["hero gets in (F) or presses H"] --> NEAR["followers within ~44 m, ranked: golem > gunners > others"]
+  NEAR --> SEAT{"a fitting seat in my vehicle?"}
+  SEAT -- "window / bed / roof (sunroof, hatch) / tail / middle" --> RIDE["board through the nearest clear door → ride, lean out, shoot on their side"]
+  SEAT -- full --> CAND["nearest drivable vehicles (not boxed in) → driver + crew"]
+  CAND --> COL["column: pure pursuit on my trail · interval max(8 m town / 14 m open, 0.6 m per mph) ≤ 30 m (×0.8 under fire) · catch-up speed · feelers avoid parked cars"]
+  COL --> HALT{"I stop?"}
+  HALT -- yes --> HB["herringbone: alternate 45° pull-offs, road kept clear; refuel together at a pump"]
+  HALT -- no --> COL
+  COL --> HIT{"convoy vehicle disabled?"}
+  HIT -- yes --> XL["cross-load into seats left in the column"]
+  XL -- no seats --> HOLD["hold the spot + map marker until picked up"]
+  COL --> STUCK{"no progress for 3 s?"}
+  STUCK -- yes --> REC["reverse away from the blocked side · off-screen: snap to a clear spot"]
+  OUT["hero gets out / bails out"] --> DIS["everyone dismounts (security 5 / 25 m)"]
+```
+
+## 15. Fences, roofs & eye height (js/cityaccess.js, v14.1)
+
+```mermaid
+flowchart TD
+  F["hero walks into a fence"] --> CLS{"mobility class (ACC_MOB)"}
+  CLS -- tele --> PH["phase through"]
+  CLS -- "jet / leap" --> VAULT["vault / fly over (eyes above the fence mid-leap)"]
+  CLS -- climb --> SCALE["climb over (slower)"]
+  CLS -- giant --> STEP["step over"]
+  CLS -- smash --> BREAK["smash through (section stays open)"]
+  CLS -- none --> GATE["blocked: use a gate"]
+  R["building"] --> LAD["ladder / grav-lift: F"]
+  R --> TAP["teleporter / leaper taps: 2× = inside / window dive, 3× = roof"]
+  LAD --> ROOF["on the roof: sight +25 % over everything; street sees you, room below doesn't; melee hunters climb after you"]
+  TAP --> ROOF
+  EYE{"accEyeHigh: tall cab · jetpack · half-giant · leap apex"} -- yes --> SEE["privacy fences, hedges, stone walls transparent for sight both ways"]
+  EYE -- no --> GREY["they block sight (grey beyond); chain-link and pickets never do"]
+```
+
+## 16. HUD layout manager (js/hudlayout.js, v14.1)
+
+```mermaid
+flowchart LR
+  OPT["Options → HUD LAYOUT: order ▲▼ · Don't shrink · Hide · size · auto-compact"] --> PRIO["12 items by priority (top bar 100 … FPS 6)"]
+  VIEW["viewport W×H → density clamp(min(W,H)/640, 0.78, 1)"] --> PLACE
+  PRIO --> PLACE["place in zones: top bar, corners, bottom-centre column"]
+  PLACE --> OV{"any overlap?"}
+  OV -- yes --> SHR["shrink the lowest-priority overlapping item (not 'Don't shrink') toward its minimum"]
+  SHR --> HIDE{"still overlapping at the minimum?"}
+  HIDE -- yes --> MOVE["hide-able items step aside / hide"]
+  HIDE -- no --> PLACE
+  MOVE --> PLACE
+  OV -- no --> OUT["HUDL.rects → DOM + canvas banners (below HUDL.topH), stealth pill, minimap"]
 ```

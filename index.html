@@ -7,7 +7,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>OMNI-SHIFT: NEXUS SURVIVORS</title>
-<link rel="stylesheet" href="css/style.css?v=v14-2026-10-31">
+<link rel="stylesheet" href="css/style.css?v=v14.1-2026-10-31">
 <!-- PRE-BOOT BULLETPROOF DOM GUARD & LIVE DEBUGGER -->
 <script>
 (function() {
@@ -309,6 +309,19 @@
     <div style="max-width:355px;margin:4px auto;display:flex;flex-direction:column;gap:8px;width:100%">
 
       <div class="hud-guide-box">
+        <div class="guide-title">NEW IN v14.1 · VEHICLES, CONVOYS, ROOFS & A HUD THAT NEVER OVERLAPS</div>
+        <div class="card-desc" style="line-height:1.45">
+          <b style="color:#ffab40">🚗 Every vehicle drives</b> — cars, police cruisers, pickups, SUVs, buses, the army trucks of the roadblocks, tractors, semis, fire engines in their stations, forklifts, garage cars (the door opens) and every universe's ride. Push where you want to go (pull back = reverse) or switch to classic W/S + A/D in Options · <b>Space</b> handbrake · <b>H</b> horn · <b>F</b> in / out.<br>
+          <b style="color:#ff5252">💥 Real crashes</b> — vehicles are solid and heavy (a bus shoves a car). Hits crumple the body where they land; bumpers, hood, doors, mirrors, lights, glass and wheels tear off and stay on the road. Not dead on the first hit — but hit enough and it smokes, dies, burns and blows up. People, bullets, blasts, melee, sabers and the Force all count.<br>
+          <b style="color:#69f0ae">⛽ Fuel</b> — the gauge ticks down with the throttle; stop next to a pump (TIBANNA FUEL, VOLT CHARGE, STABLES…) to refill. Below half a tank the minimap shows the stations, below 30 % it points to the nearest one.<br>
+          <b style="color:#c5e1a5">📻 Your squad rides</b> — they mount up when you get in, lean out of their windows (or stand in the bed / pop out of the sunroof) and shoot on their side. Too many? They split into nearby vehicles and follow you in a real tactical convoy: close column with speed-based intervals, catch-up speed, sectors (lead 12 · 9 / 3 · trail 6 o'clock), drive through ambushes, herringbone at halts, cross-load from disabled vehicles. <b>H</b> = mount up.<br>
+          <b style="color:#ffe082">🚪 Doors you can see</b> — every entrance has a step, frame, porch light and an arrow; garages and loading bays too; EXIT markers inside.<br>
+          <b style="color:#80deea">🏠 Roofs & fences</b> — every building has a ladder / grav-lift (<b>F</b>). Teleporters: <b>double-tap a building = inside, triple-tap = roof</b>; jetpacks and leapers dive through a window or land on the roof. Fences are tall now: leapers vault them, climbers scale them, the T-800 and Vader go straight through. Privacy fences, hedges and garden walls hide what's behind them (chain-link and pickets don't) — unless your eyes are above them: a bus / truck / tractor cab, a jetpack, Hagrid's height or the top of a leap (and then you can be seen too).<br>
+          <b style="color:#b0bec5">🧩 HUD layout</b> — nothing overlaps on any screen. Options → HUD LAYOUT: set the priority order (▲▼), tick <i>Don't shrink</i>, hide items, set the HUD size, live preview.
+        </div>
+      </div>
+
+      <div class="hud-guide-box">
         <div class="guide-title">NEW IN v14 · NEXUS CITY — A 64 × 64 KM WORLD</div>
         <div class="card-desc" style="line-height:1.45">
           <b style="color:#80deea">🌆 Nexus City</b> — every deploy drops you into a generated region with 55 cities and towns, interstates, suburbs, downtowns, farms, woods and lakes. Thousands of single-storey buildings — houses, gas stations, diners, banks, schools, police and fire stations, city halls, churches, motels, warehouses — and <b>every one has a full interior</b> you can walk into. Main menu → <b>WORLD</b> switches back to the classic arena.<br>
@@ -453,38 +466,42 @@
 </div>
 
 <!-- ORDERED MODULAR SCRIPT LOADING (?v= busts stale GitHub Pages caches after an upload; bump it on every release) -->
-<script src="js/chaos.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
-<script src="js/data-factions.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
-<script src="js/data-heroes.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
-<script src="js/data-relics.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
-<script src="js/state.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
-<script src="js/world.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
-<script src="js/combat.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
-<script src="js/sim.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
-<script src="js/render.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
-<script src="js/fx.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/fx.js', true)"></script>
-<script src="js/rewind.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/rewind.js', true)"></script>
-<script src="js/arsenal.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/arsenal.js', true)"></script>
-<script src="js/squad.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/squad.js', true)"></script>
-<script src="js/glory.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/glory.js', true)"></script>
-<script src="js/showdown.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/showdown.js', true)"></script>
-<script src="js/sense.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/sense.js', true)"></script>
-<script src="js/force.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/force.js', true)"></script>
-<script src="js/biomes.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/biomes.js', true)"></script>
-<script src="js/campaign.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/campaign.js', true)"></script>
-<script src="js/proving.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/proving.js', true)"></script>
-<script src="js/saberforms.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/saberforms.js', true)"></script>
-<script src="js/creator.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/creator.js', true)"></script>
-<script src="js/citygen.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/citygen.js', true)"></script>
-<script src="js/cityworld.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/cityworld.js', true)"></script>
-<script src="js/citythemes.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/citythemes.js', true)"></script>
-<script src="js/cityrender.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/cityrender.js', true)"></script>
-<script src="js/stealth.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/stealth.js', true)"></script>
-<script src="js/enemylook.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/enemylook.js', true)"></script>
-<script src="js/cityplay.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/cityplay.js', true)"></script>
-<script src="js/vision.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/vision.js', true)"></script>
-<script src="js/minimap.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/minimap.js', true)"></script>
-<script src="js/ui.js?v=v14-2026-10-31" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
+<script src="js/chaos.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
+<script src="js/data-factions.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
+<script src="js/data-heroes.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
+<script src="js/data-relics.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/data-relics.js', true)"></script>
+<script src="js/state.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/state.js', true)"></script>
+<script src="js/world.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/world.js', true)"></script>
+<script src="js/combat.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/combat.js', true)"></script>
+<script src="js/sim.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/sim.js', true)"></script>
+<script src="js/render.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/render.js', true)"></script>
+<script src="js/fx.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/fx.js', true)"></script>
+<script src="js/rewind.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/rewind.js', true)"></script>
+<script src="js/arsenal.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/arsenal.js', true)"></script>
+<script src="js/squad.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/squad.js', true)"></script>
+<script src="js/glory.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/glory.js', true)"></script>
+<script src="js/showdown.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/showdown.js', true)"></script>
+<script src="js/sense.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/sense.js', true)"></script>
+<script src="js/force.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/force.js', true)"></script>
+<script src="js/biomes.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/biomes.js', true)"></script>
+<script src="js/campaign.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/campaign.js', true)"></script>
+<script src="js/proving.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/proving.js', true)"></script>
+<script src="js/saberforms.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/saberforms.js', true)"></script>
+<script src="js/creator.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/creator.js', true)"></script>
+<script src="js/citygen.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/citygen.js', true)"></script>
+<script src="js/cityworld.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/cityworld.js', true)"></script>
+<script src="js/citythemes.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/citythemes.js', true)"></script>
+<script src="js/cityrender.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/cityrender.js', true)"></script>
+<script src="js/stealth.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/stealth.js', true)"></script>
+<script src="js/enemylook.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/enemylook.js', true)"></script>
+<script src="js/cityplay.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/cityplay.js', true)"></script>
+<script src="js/vision.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/vision.js', true)"></script>
+<script src="js/minimap.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/minimap.js', true)"></script>
+<script src="js/vehicles.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/vehicles.js', true)"></script>
+<script src="js/convoy.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/convoy.js', true)"></script>
+<script src="js/cityaccess.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/cityaccess.js', true)"></script>
+<script src="js/hudlayout.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/hudlayout.js', true)"></script>
+<script src="js/ui.js?v=v14.1-2026-10-31" onerror="window.trackProgress('404 Missing: js/ui.js', true)"></script>
 </body>
 </html>
 <!-- EOF:index.html -->
