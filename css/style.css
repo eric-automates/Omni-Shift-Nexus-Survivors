@@ -489,3 +489,41 @@ h2 {
 .cr-cap span { background: #0b1524; border: 1px solid #263850; border-radius: 10px; padding: 2px 7px; color: #b0bec5; font-weight: 700; }
 .cr-cap span.full { border-color: #69f0ae88; color: #b9f6ca; }
 .cr-msg { background: #1b2a1b; border: 1px solid #69f0ae66; color: #b9f6ca; border-radius: 6px; padding: 5px 8px; font-size: 0.66rem; }
+
+/* v14 Nexus City: district / street banner (bottom-right, above the minimap) */
+#cityHud { position: fixed; right: 10px; bottom: 236px; z-index: 40; display: none; pointer-events: none; text-align: right;
+  font: 700 12px 'Segoe UI', sans-serif; color: #e0f7fa; text-shadow: 0 1px 3px #000, 0 0 6px rgba(0,0,0,0.8); max-width: 46vw; }
+#cityHud b { display: block; font-size: 13px; letter-spacing: 0.04em; color: #80deea; }
+#cityHud span { display: block; font-weight: 600; opacity: 0.88; }
+
+/* v14 city map & minimap controls */
+#mmCtl { position: fixed; z-index: 41; display: none; gap: 4px; pointer-events: auto; }
+#mmCtl .btn { padding: 3px 8px; font-size: 0.8rem; min-width: 30px; }
+#mapOv { position: fixed; inset: 0; z-index: 9000; display: none; background: #000; }
+#mapOv canvas { position: absolute; inset: 0; cursor: crosshair; touch-action: none; }
+#mapOv .map-top { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); text-align: center; pointer-events: none;
+  background: rgba(6,10,16,0.78); border: 1px solid rgba(128,222,234,0.45); border-radius: 12px; padding: 6px 16px; color: #e0f7fa; font: 700 12px 'Segoe UI', sans-serif; }
+#mapOv .map-top b { display: block; font-size: 15px; letter-spacing: 0.05em; color: #80deea; }
+#mapOv .map-btns { position: absolute; right: 12px; top: 12px; display: flex; gap: 6px; }
+#mapOv .map-btns .btn { padding: 6px 12px; font-size: 0.95rem; }
+#mapOv .map-info { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); background: rgba(6,10,16,0.75); color: #e0f7fa;
+  font: 600 12px 'Segoe UI', sans-serif; padding: 4px 12px; border-radius: 10px; pointer-events: none; }
+#mapOv .map-side { position: absolute; right: 12px; top: 60px; width: 270px; max-height: 70vh; overflow: auto; display: none; background: rgba(6,10,16,0.88);
+  border: 1px solid rgba(128,222,234,0.45); border-radius: 12px; padding: 10px; color: #e0f7fa; font: 600 12px 'Segoe UI', sans-serif; }
+#mapOv .map-side.on { display: block; }
+#mapOv .map-li { padding: 6px; border-bottom: 1px solid rgba(255,255,255,0.08); cursor: pointer; }
+#mapOv .map-li:hover { background: rgba(128,222,234,0.12); }
+#mapOv .map-li em { float: right; opacity: 0.6; font-style: normal; }
+#mapOv .map-ed { position: absolute; width: 250px; display: none; flex-direction: column; gap: 8px; background: rgba(8,14,22,0.95); border: 1px solid #80deea;
+  border-radius: 12px; padding: 10px; color: #e0f7fa; font: 700 12px 'Segoe UI', sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,0.6); }
+#mapOv .map-row { display: flex; gap: 6px; flex-wrap: wrap; }
+#mapOv .map-sw { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); cursor: pointer; }
+#mapOv .map-sw.on { border-color: #fff; box-shadow: 0 0 0 2px #000, 0 0 8px #fff; }
+#mapOv .map-sym { width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.06); color: #e0f7fa; font-size: 15px; cursor: pointer; }
+#mapOv .map-sym.on { background: rgba(255,255,255,0.18); border-color: #fff; }
+#mapOv textarea { width: 100%; box-sizing: border-box; height: 56px; resize: none; background: rgba(255,255,255,0.06); color: #fff; border: 1px solid rgba(255,255,255,0.25); border-radius: 8px; padding: 6px; font: 600 12px 'Segoe UI', sans-serif; }
+
+#cityTip { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 45; max-width: min(560px, 90vw); text-align: center; pointer-events: none;
+  background: rgba(6,10,16,0.82); border: 1px solid rgba(128,222,234,0.5); border-radius: 12px; padding: 8px 14px; color: #e0f7fa;
+  font: 600 13px 'Segoe UI', sans-serif; opacity: 0; transition: opacity 0.4s; box-shadow: 0 4px 18px rgba(0,0,0,0.5); }
+#cityTip b { color: #80deea; }
