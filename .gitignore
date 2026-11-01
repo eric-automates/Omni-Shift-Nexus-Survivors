@@ -1,0 +1,5 @@
+# music lives in the GitHub repo (≈81 MB); the local test copy is fetched into ~/.cache/omni-music by qa/music.py
+*.mp3
+*.zip
+.DS_Store
+Thumbs.db

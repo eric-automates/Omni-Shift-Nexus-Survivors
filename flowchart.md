@@ -1,6 +1,6 @@
 # FILE: flowchart.md
 # PART: 2 of 14
-# DETAIL: Current State Architecture & Execution Flowcharts (v14.1 patch, 2026-10-31) — boot, menus, Hero Creator v2, run start, the 60 FPS loop, simulation (Threat Sense clocks, Force-persuaded allies, Yoda's powers), Saber Form Engine, Rival Showdown, glory kills / EXECUTE, Nexus City, vehicles & convoys, roofs / fences / eye height, the HUD layout manager, rendering and end of run. Feature descriptions live in info.md.
+# DETAIL: Current State Architecture & Execution Flowcharts (v14.2, 2026-11-01) — boot, menus, Hero Creator v2, run start, the 60 FPS loop, simulation (Threat Sense clocks, Force-persuaded allies, Yoda's powers), Saber Form Engine, Rival Showdown, glory kills / EXECUTE, Nexus City, vehicles & convoys, roofs / fences / eye height, the HUD layout manager, rendering and end of run. Feature descriptions live in info.md.
 
 ## 1. Whole-game flow
 
@@ -398,4 +398,96 @@ flowchart LR
   HIDE -- no --> PLACE
   MOVE --> PLACE
   OV -- no --> OUT["HUDL.rects → DOM + canvas banners (below HUDL.topH), stealth pill, minimap"]
+```
+
+## 17. Run start in v14.2: world, scenario, people (js/location.js, js/regiongen.js, js/realui.js, js/scenario.js)
+
+```mermaid
+flowchart TD
+  LOC["📍 LOCATION: WHERE · SCENARIO · SEED"] --> W{"where?"}
+  W -- homeworld --> HW["the group's world (RG_PROFILES: tatooine, arrakis, kiearth, …) · fresh seed each run unless KEEP"]
+  W -- "choose a world" --> HW
+  W -- "classic Nexus" --> NX["nexus profile = exact v14.1 generator (hash 442310629)"]
+  W -- "real map" --> RM{"Indiana place or online city"}
+  RM -- offline --> PK["data/realmap pack v2: overview + core + detail packs (fetch, same origin)"]
+  RM -- online --> OF["OpenFreeMap tiles (cached) · Nominatim / Photon search"]
+  PK --> RG["realgen: roads · water · parks · POI buildings · footprints → km cells · Highway 365"]
+  OF --> RG
+  PK -. "missing" .-> OF
+  OF -. "no internet" .-> FB["generated map + banner"]
+  HW --> GEN["regiongen: organic / grid macro → blocks → sites → natives (locals.js)"]
+  NX --> GEN0["citygen (v14)"]
+  RG --> RUN["startRun → CITY.on"]
+  GEN --> RUN
+  GEN0 --> RUN
+  RUN --> SC{"scenario"}
+  SC -- survivors --> S1["hunters & rivals as before (+ optional day & night)"]
+  SC -- apoc --> S2["apoc.js: wrecks, rubble, raiders, holdouts, zombies, richer loot"]
+  SC -- economy --> S3["townsfolk.js + economy.js: residents, jobs, shifts, market, the law"]
+```
+
+## 18. One person in the Simulated Economy (js/townsfolk.js, js/economy.js)
+
+```mermaid
+flowchart LR
+  B["building near you"] --> POP["residents / staff rolled from the building (same every visit) · tfMem per world"]
+  POP --> SCH{"clock: on shift? asleep? commuting?"}
+  SCH -- far from you --> ABS["position follows the schedule (no simulation)"]
+  SCH -- near you --> WALK["LOD walker: A* paths, counters, beds, pavements (≤ 34 outdoors, ≤ 18 indoors)"]
+  WALK --> TALK["[F] TALK: name · job · shift · thoughts (prices, deaths, promotions, the bounty)"]
+  WALK --> PROD["on shift → the workplace produces · homes consume → stock → prices (kiosks)"]
+  WALK --> DIE{"killed?"}
+  DIE -- yes --> JOB["permanent: deputy promoted · hire within hours · or the job stays open (shelves run low)"]
+  DIE -- witnessed --> LAW["heat: ★ security → ★★ police → ★★★ SWAT → ★★★★ military → ★★★★★ universe elite"]
+```
+
+## 19. Flight (js/flight.js)
+
+```mermaid
+flowchart TD
+  IN["board an aircraft / capsule ship · or G (self-flight: jetpack, broom, ki flight)"] --> AIR["FLY.on: altitude, soft-Newtonian velocity"]
+  AIR --> CTRL["Space/E up · Shift/Q down · stick = thrust · H hover stop · C cockpit"]
+  AIR --> SAFE{"K: safety"}
+  SAFE -- "SAFE (default)" --> AS["altitude hold, drag, top speed ×1"]
+  SAFE -- "UNSAFE (confirmed)" --> UN["no hold, almost no drag, top speed ×2, red cabin lights"]
+  AIR --> ALT{"altitude"}
+  ALT -- "low" --> CITYART["city art, clouds below"]
+  ALT -- "high" --> AER["aerial tiles (Nanite-style levels) → whole region"]
+  ALT -- "> ~35 km" --> SPACE["air thins, climb slows to a stop, black sky"]
+  AIR --> DMG["hits → engines / wings / rotor / tail / gear / cockpit"]
+  DMG --> CR{"crash or lost lift?"}
+  CR -- yes --> BRK["break-up: debris, fire"]
+  AIR --> F["F: get out — above the rooftops: parachute"]
+```
+
+## 20. Ki-Surge power-up & Instant Transmission (js/kisurge.js)
+
+```mermaid
+flowchart TD
+  R["hold R / 🔥"] --> AND{"android?"}
+  AND -- yes --> OD["OVERDRIVE at once (18 s)"]
+  AND -- no --> CH["charging: ki +34 %/s, aura flames, slowed, ki noise"]
+  CH --> FULL{"ki = 100 %"}
+  FULL --> FORM["GOLDEN FORM (Saiyans) · FULL POWER (Frieza) · PERFECT POWER (Cell) · NAMEKIAN FOCUS (Piccolo) — 36 s"]
+  FORM --> END["back to base: stats restored, 20 s recovery"]
+  OD --> END
+  T["T / IT (Goku, or Cell with it absorbed)"] --> CD{"recharged (≤ 1 s)?"}
+  CD -- yes --> MAP["aiming map (paused): glowing IT reticle · never a marker"]
+  MAP -- tap --> POSE["fingers to the forehead + static (0.42 s)"]
+  POSE --> JUMP["arrive: static burst · flight / vehicle exited"]
+  MAP -- "✖ / ESC" --> BACK["closed — no marker, game resumes"]
+```
+
+## 21. Rival evasion & the bounty (js/rivalchase.js)
+
+```mermaid
+flowchart LR
+  RV["rival team (open world)"] --> D{"> 350 m for 6 s?"}
+  D -- no --> RV
+  D -- yes --> EV["RIVAL EVADED · BOUNTY UP — team leaves, duel ring closes, 🎯 +1"]
+  EV --> WAIT["60–100 s"]
+  WAIT --> RET["same rival + 1 partner per evasion (max 4, own universe), Showdown"]
+  RET --> D
+  RET --> K{"leader finished?"}
+  K -- yes --> PAY["stake claimed: cash + XP · bounty − evasions · count reset"]
 ```

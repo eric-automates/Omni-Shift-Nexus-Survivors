@@ -52,3 +52,18 @@ Every track below is free for commercial and non-commercial use. **CC0** = publi
 - Re-encoded to MP3 128 kbps / 44.1 kHz stereo, loudness-matched to about −12 LUFS (EBU R128, ≤ −1 dBTP), so the volume stays steady next to tracks 1–3 (−9 to −14 LUFS).
 - A 4-second fade-out was added to the end of each track because many of the sources are seamless game loops that would otherwise stop dead when the playlist moves on. Nothing else in the music was changed.
 - Every file has ID3 tags for title, artist, genre and license (the license and source link are in the comment tag).
+
+## Map data (v14.2 real maps)
+
+**OpenFreeMap © OpenMapTiles · Data from OpenStreetMap**
+
+- Real-map streets, buildings, businesses, water and land use: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). The built-in Indiana packs in `data/realmap/` are a derived database offered under the same licence (see `data/realmap/LICENSE.md`).
+- Vector tiles: [OpenMapTiles](https://openmaptiles.org/) schema (CC-BY 4.0), served by [OpenFreeMap](https://openfreemap.org/) — free, no key.
+- Houses in the built-in Indiana places where OpenStreetMap has none mapped yet (most small towns): [Microsoft US Building Footprints](https://github.com/microsoft/USBuildingFootprints) © Microsoft, [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/) — computer-traced from aerial imagery.
+- Place search ("Any City in the World"): [Nominatim](https://nominatim.openstreetmap.org/) (OpenStreetMap), with [Photon](https://photon.komoot.io/) by Komoot as a fallback. One request per search, never search-as-you-type.
+- The 14 built-in Indiana places (Indianapolis, Carmel, Fishers, Noblesville, Gary, Greenwood, Kokomo, Westfield, Lebanon, Beech Grove, Brazil, Sheridan, Thorntown, Clay City) — coordinates: [GeoNames](https://www.geonames.org/) (CC-BY 4.0); populations: 2020 US census (GeoNames estimates for the smallest towns).
+
+Real places, streets and businesses appear only because they are on the map; none of them is affiliated with, sponsors or endorses the game (see the in-game disclaimer).
+
+## Characters & worlds
+Omni-Shift is a free, non-commercial fan project. Its heroes and worlds — from Star Wars, Stargate, Firefly, Dune, Star Trek, Alien, Halo, Doom, Dragon Ball Z (the Ki-Surge class), The Matrix, Harry Potter, The Lord of the Rings and many more — are affectionate homage and parody; all names, trademarks and copyrights belong to their owners, who are not affiliated with the game and do not endorse it.

@@ -1,10 +1,10 @@
 # FILE: info.md
 # PART: 1 of 14
-# DETAIL: Master design document, updated for the v14.1 patch (2026-10-31). Covers what the game is now, everything built so far (v8.x → v14.1), how much of the Version 9.0 plan is done, and the roadmap for future iterations, including realism and cool-factor ideas. The architecture and execution diagrams are in flowchart.md.
+# DETAIL: Master design document, updated for v14.2 (2026-11-01). Covers what the game is now, everything built so far (v8.x → v14.2), how much of the Version 9.0 plan is done, and the roadmap for future iterations, including realism and cool-factor ideas. The architecture and execution diagrams are in flowchart.md.
 
 ---
 
-## 1. What the game is (current state, v14.1)
+## 1. What the game is (current state, v14.2)
 
 **OMNI-SHIFT: NEXUS SURVIVORS** is a touch-first multiverse survival roguelike built on HTML5 Canvas. It runs in mobile WebViews and desktop browsers and is played live on GitHub Pages.
 
@@ -31,8 +31,8 @@
     - `onRenderWorld` / `onRenderScreen`
 
 ### Content
-- **81 heroes:** 80 canon heroes (#00–#79) in 11 universe genres, plus **your own hero (#80)** — any kind of character since v13.
-- **The 11 genres:** Star-Sector, Chevron-Gate, Verse-Rim, Spice-Dune, Star-Citadel, Xeno-Hive, Grim-Imperium, Cyber-Noir, Anomaly-Lab, Eldritch-Ash and Arcane-Sanctum.
+- **89 heroes:** 88 canon heroes (#00–#79 and, since v14.2, #81 Qui-Gon · #82 The Count · #83 Old Ben · #84–#88 Frieza, Cell, Androids 16/17/18) in 11 universe genres, plus **your own hero (#80)** — any kind of character since v13.
+- **The 11 genres:** Star-Sector, Chevron-Gate, Verse-Rim, Spice-Dune, Star-Citadel, Xeno-Hive, Ki-Surge (was Grim-Imperium until v14.2), Cyber-Noir, Anomaly-Lab, Eldritch-Ash and Arcane-Sanctum.
 - **World:** since v14 every deploy drops you into **Nexus City**, a generated 64 × 64 km region (55 cities & towns, interstates, thousands of enterable single-storey buildings), dressed for your hero's universe. The classic arena is one toggle away (main menu → WORLD, or `?world=classic`).
 - **Sectors:** 50 procedural sectors, plus the **Galactic Expedition** branching campaign map.
 - **Meta progression:**
@@ -219,7 +219,8 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
   | Wizards | DARK OMEN — SCAR BURNING for Harry |
   | Military / tech | MOTION TRACKER with beeps that quicken; SENSOR SWEEP for R2; COLLECTIVE ALERT for the Borg |
   | Bounty hunters / hunters | BOUNTY HEAT, MEDALLION HUMMING (Geralt), HUNT INSTINCT (Predator) |
-  | Demons / beasts | DEMONIC PRESENCE (Doom), PRIMAL INSTINCT, WAAAGH-O-METER (Ork), HIVE SENSE (Xeno) |
+  | Demons / beasts | DEMONIC PRESENCE (Doom), PRIMAL INSTINCT, HIVE SENSE (Xeno) |
+  | Ki-Surge (v14.2) | KI SENSE (the fighters), ANDROID SCANNER (Androids 16/17/18) |
   | Everyone else | THREAT LEVEL |
 
 - **Feedback:** flavour lines at 50 / 75 / 90 %, a style-specific sound cue, pings around the hero that quicken as it closes in, and at **90 %+ an arrow on the screen edge** pointing where it will come from (the spawn angle is pre-rolled, so the arrow is truthful) with a soft coloured vignette. At 100 % the line ("IT IS HERE.", "CONTACT!", "AS FORESEEN."…) sweeps the screen.
@@ -249,11 +250,11 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 - **Interiors:** 20 templates, every building enterable: rooms by purpose (living, kitchens, bedrooms, baths, offices, classrooms, cells, armory, vault, council chamber, nave…), doors (swing / slide, open for anyone), windows (break, then climbable), ~75 furniture types placed so walkways and archways stay clear (validated: <2 % unreachable floor on average, every building has an exterior door).
 - **Runtime (`cityworld.js`):** 64 m chunks of 0.5 m tiles with flags (MOVE / SIGHT / SHOT / WINDOW / DOOR / INDOOR / LOW / WATER) and material kinds; circle collision with sliding, DDA ray casts, recursive shadow-cast line of sight, door simulation, window breaking. The drop zone maps to local (256, 256) so every v13 system keeps working.
 - **Rendering (`cityrender.js`):** 512 px tiles baked nearest-first within a 6 ms budget (LRU), procedural texture patterns per universe; live layer for doors, decals (bullet holes, scorch, glass, blood), supply caches; roofs (gable / hip / flat / dome / false front, chimneys, AC units, solar, windtraps, obelisks, spires, landing pads, neon trims) that fade out for the building you're in; signage with themed names; scattered litter everywhere.
-- **Universe dressing (`citythemes.js`):** 14 looks — Modern Earth, Neon Megacity, Outer Rim, Core-World ecumenopolis, Federation colony, Frontier colony base, Firefly rim world, Old West, Arrakeen, Goa'uld world, Imperial hive, Wasteland, Medieval kingdom, Wizarding village. Floors, walls, roofs, furniture style, cars (sedans, spinners, landspeeders, hovercars, APCs, mules, wagons, ornithopters, death gliders, Rhinos, rusted wrecks, carts, the flying Anglia), trees (palms, cacti, vaporators, holo-trees…), lamps, signs ("TIBANNA FUEL", "PROMETHIUM DEPOT", "FLOO POWDER CO."), city names (Mos Espa, Hogsmeade, Night City…), weather and litter.
+- **Universe dressing (`citythemes.js`):** 14 looks — Modern Earth, Neon Megacity, Outer Rim, Core-World ecumenopolis, Federation colony, Frontier colony base, Firefly rim world, Old West, Arrakeen, Goa'uld world, Capsule-Age Earth (Ki-Surge, v14.2; the old hive look is now a neutral Gothic Spire City), Wasteland, Medieval kingdom, Wizarding village. Floors, walls, roofs, furniture style, cars (sedans, spinners, landspeeders, hovercars, APCs, mules, wagons, ornithopters, death gliders, Rhinos, rusted wrecks, carts, the flying Anglia), trees (palms, cacti, vaporators, holo-trees…), lamps, signs ("TIBANNA FUEL", "PROMETHIUM DEPOT", "FLOO POWDER CO."), city names (Mos Espa, Hogsmeade, Night City…), weather and litter.
 
 ### 2.11 Stealth, hearing & the director (new in v14)
 - **Sound model:** `L = L0 − 20·log10(d) − 0.012·d − walls`. Every wall, door, window, fence on the straight path costs its transmission loss (wood 24, brick 32, masonry 35, metal 30, interior 20, closed door 15/24, window 20, broken 0); buildings the sound only passes over cost 10 dB (+3 each more). Thresholds: notice 50, investigate 66, urgent 88, combat 115 (< 25 m).
-- **Profiles:** each hero's weapon has a level and class (firearm 160–176, blaster 140, staff weapons 136, energy 88–150, magic ~104, blades 72). **V** fits a suppressor (118 dB) on real firearms only (revolvers, bolters, shotguns, the Deffgun… can't). Footsteps 58–66, sneaking 36, engines 92, glass 105, ricochets 100, explosions ~160–178.
+- **Profiles:** each hero's weapon has a level and class (firearm 160–176, blaster 140, staff weapons 136, energy 88–150, magic ~104, blades 72). **V** fits a suppressor (118 dB) on real firearms only (revolvers, shotguns, heavy guns… can't). Footsteps 58–66, sneaking 36, engines 92, glass 105, ricochets 100, explosions ~160–178.
 - **Reactions:** listeners investigate the (error-blurred) source, the next shot re-targets them, very loud close shots put them straight into combat; distant enemies beyond the simulated radius answer loud shots as responders. Ricochets and breaking glass make noise at the impact point (distraction).
 - **AI states:** idle (guard posts, rooms) · patrol (street patrols, routes) · investigate · search · alert (chase, shoot with LOS, call contacts) · return. View cones (wider when searching), suspicion that builds with distance, light, movement and muzzle flash; A* on a walkability snapshot, door opening, unsticking.
 - **Director:** spawns the generator's room / guard / patrol records within ~130 m (never in plain view), despawns far idle enemies, remembers kills; hunter squads sweep toward you periodically (faster in dangerous districts).
@@ -300,12 +301,57 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 - **Roofs:** every building has a ladder (grav-lift in sci-fi looks) — **F** to climb. On a roof you see 25 % further and over everything, the street can see you, the room below can't; melee hunters climb after you and come down when you do. Mobility classes per hero (tele / jet / leap / climb / giant / smash / none): climbers pull themselves up without a ladder.
 - **Teleport / leap gestures:** double-tap a building = inside (apparate) or dive through a window (leapers / jetpacks), **triple-tap = roof**; tapping the street from a roof drops you there.
 - **Fences:** drawn tall in every look (wood / durasteel privacy panels, chain-link with a crisp diamond mesh — barbed wire in industrial blocks — pickets, stone garden walls, hedges), with gates. Leapers vault, jetpacks fly over, climbers scale, teleporters phase, the half-giant steps over, the T-800 and Vader smash through; heroes without mobility use gates.
-- **Sight through fences:** privacy fences, hedges and stone walls block sight (that's the grey beyond them); chain-link and pickets don't. **Eye height:** from a tall cab (bus, army truck, fire engine, semi, tractor, APC / Rhino hatch, stagecoach box), on a jetpack, as the half-giant or at the top of a leap you see over those ~2 m obstacles — and can be seen.
+- **Sight through fences:** privacy fences, hedges and stone walls block sight (that's the grey beyond them); chain-link and pickets don't. **Eye height:** from a tall cab (bus, army truck, fire engine, semi, tractor, APC / armored-carrier hatch, stagecoach box), on a jetpack, as the half-giant or at the top of a leap you see over those ~2 m obstacles — and can be seen.
 
 ### 2.20 HUD layout manager (v14.1)
 - A solver places 12 HUD elements (health bar, EXECUTE, vehicle gauge, minimap, stealth pill, squad radio, minimap buttons, tips, district banner, debug / music, music toast, FPS) by priority so **nothing ever overlaps** — verified at 7 screen sizes from 360 × 740 phones to 1080p, while driving with a tip, EXECUTE and the toast up. Lower-priority items shrink first (each down to its own minimum), then hide-able items step aside.
 - **Options → HUD LAYOUT:** priority order (▲▼), **Don't shrink** per item, Hide per item, overall HUD size, auto-compact on phones, live preview.
 - The world shows only an **F / TAP keycap** over the thing you can use; the full prompt lives in one HUD button (no duplicate text).
+
+### 2.21 Age-appropriate content (v14.2, `agefilter.js`)
+- Options → 🛡️ Age-Appropriate Content: **OFF** (everything), **NORMAL** (no slicing/dismemberment, a quick spark pop instead of blood — or blue / green / nothing), **STRONG** (no blood or bodies, KO sparkle, TAKEDOWN instead of EXECUTE, softened words). Optional parent PIN (lowering asks for it). Gameplay identical — the spawners are wrapped.
+
+### 2.22 Star Wars additions (v14.2, `heroreg.js`, `saga.js`, `weaponart.js`, `sheathe.js`)
+- **#81 Qui-Gon, #82 The Count, #83 Old Ben** through a hero registry (`heroRegister`) that fills every per-hero table. Luke → "Luke", Windu → "The Jedi Master Duelist".
+- Film ignitions with variations for every saber hero; Dooku's straight fingertip lightning grows with his level; +25 % Form matchups for saber users only.
+- Steel blades sheathe on the back and auto-draw; guns at low ready; only lightsabers glow.
+
+### 2.23 World profiles & Location (v14.2, `regiongen.js`, `regionsites.js`, `regionart.js`, `regionworlds.js`, `location.js`, `locals.js`)
+- `RG_PROFILES`: **nexus** (exact v14.1, hash-verified), **grid** worlds (Midwest, Night City, Starfleet Earth: beltway + airports), **organic** worlds (Tatooine, Abydos, Persephone, Arrakis, LV-426, Ki-Surge Earth, Black Mesa, The Continent, the Highlands: curvy track networks, ring road, film landmarks as sites).
+- 📍 LOCATION: homeworld per group, any world, Classic Nexus, Real Map; seed per run (new / keep / typed); markers & drop zone per world; Hails From for the custom hero.
+- Natives (`locals.js`): per-enemy rosters (Sand People in the canyons, a hive on LV-426's ridges…) and living locals — Jawas round each sandcrawler (wander, chatter, scatter at gunfire, [F] TRADE stall).
+
+### 2.24 Real map (v14.2, `realdata.js`, `realgen.js`, `realart.js`, `realui.js`, `tools/realmap-build.js`)
+- OpenFreeMap vector tiles (OpenMapTiles schema, z14) → roads, water, parks, buildings with real names; Microsoft building footprints fill the houses OSM lacks. 48 km per map, city centred, Highway 365 border (under construction, drivable, you can't leave).
+- Offline: `data/realmap/` pack v2 (overview + 14 city cores + Hilbert-ordered detail packs, ≈ 40 MB). Online: any city via Nominatim/Photon search, cached. Missing packs → Indiana streams online → generated fallback with a banner.
+- WHO'S AFTER YOU: Snuck In (locals + your universe's bounty hunters, lawful or lawless), Invasion, Locals Only, Open Season. First-start disclaimer + attribution (ODbL, `data/realmap/LICENSE.md`).
+
+### 2.25 Scenarios, clock, day & night (v14.2, `scenario.js`)
+- `meta.region.scen = {mode: survivors|apoc|economy, zombies: off|few|horde, needs, night}`. 1 game hour = 1 real minute; one low-res light map at night (street lights, headlights, windows, your light).
+
+### 2.26 Simulated economy (v14.2, `townsfolk.js`, `economy.js`)
+- Residents and staff per building (titles by rank, shifts by kind), schedules, LOD walkers near you, [F] TALK cards with thoughts; deaths are permanent → promotions / hiring / open jobs; a few people turn bad.
+- Production while people are on shift, consumption at home → stock → prices; counters and terminals; fines.
+- The law: witnessed crimes only (self-defence exempt); ★ security/citizens → ★★ police → ★★★ SWAT → ★★★★ military → ★★★★★ the universe's elite; heat cools out of sight; lawful vs lawless bounty hunters. Optional survival needs (hunger, thirst, ammo).
+
+### 2.27 Post-apocalyptic (v14.2, `apoc.js`)
+- Washed-out look, wrecks, rubble, weeds; richer cupboards + street caches; raider parties; holdouts (talk/trade); zombies off / few / horde (walkers, runners, crawlers, brutes; noise and night make them bolder).
+
+### 2.28 Items (v14.2, `items.js`)
+- Every container searchable, rolled on first open and persisted per world (`meta.cont`); ★ unique weapons (LV 3); auto med/stim; 🎒 bag: wallet (`meta.wallet`, currency per universe), supplies, Pocket Capsules (vehicles/ships), courier (drone disposal at market value).
+
+### 2.29 Flight (v14.2, `flight.js`)
+- `FLY_SPECS` for aircraft and every universe's ships, `FLY_SELF` for heroes who fly (jetpack, boosters, suspensors, thrusters, dark/hex flight, broom, **KI FLIGHT**). Soft-Newtonian with HOVER stop, SAFE/UNSAFE (K), cockpit (C), parachute bail-out, component damage and break-up, altitude to the edge of space with thinning air, clouds, Nanite-style ground LOD.
+
+### 2.30 Ki-Surge (v14.2, `kisurge.js` + the source tables)
+- Faction #6: Goku (starter), Vegeta, Piccolo, Trunks (steel sword), Gohan, Frieza, Cell, Androids 16/17/18; each with hair in 3 styles, outfits, career stances, ki palm glow, own vision/sense, music riff, matchups.
+- Power-up (hold R / 🔥): charge → **GOLDEN FORM** (Saiyans; the regular one only), FULL POWER (Frieza), PERFECT POWER (Cell), NAMEKIAN FOCUS (Piccolo), OVERDRIVE (androids, no charge); stats restored afterwards.
+- **Instant Transmission** (T / IT): aiming map with a glowing IT reticle; never places a marker; fingers-to-forehead + static; 1 s recharge.
+- **Cell absorbs** one natural ability from each rival he finishes (`CELL_ABSORB`, 89 entries, 19 kinds; Yoda → levitation + Yoda's word order).
+- Drop rule: ki techniques drop only for Ki-Surge heroes; Trunks's sword drops for anyone. Earth's Defenders squad; Frieza Force / Red Ribbon / Cell Juniors / Earth's Defenders rosters; Rocky Battle Plains biome; KI BLAST FINISH glory kill. All 40K content removed (QA scans every table).
+
+### 2.31 Rival evasion & bounty (v14.2, `rivalchase.js`)
+- Open world only: a rival team more than 350 m away for 6 s loses you → RIVAL EVADED · BOUNTY UP (🎯 pill), back 60–100 s later with +1 partner per evasion (max 4, same universe); the returning leader's kill pays its stake (cash + XP) and lowers the bounty.
 
 ---
 
@@ -321,7 +367,8 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 | **v12** (`1bfed0e` … `9ccf8e0`) | Custom Hero Creator #80 (single / staff / dual sabers, hilt selector, 10 colours, Form paths, species). Rival Showdown. Always-on EXECUTE with rank targeting and chains. Film hilts for canon saber heroes. Darksaber. Proving Ground 14 actions. |
 | **v13** (`65c212e`) | **Threat Sense** meter (per-hero style, distance-scaled rival / Titan clocks, edge arrow). **Force Persuasion** (light-side Force users turn enemies into allies). **Yoda:** Force Lift & Hurl, Ataru bounding, **Will of the Force**, Tutaminis. **Hero Creator v2:** any character — 26 weapons, twins with own cylinders / targets, 2 skills, gear, mobility, armor, headgear, **jetpack flight**, 8 presets, v12 migration. |
 | **v14** (`74a5b73`) | **Nexus City:** generated 64 × 64 km region with 55 settlements, interstates and thousands of enterable single-storey buildings with full interiors; 14 universe looks; line-of-sight fog and roofs; **stealth AI** with realistic hearing (walls, doors, suppressors, ricochets, glass), director, street patrols and hunters; **48 detailed enemy rosters** (city and arena); **per-hero vision** (16 senses); minimap, full map, markers & notes, drop zone; drivable cars; supply caches; district threat; 18-test suite. |
-| **v14.1 patch** (this update) | **Vehicles:** every vehicle drivable (incl. roadblock army trucks, buses, semis, fire engines, forklifts, garage cars), rigid-body collisions, location-based crumple zones, detachable parts, damage from every source, fire & explosions; **fuel** with themed stations. **Squad riders** shooting from their side, sunroof / hatch gunners, **doctrine convoys** (intervals, sectors, herringbone, cross-load, hold markers). **Visible doors, roofs** (ladders, tap gestures), **tall fences** by hero mobility, **eye-height** vision. **HUD layout manager** (no overlaps, priority / Don't shrink options). Fix: interiors are now repeatable (a random-comparator sort made ~1 % of buildings re-furnish differently after cache evictions). 20-test suite. |
+| **v14.1 patch** (`c04fb0a`) | **Vehicles:** every vehicle drivable (incl. roadblock army trucks, buses, semis, fire engines, forklifts, garage cars), rigid-body collisions, location-based crumple zones, detachable parts, damage from every source, fire & explosions; **fuel** with themed stations. **Squad riders** shooting from their side, sunroof / hatch gunners, **doctrine convoys** (intervals, sectors, herringbone, cross-load, hold markers). **Visible doors, roofs** (ladders, tap gestures), **tall fences** by hero mobility, **eye-height** vision. **HUD layout manager** (no overlaps, priority / Don't shrink options). Fix: interiors are now repeatable (a random-comparator sort made ~1 % of buildings re-furnish differently after cache evictions). 20-test suite. |
+| **v14.2** (this update) | **Location:** homeworlds for every universe (13 worlds, a new one every run), Classic Nexus, the creator's Hails From, ring roads, airports, natives. **Real map:** 14 Indiana places offline + any city online (48 km, real names, interiors, Highway 365). **Scenarios:** Survivors / Post-Apocalyptic (zombies) / Simulated Economy (townsfolk, jobs, market, the law). Searchable furniture, capsules, courier. **Flight** for everything that flies. **Ki-Surge** replaces 40K (10 heroes, golden form, Instant Transmission, Cell absorbs). Qui-Gon, The Count, Old Ben, film ignitions. Rival evasion & bounty. Age-appropriate content setting. |
 
 ---
 
@@ -350,12 +397,12 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 ## 5. Future iterations (roadmap)
 
 ### 5.1 Next up (v15 candidates)
-1. **Civilians & evacuation** (the city is evacuated "for now"): stragglers to escort, convoys, rescue objectives; enemies that take hostages.
-2. **Day / night & lighting:** street lamps, flashlights, lit windows; night vision for the heroes who have it; stealth bonus in the dark.
+1. **Civilians & evacuation** (✅ v14.2: townsfolk with homes, jobs and shifts in the Simulated Economy; still open: escorts and hostages): stragglers to escort, convoys, rescue objectives; enemies that take hostages.
+2. **Day / night & lighting** (✅ v14.2: clock, night light map with street lights, headlights and lit windows; still open): night vision for the heroes who have it; stealth bonus in the dark.
 3. **Smarter squads:** enemies that use cover, flank around buildings, breach doors, throw grenades through windows, radio for backup (reinforcement trucks on the roads).
 4. **Destructible city:** doors that can be kicked / blown, walls that crumble to rockets (cars that crumple, burn and explode: ✅ v14.1).
 5. **Enemy vehicles & traffic (v14.1 follow-up):** enemies that drive — pursuit cars, manned roadblocks, technicals with mounted guns, reinforcement trucks that unload a squad; AI traffic on the interstates; speeder bikes; fast travel between discovered towns.
-6. **Vehicle follow-ups:** repair at a garage / fire station bay (re-hang doors and bumpers), mounted weapons (turrets on APCs, the Rhino's storm bolter) crewed by a squad gunner, towing a wreck clear with a truck, two-storey buildings with stairs (roof → upper floor).
+6. **Vehicle follow-ups:** repair at a garage / fire station bay (re-hang doors and bumpers), mounted weapons (turrets on APCs, an armored carrier's roof gun) crewed by a squad gunner, towing a wreck clear with a truck, two-storey buildings with stairs (roof → upper floor).
 7. **Missions on the map:** caches marked by intel, bounties, a Titan lair downtown, capture the city hall.
 8. **The v13 list still stands:** dark-side "Fear", ally orders, saber-vs-saber showdowns, Creator part 3, Form-specific Force powers, the rest of the v9.0 roster, DPS telemetry, Memory Purge screen, Proving Ground batch mode.
 
