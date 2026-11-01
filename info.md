@@ -353,6 +353,39 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 ### 2.31 Rival evasion & bounty (v14.2, `rivalchase.js`)
 - Open world only: a rival team more than 350 m away for 6 s loses you → RIVAL EVADED · BOUNTY UP (🎯 pill), back 60–100 s later with +1 partner per evasion (max 4, same universe); the returning leader's kill pays its stake (cash + XP) and lowers the bounty.
 
+### 2.32 Real-map scale (v14.3, `realdata.js` / `realgen.js` / `realart.js` / `vehicles.js`)
+- `RM.S` = world metres per real metre (default 1/3; Location → 📏 1:3 / 1:2 / 1:1). Everything geographic is placed at real × S: roads, blocks, footprints, props, spawns (× S²; police stations keep their officers), vehicles (`k = S`; handling × `sv = min(1, 2.24 k)`), flight `flyK()`, capsules/airfields, headlights.
+- Speed and distance readouts are real-equivalent: `vehRealMs(v)` (world m/s ÷ k) and `mapDistTxt(m)` / `mapRealK()` (minimap, markers, map readout, fuel nav). Flight gauges stay nominal.
+- Drop / cache keys get a `|1:3` suffix (none at 1:1, so v14.2 saves stay valid). Streaming: `rmSegGrid` (40 m buckets) + ring `rmNearestSeg`, bucketed `rmOnRoad`, deduped chunk roads; `rmFrame` radius `max(30, 140·S)`.
+- Scaled interiors (`IC_FS < 1`): thin walls, `rmSmallHome` (studio / living + bed / living + kitchen + bed), half-size furniture; garages/sheds below 7 m² world become solid outbuildings.
+
+### 2.33 NPC traffic (v14.3, `traffic.js`)
+- A local road net (170 m radius, rebuilt every 60 m) from `rmCellSegsAt` (real: ranks 3–8, no Highway 365 / tunnels / construction) or `cityCellStreets` (Nexus, highways skipped). Degree-2 chains become links with miter normals; lanes per direction from width / (3.5 m·k); right-hand offsets.
+- Cars: IDM following (a0 1.7, b 2.8, s0 2 m, T 1.2 s, all × k), Bézier turns with indicators, brake lights, headlights. Limits by rank 25/30/35/40/50/65 mph (real-equivalent × k).
+- Signals at real traffic-light props (Nexus: crossings of three or more big links): `trfSig(n, ph)` — 56 s cycle, A 26 G / 3.5 Y / 1.5 R-R, B 20 G / 3.5 Y / 1.5 R-R; offset `−(x·ax + y·ay)/v35 mod 56` (green wave). Stop signs: minor approaches stop (all-way when equal ranks); unmarked: side roads yield; don't-block-the-box check.
+- Obstacles: the hero, townsfolk, enemies, live vehicles → brake, honk after 2.2 s, ease around a pedestrian. Crash / shot / blast → `trfPromote` → `vehNew` (physics). Player on foot is pushed out of car boxes. Option `opts.traffic`.
+- In a turn (inside the box) a person on the path → wait, honk at 2.2 s, creep through at 1.2 m/s × k after 4 s (`c.blockT`), so a hero standing on a corner can't lock a junction.
+
+### 2.34 Traffic police (v14.3, `police.js`)
+- Offenses (road vehicles only, not flying): speeding (> limit + max(10, 20 %) for 1.1 s on a road — off-road never counts), red light (entering a signal box on red above 8 mph), crash (`VEH.stats.crashes` / `TRF.onCrash`). Witness: a police traffic car within 150 m·k with line of sight (≤ 20 m·k without), or a police-job townsperson within ≈ 70 m·k.
+- States: idle → chase (unit follows the player's breadcrumb trail, catches up off-screen) → stop (player < 3 mph near the unit; unit parks behind, aligned) → walk (officer to the driver's window) → talk (DOM panel, game paused; sorry / license / hurry / floor it) → leave. Fines: speed $75 + $10 per mph over 10, crash $150, red $125, evade $300, rude +$25 (cap $900). Paid via `itPay(−fine)` + `pdNotify` (watch card, vibrate). Can't pay → `pdJail`: fade, next day 07:00 (+1 day), released at the nearest known police station, car impounded, heat 0. Flee → EVADING banner, economy heat ≥ level 2; lost after 7–10 s out of sight beyond 110 m·k.
+- Speed-limit sign in the vehicle HUD (km/h when chosen). Option `opts.police`.
+- `stop`: if the cruiser hasn't lined up after 4 s (`PD.parkT`) and is within 14 m, it parks where it is; no cruiser → the officer walks up on foot from 8 m behind.
+
+### 2.35 Touch-first actions (v14.3, `actionui.js`)
+- `#actBtn` (right thumb; left with `opts.hudFlip`): shows `findInteractTarget()`'s label parsed to icon + words; sticky for 2.6 s / 72 px (`ACT.force` makes the outermost `findInteractTarget` return the remembered target when tapped). Roof: `actGetDown` (nearest ladder within ≈ 7 m, else the nearest edge). Moving vehicle exit = 380 ms hold. `#actFly` 🚀 for `flySelfSpec()` heroes.
+- `actTxt()` rewrites key hints on touch (tips via `cityTip`, `itToast`, `vehToast`, `spawnSpeech`, observers on `#cityTip`, the help screen); the world keycap shows the action icon.
+
+### 2.36 Guns (v14.3, `gunart.js`, `gunaudio.js`)
+- `GUNS[id]` part lists (x, y, w, h, colour, flags: slide / rounded / vents) per firearm, blaster or gun device; `drawWeaponModel` routes them to `gaDraw` (no emitters). Suppressor can per gun (`can: [len, dia, col]`), shown on the player's gun (`GA.owner` set while `drawHeroSprite` draws the player), animated by `GA.supK` (0.45 s).
+- Weapon light `GA.light` (🔦 / L, night only): `scnLights` torch circles along the aim up to the first wall (`cityRay`), a lit cone drawn in `V10.onRenderWorld`, `stHeroVisMul × 1.5`.
+- `gauShot(id)` per class (crack / body / thump / action; suppressed: dull thup + action + rifle snap), echo taps by surroundings (room / street / open) × per-gun echo, thinned by shots in the last 0.5 s and capped at 5 voices.
+
+### 2.37 Independent hands (v14.3, `dualaim.js`)
+- Only when two or more **ranged** weapons are in hand (the sim's slot order: `armCap`, `handSlotOffset`). Every 0.12 s `dualAssign()` sorts the on-screen, non-staggered, non-ignored enemies by distance: hand 1 → nearest; each later hand → the nearest target not yet covered, except that all hands stay on the nearest when it is inside `DUAL.close` (110 px ≈ 3.4 m) and is the only one that close (or the only target).
+- `V10.onStep` (after the sim's weapon loop) turns each hand's `w.dualAng` toward its target at 11 + 2.5·hand rad/s and writes `w.armAng` / `w.ang`, which `render.js` already draws per slot. No target → back to `player.aim` (+0.18 rad for even hands).
+- `fireWeapon(w)` in `combat.js` asks `dualAimTarget(w)` (valid only while that enemy is active and on screen), so the shots go where the hand points. One gun, or blades only → nothing changes.
+
 ---
 
 ## 3. Version history
@@ -368,8 +401,9 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 | **v13** (`65c212e`) | **Threat Sense** meter (per-hero style, distance-scaled rival / Titan clocks, edge arrow). **Force Persuasion** (light-side Force users turn enemies into allies). **Yoda:** Force Lift & Hurl, Ataru bounding, **Will of the Force**, Tutaminis. **Hero Creator v2:** any character — 26 weapons, twins with own cylinders / targets, 2 skills, gear, mobility, armor, headgear, **jetpack flight**, 8 presets, v12 migration. |
 | **v14** (`74a5b73`) | **Nexus City:** generated 64 × 64 km region with 55 settlements, interstates and thousands of enterable single-storey buildings with full interiors; 14 universe looks; line-of-sight fog and roofs; **stealth AI** with realistic hearing (walls, doors, suppressors, ricochets, glass), director, street patrols and hunters; **48 detailed enemy rosters** (city and arena); **per-hero vision** (16 senses); minimap, full map, markers & notes, drop zone; drivable cars; supply caches; district threat; 18-test suite. |
 | **v14.1 patch** (`c04fb0a`) | **Vehicles:** every vehicle drivable (incl. roadblock army trucks, buses, semis, fire engines, forklifts, garage cars), rigid-body collisions, location-based crumple zones, detachable parts, damage from every source, fire & explosions; **fuel** with themed stations. **Squad riders** shooting from their side, sunroof / hatch gunners, **doctrine convoys** (intervals, sectors, herringbone, cross-load, hold markers). **Visible doors, roofs** (ladders, tap gestures), **tall fences** by hero mobility, **eye-height** vision. **HUD layout manager** (no overlaps, priority / Don't shrink options). Fix: interiors are now repeatable (a random-comparator sort made ~1 % of buildings re-furnish differently after cache evictions). 20-test suite. |
-| **v14.2** (this update) | **Location:** homeworlds for every universe (13 worlds, a new one every run), Classic Nexus, the creator's Hails From, ring roads, airports, natives. **Real map:** 14 Indiana places offline + any city online (48 km, real names, interiors, Highway 365). **Scenarios:** Survivors / Post-Apocalyptic (zombies) / Simulated Economy (townsfolk, jobs, market, the law). Searchable furniture, capsules, courier. **Flight** for everything that flies. **Ki-Surge** replaces 40K (10 heroes, golden form, Instant Transmission, Cell absorbs). Qui-Gon, The Count, Old Ben, film ignitions. Rival evasion & bounty. Age-appropriate content setting. |
+| **v14.2** | **Location:** homeworlds for every universe (13 worlds, a new one every run), Classic Nexus, the creator's Hails From, ring roads, airports, natives. **Real map:** 14 Indiana places offline + any city online (48 km, real names, interiors, Highway 365). **Scenarios:** Survivors / Post-Apocalyptic (zombies) / Simulated Economy (townsfolk, jobs, market, the law). Searchable furniture, capsules, courier. **Flight** for everything that flies. **Ki-Surge** replaces 40K (10 heroes, golden form, Instant Transmission, Cell absorbs). Qui-Gon, The Count, Old Ben, film ignitions. Rival evasion & bounty. Age-appropriate content setting. |
 
+| **v14.3** (this update) | Corrections patch: real maps at **1:3** (adjustable 1:2 / 1:1) with real-equivalent speeds and distances; evidence-only building types; **NPC traffic** with 56 s signals, green waves and stop signs; **traffic police** (pull-over, talk, auto-paid ticket + bank notification, a night in jail); the touch-first **ACTION** button (sticky, roof GET DOWN, hold-to-exit); no key hints on touch; real **gun silhouettes**, visible suppressors, real gunshot audio with capped echo; **weapon light**; **dual wield** — each hand aims and fires at its own target. |
 ---
 
 ## 4. Status of the Version 9.0 plan

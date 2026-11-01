@@ -491,3 +491,81 @@ flowchart LR
   RET --> K{"leader finished?"}
   K -- yes --> PAY["stake claimed: cash + XP · bounty − evasions · count reset"]
 ```
+
+## 22. Traffic at a junction (js/traffic.js)
+
+```mermaid
+flowchart LR
+  L["car on its lane (IDM: keeps the gap)"] --> A{"near the junction?"}
+  A -- no --> L
+  A -- yes --> N["pick the next road (straight > right > left)"]
+  N --> C{"control"}
+  C -- signal --> S{"my phase"}
+  S -- green --> B{"room beyond the box?"}
+  S -- amber --> Y{"can stop comfortably?"} -- yes --> W["stop at the line"]
+  Y -- no --> B
+  S -- red --> W
+  C -- "stop sign / side road" --> F["full stop 0.7 s"] --> G{"box free and no main-road car within 3 s?"} -- yes --> B
+  G -- no --> F
+  C -- "main road, unmarked" --> B
+  B -- yes --> T["Bézier turn through the box, indicators"] --> L
+  B -- no --> W
+  W --> C
+```
+
+## 23. A traffic stop (js/police.js)
+
+```mermaid
+flowchart TD
+  O["speeding on a road · red light · crash"] --> Wt{"a cop saw it? (cruiser with line of sight / officer on foot)"}
+  Wt -- no --> X["nothing happens"]
+  Wt -- yes --> CH["🚨 PULL OVER — the cruiser follows your path"]
+  CH --> STOP{"you stop?"}
+  STOP -- "no (16 s, still fast)" --> EV["🚨 EVADING — economy heat up"] --> LOST{"out of sight 7–10 s?"}
+  LOST -- yes --> FREE["you lost them"]
+  LOST -- no --> STOP
+  STOP -- yes --> PARK["cruiser parks behind you"] --> WALK["officer walks to your window"] --> TALK["talk: sorry / license / hurry / floor it"]
+  TALK -- "floor it" --> EV
+  TALK --> WARN{"small offense + polite?"} -- "warning" --> GO["drive safe"]
+  WARN -- ticket --> PAY{"wallet ≥ fine?"}
+  PAY -- yes --> BANK["auto-paid · 🏦 −$X watch notification"] --> GO
+  PAY -- no --> JAIL["fade: 'you couldn't afford the ticket — a night in jail'"] --> AM["07:00 next day, out of the police station, car impounded"]
+```
+
+## 24. The ACTION button (js/actionui.js)
+
+```mermaid
+flowchart LR
+  F["every frame: findInteractTarget()"] --> T{"a target?"}
+  T -- yes --> SHOW["show icon + words (live)"]
+  T -- no --> M{"seen < 2.6 s ago and < 72 px away?"}
+  M -- yes --> STK["keep showing it (sticky)"]
+  M -- no --> R{"on a roof?"}
+  R -- yes --> GD["⬇ GET DOWN"]
+  R -- no --> HIDE["hide"]
+  SHOW --> TAP["tap (works while moving)"]
+  STK --> TAP
+  GD --> TAP
+  TAP --> V{"moving vehicle exit?"} -- yes --> HOLD["hold 0.38 s"] --> DO["do it (a remembered target is forced through the interact chain)"]
+  V -- no --> DO
+```
+
+
+## 25. Two guns, two targets (js/dualaim.js)
+
+```mermaid
+flowchart TD
+  A[Every 0.12 s] --> B{Two or more ranged weapons in hand?}
+  B -- no --> Z[Classic aim: every weapon follows player.aim]
+  B -- yes --> C[Sort on-screen enemies by distance]
+  C --> D{Any enemy?}
+  D -- no --> Y[Hands drift back to player.aim / low ready]
+  D -- yes --> E[Hand 1 → nearest]
+  E --> F{Nearest within 3.4 m and the only one that close?}
+  F -- yes --> G[Every hand on that target]
+  F -- no --> H[Each later hand → nearest target nobody covers yet<br/>none left → nearest]
+  G --> I[Each frame: turn each hand toward its target at its own speed]
+  H --> I
+  I --> J[fireWeapon w → shoots at dualAimTarget w]
+```
+
