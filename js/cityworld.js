@@ -150,6 +150,10 @@ function cityBuildChunk(cx, cy) {
         if (!inC(fx, fy, f.w, f.h)) continue;
         const fl = f.s === FS_TALL ? F_MOVE | F_SIGHT | F_SHOT : f.s === FS_COVER ? F_MOVE | F_SHOT : F_MOVE | F_LOW;
         const kd = f.s === FS_TALL || f.t === "car" || f.t === "firetruck" || f.t === "carlift" ? (f.t === "car" || f.t === "firetruck" ? K_CAR : K_FURN_HARD) : K_FURN;
+        if (f.pc) {   // v14.2: furniture of a building at an angle — exactly the cells under it
+          for (let q = 0; q < f.pc.length; q += 2) { const xx = b.x + f.pc[q], yy = b.y + f.pc[q + 1]; if (xx < x0 || yy < y0 || xx >= x0 + CH || yy >= y0 + CH) continue; const i = ((yy - y0) << 7) | (xx - x0); if ((C.flags[i] & (F_MOVE | F_DOOR)) === 0) { C.flags[i] |= fl; C.kind[i] = kd; } }
+          continue;
+        }
         const xa2 = Math.max(x0, Math.floor(fx)), ya2 = Math.max(y0, Math.floor(fy)), xb2 = Math.min(x0 + CH, Math.ceil(fx + f.w)), yb2 = Math.min(y0 + CH, Math.ceil(fy + f.h));
         for (let yy = ya2; yy < yb2; yy++) for (let xx = xa2; xx < xb2; xx++) { const i = ((yy - y0) << 7) | (xx - x0); if ((C.flags[i] & (F_MOVE | F_DOOR)) === 0) { C.flags[i] |= fl; C.kind[i] = kd; } }
       }
@@ -473,4 +477,4 @@ function cityFindWalkable(lx, ly, maxR = 400, outdoor = true) {
   }
   return [lx, ly];
 }
-// EOF part 1 (continued in citydirector section below)
+// EOF:js/cityworld.js

@@ -20,20 +20,21 @@
 const ST_WPN = {};
 (function () {
   const set = (ids, L0, cls, sup) => ids.forEach(i => { ST_WPN[i] = [L0, cls, sup]; });
-  set([0, 3, 14, 18, 24, 29, 30, 42, 48, 50, 55, 71, 76, 77, 78, 79], 72, "x", 0);   // sabers, blades, claws
+  set([0, 3, 14, 18, 24, 29, 30, 37, 42, 48, 50, 55, 71, 76, 77, 78, 79], 72, "x", 0);   // sabers, blades, claws (and Trunks's sword)
   set([17], 96, "x", 0);                                     // Reaver reactor buzzsaws
   set([1, 5, 6, 54], 140, "b", 0); set([2], 145, "b", 0);    // blasters & bowcaster
   set([7, 9], 136, "e", 0);                                  // Goa'uld staff weapons
-  set([10, 19, 22, 23, 35, 36, 43, 47], 122, "e", 0);        // beams, lasguns, phasers, gauss
+  set([10, 19, 22, 23, 43, 47], 122, "e", 0);                // beams, phasers
+  set([34, 35, 36, 38, 84, 85, 86, 87, 88], 132, "e", 0);   // ki blasts (the androids' energy cannons too)
   set([4, 11, 45], 100, "e", 0); set([46], 88, "e", 0);      // welder / stunner / grav-gun · sonic
   set([16, 21], 150, "e", 0); set([58], 130, "m", 0);        // thrusters & mortar · Weasley fireworks
-  set([12, 38, 49, 56, 57, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 72, 73, 74, 75], 104, "m", 0);
+  set([12, 49, 56, 57, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 72, 73, 74, 75], 104, "m", 0);
   set([20], 92, "v", 0);                                     // the Voice
   set([8, 13, 15, 32, 39, 51], 160, "g", 1);                 // firearms that take a suppressor
   set([27, 31], 162, "g", 0); set([25, 41, 52], 165, "g", 0); // magnums, revolvers, Deckard's blaster
-  set([26, 28, 33, 40, 44, 53], 170, "g", 0); set([34, 37], 176, "g", 0);   // heavy guns & shotguns · bolters & dakka
+  set([26, 28, 33, 40, 44, 53], 170, "g", 0);   // heavy guns & shotguns
 })();
-const ST_NOSUP_WHY = { 25: "a Viper magnum", 27: "a mass-effect shotgun", 28: "an M56 smartgun", 31: "a Morita", 33: "the Super Shotgun", 34: "a bolter", 37: "a Deffgun", 40: "a minigun", 41: "Deckard's blaster", 44: "a quad-barrel boomstick", 52: "revolvers", 53: "an M60", 26: "Centurion autocannons" };
+const ST_NOSUP_WHY = { 25: "a Viper magnum", 27: "a mass-effect shotgun", 28: "an M56 smartgun", 31: "a Morita", 33: "the Super Shotgun", 34: "ki blasts", 35: "ki blasts", 36: "ki blasts", 38: "ki blasts", 84: "ki blasts", 85: "ki blasts", 86: "arm cannons", 87: "ki blasts", 88: "ki blasts", 40: "a minigun", 41: "Deckard's blaster", 44: "a quad-barrel boomstick", 52: "revolvers", 53: "an M60", 26: "Centurion autocannons" };
 function stHeroProfile(wpnId) {
   let p = ST_WPN[wpnId];
   if (!p && player && player.cid === CUSTOM_CID && typeof customCityUniverse === "function") { const u = customCityUniverse(); if (u && u.sound) p = u.sound; }
@@ -474,7 +475,7 @@ function stSpawnGroup(s, S) {
       else if (s.pts) { const p = s.pts[k % s.pts.length]; tx = Math.round(p[0] + (Math.random() - 0.5) * 6); ty = Math.round(p[1] + (Math.random() - 0.5) * 6); }
       else { tx = Math.round((s.x || s.ax) + (Math.random() - 0.5) * 8); ty = Math.round((s.y || s.ay) + (Math.random() - 0.5) * 8); }
       const f = cityFlagsT(tx, ty);
-      ok = !(f & F_MOVE) && !cityCircleBlocked(tx * 16 + 8 - CITY.orx, ty * 16 + 8 - CITY.ory, 8, false);
+      ok = !(f & F_MOVE) && !(b && rooms.length && !(f & F_IN)) && !cityCircleBlocked(tx * 16 + 8 - CITY.orx, ty * 16 + 8 - CITY.ory, 8, false);   // v14.2: room spawns stay indoors (odd-shaped rooms)
     }
     if (!ok) continue;
     const lx = tx * 16 + 8 - CITY.orx, ly = ty * 16 + 8 - CITY.ory;

@@ -2,7 +2,7 @@
 // PART: v10 module 4 of 8
 // DETAIL: v10 Squad Direct Command — quick-access radial order wheel (Hold Position / Focus Fire / Advance / Regroup) for
 //         every summoned companion (necro swordsmen, hounds, bowmen, knights, bone golems) plus universe-themed rifle
-//         fireteams (Tears of the Sun SEALs, Colonial Marines, 501st Clones, Cadians...) called in from radio beacons or
+//         fireteams (Tears of the Sun SEALs, Colonial Marines, 501st Clones, Earth's Defenders...) called in from radio beacons or
 //         deployed with military heroes. Includes a vehicle co-gunner: while you drive, a soldier rides along on the gun.
 
 "use strict";
@@ -29,15 +29,15 @@ const FIRETEAM_THEMES = {
   fremen: { name: "Fremen Fedaykin", uni: "#8d6e63", helm: "#5d4037", accent: "#40c4ff", names: ["Stilgar", "Chani", "Jamis", "Korba", "Otheym"] },
   fleet:  { name: "Colonial Fleet Marines", uni: "#455a64", helm: "#263238", accent: "#3a86ff", names: ["Kelly", "Hotdog", "Racetrack", "Gaeta", "Tigh"] },
   mi:     { name: "Roughnecks Mobile Infantry", uni: "#78909c", helm: "#546e7a", accent: "#ffd166", names: ["Rico", "Dizzy", "Ace", "Sugar", "Zim"] },
-  guard:  { name: "Cadian Shock Troops", uni: "#8d7b5a", helm: "#5d5037", accent: "#ffcc00", names: ["Creed", "Kell", "Straken", "Gaunt", "Larkin"], bolt: true },
+  ki:     { name: "Earth's Defenders", uni: "#ff9100", helm: "#151515", accent: "#2962ff", names: ["Krillin", "Yamcha", "Tien", "Chiaotzu", "Yajirobe"], bolt: true },
   zion:   { name: "Zion Resistance Cell", uni: "#212121", helm: "#111111", accent: "#4cc9f0", names: ["Trinity", "Switch", "Apoc", "Mouse", "Tank"] },
   lambda: { name: "Lambda Resistance", uni: "#1565c0", helm: "#0d47a1", accent: "#ff6d00", names: ["Barney", "Alyx", "Vance", "Odessa", "Griggs"] },
   blue:   { name: "Blue Stripes Commandos", uni: "#283593", helm: "#1a237e", accent: "#4ea8de", names: ["Roche", "Ves", "Fenn", "Talar", "Varga"], bolt: true },
   order:  { name: "Order of the Phoenix", uni: "#4a148c", helm: "#311b92", accent: "#ffd166", names: ["Kingsley", "Tonks", "Moody", "Arthur", "Molly"], bolt: true }
 };
-const FACTION_FIRETEAM = ["clone", "sgc", "rim", "fremen", "fleet", "marine", "guard", "zion", "lambda", "blue", "order"];
-const HERO_FIRETEAM = { 53: "seal", 28: "marine", 31: "mi", 8: "sgc", 2: "clone", 34: "guard" };
-const INNATE_SQUAD = { 53: 4, 28: 3, 31: 3, 8: 3, 2: 3, 34: 3 };   // military heroes deploy with a reinforcing fireteam
+const FACTION_FIRETEAM = ["clone", "sgc", "rim", "fremen", "fleet", "marine", "ki", "zion", "lambda", "blue", "order"];
+const HERO_FIRETEAM = { 53: "seal", 28: "marine", 31: "mi", 8: "sgc", 2: "clone" };
+const INNATE_SQUAD = { 53: 4, 28: 3, 31: 3, 8: 3, 2: 3 };   // military heroes deploy with a reinforcing fireteam
 
 const SQUAD_ORDERS = [
   { id: 0, label: "REGROUP", icon: "↩", call: "ON ME! REGROUP!", reply: ["Moving to you!", "On your six!", "Falling in!"] },

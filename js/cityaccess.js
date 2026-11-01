@@ -20,8 +20,8 @@ const ACC_MOB = {
   15: ["climb", "SCRAMBLE"], 16: ["jet", "JETPACK"], 17: ["climb", "REAVER CLIMB", 1.3], 18: ["leap", "WEIRDING LEAP"], 19: ["climb", "SARDAUKAR CLIMB", 1.2],
   20: ["none", "THE VOICE"], 21: ["jet", "SUSPENSORS"], 22: ["tele", "ENERGIZE"], 23: ["tele", "BORG TRANSPORT"], 24: ["climb", "SCRAMBLE"],
   25: ["jet", "THRUSTERS"], 26: ["smash", "CENTURION"], 27: ["leap", "BIOTIC CHARGE"], 28: ["none", "SMARTGUN RIG"], 29: ["leap", "YAUTJA LEAP"],
-  30: ["climb", "WALL CRAWL", 2.2], 31: ["climb", "SCRAMBLE"], 32: ["leap", "SPARTAN JUMP"], 33: ["leap", "DOUBLE JUMP"], 34: ["smash", "POWER ARMOUR"],
-  35: ["none", "SERVO-HARNESS"], 36: ["smash", "NECRODERMIS"], 37: ["smash", "WAAAGH!"], 38: ["tele", "WARP JAUNT"], 39: ["leap", "SUPER JUMP"],
+  30: ["climb", "WALL CRAWL", 2.2], 31: ["climb", "SCRAMBLE"], 32: ["leap", "SPARTAN JUMP"], 33: ["leap", "DOUBLE JUMP"], 34: ["jet", "KI FLIGHT"],
+  35: ["jet", "KI FLIGHT"], 36: ["jet", "KI FLIGHT"], 37: ["jet", "KI FLIGHT"], 38: ["jet", "KI FLIGHT"], 39: ["leap", "SUPER JUMP"],
   40: ["smash", "T-800"], 41: ["climb", "SCRAMBLE"], 42: ["leap", "SANDEVISTAN"], 43: ["climb", "SCRAMBLE"], 44: ["climb", "SCRAMBLE"],
   45: ["leap", "LONG-JUMP MODULE"], 46: ["tele", "TARDIS HOP"], 47: ["leap", "SPACE JUMP"], 48: ["leap", "WITCHER VAULT"], 49: ["tele", "NON-EUCLIDEAN STEP"],
   50: ["leap", "RONIN LEAP"], 51: ["climb", "SCRAMBLE"], 52: ["climb", "SCRAMBLE"], 53: ["climb", "SCRAMBLE", 1.3], 54: ["jet", "JETPACK"],
@@ -29,7 +29,8 @@ const ACC_MOB = {
   60: ["tele", "APPARATE"], 61: ["giant", "HALF-GIANT STRIDE"], 62: ["tele", "APPARATE"], 63: ["tele", "APPARATE"], 64: ["tele", "APPARATE"],
   65: ["tele", "APPARATE"], 66: ["tele", "APPARATE"], 67: ["tele", "APPARATE"], 68: ["tele", "APPARATE"], 69: ["tele", "APPARATE"],
   70: ["jet", "DARK FLIGHT"], 71: ["tele", "ISTARI STRIDE"], 72: ["tele", "ISTARI STRIDE"], 73: ["tele", "SLING-RING PORTAL"], 74: ["jet", "HEX FLIGHT"],
-  75: ["tele", "SHADOW STEP"], 76: ["smash", "FORCE CRUSH"], 77: ["leap", "FORCE FLIP"], 78: ["leap", "FORCE LEAP"], 79: ["leap", "ATARU FLIP"]
+  75: ["tele", "SHADOW STEP"], 76: ["smash", "FORCE CRUSH"], 77: ["leap", "FORCE FLIP"], 78: ["leap", "FORCE LEAP"], 79: ["leap", "ATARU FLIP"],
+  84: ["jet", "KI FLIGHT"], 85: ["jet", "KI FLIGHT"], 86: ["jet", "KI FLIGHT"], 87: ["jet", "KI FLIGHT"], 88: ["jet", "KI FLIGHT"]
 };
 const ACC_MOB_DESC = {
   tele: "phases through walls & fences — double-tap a building to go inside, triple-tap to land on its roof",

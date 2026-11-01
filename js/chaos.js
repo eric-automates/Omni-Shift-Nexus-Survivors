@@ -329,7 +329,7 @@ function sfxWeapon(style, wpnId = 0, isSaber = false) {
       playNoise(0.05, "bandpass", 2200, 600, 2.5, 0.16);
       return;
     }
-    if (wpnId === 3 || wpnId === 11 || wpnId === 38 || wpnId === 49 || style === "chain") { sfxForceLightning(); return; }
+    if (wpnId === 3 || wpnId === 11 || wpnId === 49 || style === "chain") { sfxForceLightning(); return; }
     if (wpnId === 52 || wpnId === 13) {
       playNoise(0.065, "bandpass", 2800, 480, 1.2, 0.34);
       sfxTone(1600, 170, 0.048, "square", 0.25, 0.035);
@@ -342,7 +342,7 @@ function sfxWeapon(style, wpnId = 0, isSaber = false) {
       sfxTone(190, 58, 0.06, "square", 0.18, 0.03);
       return;
     }
-    if ([15, 28, 31, 34, 37, 53].includes(wpnId)) {
+    if ([15, 28, 31, 53].includes(wpnId)) {
       playNoise(0.08, "lowpass", 1600, 240, 1.0, 0.32);
       sfxTone(320, 48, 0.085, "sawtooth", 0.26, 0.04);
       sfxTone(1350, 480, 0.028, "triangle", 0.15, 0.04);
@@ -353,7 +353,7 @@ function sfxWeapon(style, wpnId = 0, isSaber = false) {
       sfxTone(210, 42, 0.095, "square", 0.26, 0.05);
       return;
     }
-    if ([0, 2, 6, 7, 9, 10, 19, 22, 32, 36, 40, 41, 43, 45, 47].includes(wpnId) || style === "beam") {
+    if ([0, 2, 6, 7, 9, 10, 19, 22, 32, 40, 41, 43, 45, 47].includes(wpnId) || style === "beam") {
       const hi = wpnId === 6 ? 1520 : (wpnId === 40 ? 1180 : 1320);
       sfxTone(hi, 195, 0.078, "sawtooth", 0.22, 0.04);
       sfxTone(hi * 0.5, 92, 0.082, "triangle", 0.16, 0.04);
@@ -616,10 +616,22 @@ async function checkFileExists(url) {
   }
 }
 
+// v14.2: opened straight from disk (file://) the browser refuses every fetch probe, so the listed tracks are
+// trusted as they are and a file that turns out to be missing simply drops out of the playlist (runAudio.onerror)
+const MUSIC_FROM_DISK = typeof location !== "undefined" && location.protocol === "file:";
 async function discoverMusicFiles() {
   if (isDiscoveringMusic) return;
   isDiscoveringMusic = true;
   const foundMap = new Map();
+  if (MUSIC_FROM_DISK) {
+    CUSTOM_TRACK_LIST.forEach((raw, i) => { raw = raw.trim(); if (!raw) return; const url = raw.startsWith("music/") ? raw : ("music/" + raw), meta = parseTrackMetadata(url, i + 1); foundMap.set(meta.num + "_" + meta.fileName, meta); });
+    MASTER_TRACKS = Array.from(foundMap.values()).sort((a, b) => a.num - b.num);
+    MASTER_TRACKS.forEach(t => enabledGenres.add(t.genre));
+    playlistInitialized = true; isDiscoveringMusic = false;
+    if (activeQueue.length === 0 && MASTER_TRACKS.length > 0) rebuildShuffleQueue();
+    renderGenreFilterList();
+    return;
+  }
 
   let highestListed = 0;
   for (let i = 0; i < CUSTOM_TRACK_LIST.length; i++) {
@@ -781,6 +793,10 @@ runAudio.onended = () => {
 };
 
 runAudio.onerror = () => {
+  if (MUSIC_FROM_DISK && currentTrack) {   // a listed file that isn't on disk: forget it for this session
+    const u = currentTrack.url;
+    MASTER_TRACKS = MASTER_TRACKS.filter(t => t.url !== u); activeQueue = activeQueue.filter(t => t.url !== u);
+  }
   if (activeQueue.length > 0) skipTrackForward();
   else runAudioFailed = true;
 };

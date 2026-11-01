@@ -141,7 +141,7 @@ const SABER_PATHS = {
 // Swords / energy blades that are not Star Wars lightsabers reuse the same move vocabulary, keyed by their
 // existing HERO_STANCE_TABLE pattern (stage names come from that table).
 const SF_PATTERN_FORM = ["shiicho", "makashi", "soresu", "ataru", "djemso", "niman", "juyo", "whirl"];
-const SF_STEEL_IDS = [14, 18, 19, 24, 34, 48, 50, 71];        // drawn as steel, steel sounds
+const SF_STEEL_IDS = [14, 18, 19, 24, 37, 48, 50, 71];        // drawn as steel, steel sounds
 const SF_PLASMA_OFF = [18, 19, 24, 48, 50, 67, 71];           // same list the slicer uses for limb colours
 
 /* === 5. STATE === */
@@ -321,11 +321,15 @@ function saberEngineStep(w, slot, nSlots, simDt, col) {
   let nearest = 1e9, tgtNear = -1;
   for (let k = 0; k < sfGlobal.nearN; k++) { const o = sfGlobal.near[k]; if (o.d < nearest) { nearest = o.d; tgtNear = k; } }
   const stow = (player.saberStowT || 0) > 0;                     // v13: Yoda puts his blade away for the Will of the Force
-  const wantLit = !stow && (nearest < 260 || sfGlobal.boltNear || player.whirlwindTimer > 0 || sfGlobal.fanT > 0 || (player.invulnT > 0 && nearest < 400));
+  // v14.2: steel is never "switched off" — IN HAND (default) keeps it drawn; SHEATHE mode scabbards it (js/sheathe.js)
+  const steelHand = SF_STEEL_IDS.includes(w.id) && (typeof sheatheBladeMode !== "function" || sheatheBladeMode() === "hand");
+  const wantLit = steelHand || (!stow && (nearest < 260 || sfGlobal.boltNear || player.whirlwindTimer > 0 || sfGlobal.fanT > 0 || (player.invulnT > 0 && nearest < 400)));
   if (wantLit) st.idle = 0; else st.idle += simDt;
   if (stow) st.idle = Math.max(st.idle, 3.5);
   const prevLit = st.lit;
-  if (wantLit || st.idle < 3.0) st.lit = Math.min(1, st.lit + simDt / 0.16);
+  // v14.2: js/saga.js draws the hilt from the belt and ignites it in each character's own film style
+  if (typeof sagaLitStep === "function" && sagaLitStep(w, st, wantLit, stow, simDt, slot)) { /* driven by the choreography */ }
+  else if (wantLit || st.idle < 3.0) st.lit = Math.min(1, st.lit + simDt / 0.16);
   else st.lit = Math.max(0, st.lit - simDt / (stow ? 0.1 : 0.26));
   if (prevLit < 0.05 && st.lit >= 0.05 && slot === 0) {
     sfIgnite(w, true);
@@ -354,7 +358,8 @@ function saberEngineStep(w, slot, nSlots, simDt, col) {
     if (!st.ex) st.ex = [];
     for (let k = 0; k < extraN; k++) {
       const sub = st.ex[k] || (st.ex[k] = sfNewState(w));
-      sub.lit = st.lit; sub.stage = st.stage; sub.key = st.key;
+      sub.lit = st.subLit != null ? st.subLit : st.lit; sub.stage = st.stage; sub.key = st.key;
+      sub.hand = st.hand; sub.igW = st.igW; sub.igArm = st.igArm; sub.igBlade = st.igBlade; sub.igReach = st.igReach; sub.igLenK = st.igLenK;
       sfStepBlade(w, sub, Math.min(3, slot + 1 + k), total, C, false);
     }
   }
@@ -405,15 +410,21 @@ function sfStepBlade(w, st, slot, nSlots, C, main) {
     hmMv = st.mv;
   }
 
-  // stowed blend: lowered hilt while the blade is retracted
-  const litK = st.lit;
+  // stowed blend: lowered hilt while the blade is retracted (v14.2: follows the hand — a drawn, unlit hilt is held, not clipped)
+  const litK = st.lit, handK = st.hand != null ? Math.max(st.hand, litK) : litK;
   let armW = st.arm, bladeW = st.blade, reachW = st.reach;
-  if (litK < 1) {
-    const sa = player.aim || 0, k = 1 - litK;
+  if (handK < 1) {
+    const sa = player.aim || 0, k = 1 - handK;
     armW = sfLerpAng(armW, sa + SF_STOW.arm * sideSign, k); bladeW = sfLerpAng(bladeW, sa + SF_STOW.blade * sideSign, k);
     reachW = sfLerp(reachW, SF_STOW.reach, k);
   }
-  const lenPx = C.baseLen * st.len * litK;
+  if (st.igW > 0) {                                               // v14.2 ignition choreography pose (js/saga.js)
+    const sa = player.aim || 0;
+    armW = sfLerpAng(armW, sa + st.igArm * sideSign, st.igW); bladeW = sfLerpAng(bladeW, sa + st.igBlade * sideSign, st.igW);
+    reachW = sfLerp(reachW, st.igReach, st.igW);
+  }
+  // v14.2: steel blades never "retract" like a lightsaber — they are either drawn (full length) or sheathed on the back
+  const lenPx = C.baseLen * st.len * (SF_STEEL_IDS.includes(w.id) ? (litK > 0.5 ? 1 : 0) : litK) * (st.igLenK || 1);
 
   // ---- lunge (body steps into the strike) ----
   if (st.lunge > sfGlobal.maxLunge) {
@@ -433,7 +444,7 @@ function sfStepBlade(w, st, slot, nSlots, C, main) {
   o.slot = slot; o.st = st;
 
   // ---- swept collision (previous pose -> current pose) ----
-  if (litK > 0.5 && lenPx > 4 && !gloryE) {
+  if (litK > 0.5 && lenPx > 4 && !gloryE && !(st.igW > 0.5)) {   // v14.2: an ignition flourish is theatre — it never cuts anyone
     const hm = sfGlobal.hm;
     sfFillHitMode(hm, hmKind, hmMv, F, w, C.info);
     hm.st = st;

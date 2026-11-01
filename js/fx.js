@@ -8,7 +8,7 @@
 
 /* === 1. STATE === */
 // Slug-throwers that eject brass (energy weapons, wands and blades do not).
-const BALLISTIC_IDS = new Set([8, 13, 15, 25, 28, 31, 32, 33, 34, 37, 39, 44, 51, 53]);
+const BALLISTIC_IDS = new Set([8, 13, 15, 25, 28, 31, 32, 33, 39, 44, 51, 53]);
 const STREAK_TIERS = [
   [2, "DOUBLE KILL", "#80deea"], [3, "TRIPLE KILL", "#80deea"], [5, "MULTI KILL", "#ffd166"], [8, "MEGA KILL", "#ffd166"],
   [12, "ULTRA KILL", "#ff9100"], [18, "MONSTER KILL", "#ff9100"], [25, "RAMPAGE", "#ff5252"], [40, "UNSTOPPABLE", "#ff1744"],

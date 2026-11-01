@@ -29,8 +29,8 @@ const BIOME_THEMES = {
                hazard: { kind: "bog", name: "Mud Bog", col: "#3e2c1c", dps: 2, slow: 0.55, enemyMul: 3 }, weather: "rain", tint: "rgba(0,80,20,0.06)", dark: 0.35, accent: "#a5d6a7" },
   hell:      { name: "Hell Breach", base: "#33120e", blot: ["#2a0e0b", "#45180f"], floor: "lava", spire: "bonespire", crate: "altar", decor: "skulls", decorCol: "#ff3d00",
                hazard: { kind: "lava", name: "Lava Pool", col: "#ff3d00", dps: 16, enemyMul: 2.5 }, weather: "embers", tint: "rgba(255,40,0,0.07)", dark: 0.4, accent: "#ff6e40" },
-  gothic:    { name: "Imperial Hive Ruins", base: "#37373b", blot: ["#2e2e32", "#424248"], floor: "flagstone", spire: "pillar", crate: "rubble", decor: "skulls", decorCol: "#ffcc00",
-               hazard: { kind: "rift", name: "Warp Rift", col: "#aa00ff", dps: 10, pull: 55, enemyMul: 2.5 }, weather: "ash", tint: "rgba(255,200,120,0.03)", dark: 0.35, accent: "#ffd54f" },
+  kiplains:  { name: "Rocky Battle Plains", base: "#a88d63", blot: ["#98805a", "#b89d72"], floor: "cracked", spire: "rock", crate: "stone", decor: "fern", decorCol: "#8bc34a",
+               hazard: { kind: "vent", name: "Ki Crater", col: "#ffd54f", dps: 10, enemyMul: 2.5 }, weather: "dust", tint: "rgba(255,200,120,0.04)", dark: 0.1, accent: "#ff9100" },
   neon:      { name: "Neon Megacity Alleys", base: "#0d0b16", blot: ["#0a0912", "#15121f"], floor: "asphalt", spire: "tower", crate: "dumpster", decor: "neon", decorCol: "#f72585",
                hazard: { kind: "puddle", name: "Electrified Puddle", col: "#4cc9f0", dps: 6, shock: 5, enemyMul: 3 }, weather: "rain", tint: "rgba(120,0,255,0.05)", dark: 0.4, accent: "#f72585" },
   gotham:    { name: "Gotham Gothic Steel", base: "#15181c", blot: ["#101317", "#1d2126"], floor: "asphalt", spire: "gargoyle", crate: "dumpster", decor: "neon", decorCol: "#ffd54f",
@@ -53,7 +53,7 @@ const HERO_BIOME = {
   44: "wasteland", 51: "gotham", 47: "colony", 48: "darkwood", 49: "darkwood", 50: "feudal", 52: "frontier", 71: "darkwood",
   72: "darkwood", 73: "neon", 74: "wasteland", 75: "darkwood"
 };
-const FACTION_BIOME = ["tatooine", "abydos", "frontier", "arrakis", "starship", "colony", "gothic", "neon", "lab", "darkwood", "hogwarts"];
+const FACTION_BIOME = ["tatooine", "abydos", "frontier", "arrakis", "starship", "colony", "kiplains", "neon", "lab", "darkwood", "hogwarts"];
 
 const biomeState = { key: "tatooine", th: null, weather: [], hazLabelT: 0, shockT: 0, dustT: 0, vig: null, vigKey: "" };
 

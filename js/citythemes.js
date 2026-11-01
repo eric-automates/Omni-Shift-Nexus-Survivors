@@ -3,7 +3,7 @@
    The world layout (streets, lots, floor plans) is the same for everybody —
    your markers and notes stay valid — but every material is dressed for the
    hero you play: a gas station is a Tibanna fuel depot on the Outer Rim, a
-   promethium depot in the Imperium, "Floo Powder Co." for wizards, a lamp-oil
+   lamp-oil depot in the gothic spire city, "Floo Powder Co." for wizards, a lamp-oil
    & feed store in the Old West. Chairs, sofas, counters, cars, trees, street
    lamps, roofs, floors, signage and the litter on the ground all follow.
    ========================================================================= */
@@ -80,7 +80,7 @@ const CITY_THEMES = {
     r: { pat: "flatstone", gable: ["#d4b47a", "#c4a46a"], hip: ["#d8b87e", "#c8a86e"], flat: "#ccac72", trim: "#d4a537", hvac: "#b8964a", obelisk: true },
     fu: { style: "egyptian", wood: "#8a6a3a", wood2: "#6a4e2a", fabric: "#1e4a8a", fabric2: "#8a1e1e", metal: "#d4a537", white: "#f0e2c0", accent: "#d4a537", glow: "#ffd166", screen: "#2a1e0a" },
     car: "glider", tree: "palm", lamp: "brazier", trash: "sand", flag: "#d4a537", weather: "dust", tint: "rgba(255,190,90,0.05)", dark: 0.15 },
-  gothic: { name: "Imperial Hive City", era: "future",
+  gothic: { name: "Gothic Spire City", era: "future",
     g: { grass: "#4a4a50", grass2: "#525258", dirt: "#3e3c40", road: "#2e2e33", road2: "#36363c", line: "#6a6a70", line2: "#6a6a70", walk: "#46464c", curb: "#5a5a60", lot: "#323237", plaza: "#4e4e55", drive: "#3e3e44", path: "#55555c", field: "#44443e", crop: ["#4a4a40", "#42423c"], water: "#2a3a4a", sand: "#5a5650", gravel: "#4a4a4e", woods: "#333832", pool: "#3a5a6a", park: "#3e4440" },
     w: { wood: "#4b4b55", brick: "#5a3a3a", masonry: "#55555f", metal: "#3e4048", stone: "#5e5e66", int: "#6a6a72", edge: "#121216", glow: "#ffcc33", glass: "#b8442a", frame: "#c9a227", gold: true },
     f: { living: ["flagstone", "#4a4a52"], bed: ["flagstone", "#46464e"], kitchen: ["flagstone", "#50505a"], bath: ["flagstone", "#56565e"], hall: ["flagstone", "#42424a"], garage: ["plate", "#3e3e46"], comm: ["flagstone", "#4c4c54"], office: ["flagstone", "#44444c"], civic: ["flagstone", "#4e4e56"], ind: ["grate", "#3a3a42"], wood: ["flagstone", "#42424a"] },
@@ -119,7 +119,7 @@ const CITY_THEME_HERO = {
   18: "desert", 19: "desert", 20: "desert", 21: "desert", 50: "desert",
   22: "starship", 23: "starship", 24: "starship", 25: "starship", 26: "starship", 27: "starship",
   28: "colony", 30: "colony", 31: "colony", 32: "colony", 33: "colony", 47: "colony", 29: "modern", 53: "modern",
-  34: "gothic", 35: "gothic", 36: "gothic", 37: "gothic", 38: "gothic",
+  34: "capsule", 35: "capsule", 36: "capsule", 37: "capsule", 38: "capsule", 84: "capsule", 85: "capsule", 86: "capsule", 87: "capsule", 88: "capsule",
   39: "modern", 40: "modern", 41: "neon", 42: "neon", 43: "wasteland", 44: "wasteland", 51: "modern",
   45: "modern", 46: "modern", 48: "medieval", 49: "modern", 71: "medieval", 72: "medieval", 75: "medieval", 73: "modern", 74: "modern"
 };
@@ -131,26 +131,26 @@ function cityThemeKeyForHero(cid) {
 
 /* --- themed signage ----------------------------------------------------------- */
 const CITY_SIGNS = {
-  gasstore: { modern: "GAS & GO", neon: "VOLT CHARGE", galactic: "TIBANNA FUEL", coruscant: "REPULSOR FUEL", starship: "DEUTERIUM DEPOT", colony: "HYDROGEN DEPOT", frontier: "FUEL & FEED", western: "LAMP OIL & FEED", desert: "WATER SELLERS", pharaoh: "NAQUADAH DEPOT", gothic: "PROMETHIUM DEPOT", wasteland: "GAS-N-RADS", medieval: "STABLES", wizard: "FLOO POWDER CO." },
-  diner: { neon: "NOODLE BAR", galactic: "CANTINA", coruscant: "DEX'S DINER", starship: "MESS HALL", colony: "MESS HALL", frontier: "TEA HOUSE", western: "SALOON", desert: "WATER HALL", pharaoh: "FEAST HALL", gothic: "MUNITORUM MESS", wasteland: "NUKA DINER", medieval: "TAVERN", wizard: "THREE BROOMSTICKS" },
-  cafe: { neon: "SYNTH-CAF", galactic: "CAF STAND", coruscant: "CAF HOUSE", starship: "REPLICATOR CAFE", western: "BAKERY", medieval: "BAKERY", wizard: "TEA SHOPPE", gothic: "RECAF STALL", wasteland: "BOTTLE CAPS CAFE" },
-  bar: { galactic: "CANTINA", coruscant: "OUTLANDER CLUB", neon: "AFTERLIFE", western: "SALOON", frontier: "SALOON", medieval: "ALEHOUSE", wizard: "HOG'S HEAD", gothic: "AMASEC DEN", desert: "SPICE DEN", pharaoh: "MEAD HALL" },
-  store: { neon: "24/7 KONBINI", galactic: "JUNK DEALER", coruscant: "MARKET HALL", starship: "PROVISIONS", colony: "COMMISSARY", frontier: "TRADING POST", western: "GENERAL STORE", desert: "SPICE MARKET", pharaoh: "BAZAAR", gothic: "MUNITORUM DEPOT", wasteland: "TRADER", medieval: "GENERAL GOODS", wizard: "HONEYDUKES" },
+  gasstore: { modern: "GAS & GO", neon: "VOLT CHARGE", galactic: "TIBANNA FUEL", coruscant: "REPULSOR FUEL", starship: "DEUTERIUM DEPOT", colony: "HYDROGEN DEPOT", frontier: "FUEL & FEED", western: "LAMP OIL & FEED", desert: "WATER SELLERS", pharaoh: "NAQUADAH DEPOT", gothic: "LAMP-OIL DEPOT", wasteland: "GAS-N-RADS", medieval: "STABLES", wizard: "FLOO POWDER CO." },
+  diner: { neon: "NOODLE BAR", galactic: "CANTINA", coruscant: "DEX'S DINER", starship: "MESS HALL", colony: "MESS HALL", frontier: "TEA HOUSE", western: "SALOON", desert: "WATER HALL", pharaoh: "FEAST HALL", gothic: "REFECTORY", wasteland: "NUKA DINER", medieval: "TAVERN", wizard: "THREE BROOMSTICKS" },
+  cafe: { neon: "SYNTH-CAF", galactic: "CAF STAND", coruscant: "CAF HOUSE", starship: "REPLICATOR CAFE", western: "BAKERY", medieval: "BAKERY", wizard: "TEA SHOPPE", gothic: "COFFEE STALL", wasteland: "BOTTLE CAPS CAFE" },
+  bar: { galactic: "CANTINA", coruscant: "OUTLANDER CLUB", neon: "AFTERLIFE", western: "SALOON", frontier: "SALOON", medieval: "ALEHOUSE", wizard: "HOG'S HEAD", gothic: "ABSINTHE DEN", desert: "SPICE DEN", pharaoh: "MEAD HALL" },
+  store: { neon: "24/7 KONBINI", galactic: "JUNK DEALER", coruscant: "MARKET HALL", starship: "PROVISIONS", colony: "COMMISSARY", frontier: "TRADING POST", western: "GENERAL STORE", desert: "SPICE MARKET", pharaoh: "BAZAAR", gothic: "MARKET HALL", wasteland: "TRADER", medieval: "GENERAL GOODS", wizard: "HONEYDUKES" },
   grocery: { galactic: "RATION DEPOT", gothic: "RATION HALL", medieval: "MARKET", wizard: "DIAGON MARKET", western: "MERCANTILE", wasteland: "SCAVENGER MARKET" },
-  pharmacy: { galactic: "BACTA DISPENSARY", coruscant: "MED SUPPLY", starship: "SICKBAY SUPPLY", neon: "RIPPERDOC", gothic: "APOTHECARIUM", medieval: "APOTHECARY", wizard: "SLUG & JIGGERS", western: "DRUGGIST", wasteland: "STIMPAK SHOP" },
-  office: { neon: "ARASAKA OFFICES", galactic: "TRADE GUILD", coruscant: "SENATE OFFICES", starship: "ADMINISTRATION", colony: "WEYLAND-YUTANI", gothic: "ADMINISTRATUM", medieval: "GUILD OFFICES", wizard: "OWL POST", western: "LAND OFFICE", pharaoh: "SCRIBES' HALL", desert: "GUILD OFFICES", wasteland: "VAULT-TEC OFFICE" },
+  pharmacy: { galactic: "BACTA DISPENSARY", coruscant: "MED SUPPLY", starship: "SICKBAY SUPPLY", neon: "RIPPERDOC", gothic: "APOTHECARY", medieval: "APOTHECARY", wizard: "SLUG & JIGGERS", western: "DRUGGIST", wasteland: "STIMPAK SHOP" },
+  office: { neon: "ARASAKA OFFICES", galactic: "TRADE GUILD", coruscant: "SENATE OFFICES", starship: "ADMINISTRATION", colony: "WEYLAND-YUTANI", gothic: "MAGISTRACY", medieval: "GUILD OFFICES", wizard: "OWL POST", western: "LAND OFFICE", pharaoh: "SCRIBES' HALL", desert: "GUILD OFFICES", wasteland: "VAULT-TEC OFFICE" },
   bank: { galactic: "BANKING CLAN", coruscant: "INTERGALACTIC BANK", neon: "EUROBANK", gothic: "TITHE OFFICE", western: "BANK", medieval: "MONEYLENDER", wizard: "GRINGOTTS", pharaoh: "TREASURY", desert: "CHOAM", wasteland: "BANK (LOOTED)" },
-  motel: { galactic: "SPACEPORT HOSTEL", western: "HOTEL", medieval: "INN", wizard: "INN", gothic: "HAB-BLOCK", neon: "CAPSULE HOTEL", desert: "CARAVANSERAI", frontier: "BOARDING HOUSE" },
-  library: { wizard: "LIBRARY", gothic: "LIBRARIUM", galactic: "ARCHIVES", coruscant: "JEDI ARCHIVES", starship: "MEMORY ALPHA", medieval: "SCRIPTORIUM" },
-  cinema: { neon: "BRAINDANCE", galactic: "HOLO-THEATER", coruscant: "GALAXIES OPERA", starship: "HOLODECK", western: "OPERA HOUSE", medieval: "PLAYHOUSE", wizard: "THEATRE", gothic: "PROPAGANDA HALL" },
-  council: { modern: "CITY HALL", neon: "CITY ADMIN", galactic: "GOVERNOR'S HALL", coruscant: "SENATE ANNEX", starship: "FEDERATION COUNCIL", colony: "COLONY ADMIN", frontier: "MAGISTRATE", western: "TOWN HALL", desert: "THE RESIDENCY", pharaoh: "TEMPLE OF RA", gothic: "ADMINISTRATUM", wasteland: "TOWN HALL", medieval: "GUILDHALL", wizard: "MINISTRY OF MAGIC" },
+  motel: { galactic: "SPACEPORT HOSTEL", western: "HOTEL", medieval: "INN", wizard: "INN", gothic: "TENEMENT", neon: "CAPSULE HOTEL", desert: "CARAVANSERAI", frontier: "BOARDING HOUSE" },
+  library: { wizard: "LIBRARY", gothic: "ATHENAEUM", galactic: "ARCHIVES", coruscant: "JEDI ARCHIVES", starship: "MEMORY ALPHA", medieval: "SCRIPTORIUM" },
+  cinema: { neon: "BRAINDANCE", galactic: "HOLO-THEATER", coruscant: "GALAXIES OPERA", starship: "HOLODECK", western: "OPERA HOUSE", medieval: "PLAYHOUSE", wizard: "THEATRE", gothic: "GRAND THEATRE" },
+  council: { modern: "CITY HALL", neon: "CITY ADMIN", galactic: "GOVERNOR'S HALL", coruscant: "SENATE ANNEX", starship: "FEDERATION COUNCIL", colony: "COLONY ADMIN", frontier: "MAGISTRATE", western: "TOWN HALL", desert: "THE RESIDENCY", pharaoh: "TEMPLE OF RA", gothic: "MAGISTRACY", wasteland: "TOWN HALL", medieval: "GUILDHALL", wizard: "MINISTRY OF MAGIC" },
   police: { neon: "NCPD", galactic: "SECURITY", coruscant: "IMPERIAL SECURITY", starship: "SECURITY", colony: "MP STATION", frontier: "ALLIANCE OUTPOST", western: "SHERIFF", desert: "GARRISON", pharaoh: "JAFFA BARRACKS", gothic: "ARBITES PRECINCT", wasteland: "SHERIFF", medieval: "GUARDHOUSE", wizard: "AUROR OFFICE" },
   fire: { galactic: "DROID DEPOT", coruscant: "EMERGENCY SVC", starship: "RESCUE STATION", neon: "TRAUMA TEAM", gothic: "FIRE SHRINE", medieval: "WATCH HOUSE", wizard: "BROOM SHED", western: "FIRE BRIGADE", desert: "WATER GUARD", pharaoh: "GUARD POST" },
-  school: { wizard: "SCHOOL OF MAGIC", medieval: "SCRIPTORIUM", gothic: "SCHOLA PROGENIUM", galactic: "PADAWAN ACADEMY", coruscant: "IMPERIAL ACADEMY", starship: "STARFLEET ACADEMY", colony: "TRAINING CENTER", desert: "BENE GESSERIT SCHOOL", pharaoh: "SCHOOL OF SCRIBES", western: "SCHOOLHOUSE" },
-  clinic: { galactic: "MED CENTER", coruscant: "MED CENTER", starship: "SICKBAY", colony: "MED BAY", wizard: "ST MUNGO'S", medieval: "APOTHECARY", gothic: "MEDICAE", neon: "TRAUMA CLINIC", western: "DOCTOR", wasteland: "CLINIC" },
-  church: { gothic: "CHAPEL OF THE EMPEROR", medieval: "SHRINE", galactic: "TEMPLE", coruscant: "JEDI SHRINE", pharaoh: "SHRINE OF RA", starship: "MEMORIAL", desert: "SIETCH SHRINE", wizard: "CHAPEL", neon: "CHAPEL" },
-  warehouse: { galactic: "HANGAR", coruscant: "HANGAR", gothic: "MANUFACTORUM", medieval: "GRANARY", wizard: "STOREHOUSE", western: "LIVERY BARN", desert: "SPICE SILO", pharaoh: "STOREHOUSE", colony: "ATMOSPHERE PLANT" },
-  autorepair: { galactic: "SPEEDER REPAIR", coruscant: "SPEEDER BAY", neon: "AUTO DOC", western: "BLACKSMITH", medieval: "SMITHY", wizard: "BROOM REPAIR", gothic: "MECHANICUS SHRINE", desert: "THOPTER BAY", pharaoh: "FORGE" },
+  school: { wizard: "SCHOOL OF MAGIC", medieval: "SCRIPTORIUM", gothic: "ACADEMY", galactic: "PADAWAN ACADEMY", coruscant: "IMPERIAL ACADEMY", starship: "STARFLEET ACADEMY", colony: "TRAINING CENTER", desert: "BENE GESSERIT SCHOOL", pharaoh: "SCHOOL OF SCRIBES", western: "SCHOOLHOUSE" },
+  clinic: { galactic: "MED CENTER", coruscant: "MED CENTER", starship: "SICKBAY", colony: "MED BAY", wizard: "ST MUNGO'S", medieval: "APOTHECARY", gothic: "INFIRMARY", neon: "TRAUMA CLINIC", western: "DOCTOR", wasteland: "CLINIC" },
+  church: { gothic: "CATHEDRAL", medieval: "SHRINE", galactic: "TEMPLE", coruscant: "JEDI SHRINE", pharaoh: "SHRINE OF RA", starship: "MEMORIAL", desert: "SIETCH SHRINE", wizard: "CHAPEL", neon: "CHAPEL" },
+  warehouse: { galactic: "HANGAR", coruscant: "HANGAR", gothic: "FOUNDRY", medieval: "GRANARY", wizard: "STOREHOUSE", western: "LIVERY BARN", desert: "SPICE SILO", pharaoh: "STOREHOUSE", colony: "ATMOSPHERE PLANT" },
+  autorepair: { galactic: "SPEEDER REPAIR", coruscant: "SPEEDER BAY", neon: "AUTO DOC", western: "BLACKSMITH", medieval: "SMITHY", wizard: "BROOM REPAIR", gothic: "COACHWORKS", desert: "THOPTER BAY", pharaoh: "FORGE" },
   dealership: { galactic: "USED SPEEDERS", coruscant: "SPEEDER SALES", western: "HORSE TRADER", medieval: "HORSE TRADER", wizard: "BROOM SHOP", gothic: "VEHICLE DEPOT" },
   laundromat: { medieval: "WASHHOUSE", wizard: "LAUNDRY", western: "LAUNDRY", galactic: "LAUNDRY DROIDS" },
   hardware: { galactic: "DROID PARTS", medieval: "TOOLMAKER", wizard: "OLLIVANDERS", western: "HARDWARE", gothic: "ARMOURY" },
@@ -169,7 +169,7 @@ const CITY_THEME_CITIES = {
   desert: ["Arrakeen", "Carthag", "Sietch Tabr", "Tuono", "Habbanya", "Red Wall", "Old Gap", "Shield Wall", "Imperial Basin", "Funeral Plain"],
   frontier: ["Persephone", "Whitefall", "Jiangyin", "Paquin", "Beaumonde", "Haven", "Ezra", "Three Hills", "Boros", "Triumph"],
   western: ["San Miguel", "Agua Caliente", "El Paso", "Tucumcari", "Santa Cruz", "Tombstone", "Red Rock", "Dry Gulch", "Sweetwater", "Lago"],
-  gothic: ["Hive Primus", "Cadia Secundus", "Macragge Port", "Hive Tertius", "Vigilus", "Necromunda Spire", "Armageddon Prime", "Gathalamor", "Ophelia", "Valhalla"],
+  gothic: ["Blackspire", "Ravenmoor", "Cinderhallow", "Grimward", "Ashgate", "Vesper Reach", "Saint Aldric", "Thornwall", "Mournvale", "Duskmere"],
   wasteland: ["Megaton", "Diamond City", "Gastown", "Bullet Farm", "Rivet City", "Goodneighbor", "New Reno", "Junktown", "Bartertown", "Novac"],
   medieval: ["Novigrad", "Bree", "Edoras", "Vizima", "Oxenfurt", "Dale", "Minas Tirith", "Tretogor", "Hobbiton", "Dol Amroth"],
   wizard: ["Hogsmeade", "Godric's Hollow", "Ottery St Catchpole", "Little Whinging", "Tinworth", "Upper Flagley", "Little Hangleton", "Mould-on-the-Wold", "Diagon Alley", "Spinner's End"],
@@ -193,7 +193,7 @@ const CITY_SHOPS = {
   western: ["GUNSMITH", "BARBER", "UNDERTAKER", "SADDLERY", "ASSAYER", "TELEGRAPH"],
   desert: ["SPICE TRADER", "STILLSUIT MAKER", "WATER SELLER", "WEAPONSMITH", "RUG WEAVER"],
   pharaoh: ["POTTERY", "WEAVER", "GOLDSMITH", "SCRIBE", "INCENSE"],
-  gothic: ["RELIQUARY", "ARMOURY", "SERVITOR PARTS", "SCRIPTORIUM", "CANDLEMAKER"],
+  gothic: ["RELIQUARY", "ARMOURY", "CLOCKMAKER", "SCRIPTORIUM", "CANDLEMAKER"],
   wasteland: ["SCRAP TRADER", "GUNS & AMMO", "WATER", "CAPS EXCHANGE", "ROBOT REPAIR"],
   medieval: ["BLACKSMITH", "BAKER", "TAILOR", "FLETCHER", "BUTCHER", "HERBALIST"],
   wizard: ["OLLIVANDERS", "FLOURISH & BLOTTS", "WEASLEYS' WIZARD WHEEZES", "ZONKO'S", "QUALITY QUIDDITCH", "EEYLOPS OWL EMPORIUM", "MADAM MALKIN'S"]
@@ -224,7 +224,7 @@ const CITY_UNIVERSES = {
   trek: { name: "Federation", desc: "Clean colony · the Borg · tricorder scans", theme: "starship", roster: "borg", vision: 22 },
   aliens: { name: "Colony Siege", desc: "Industrial colony · Xenomorph hive · motion tracker", theme: "colony", roster: "xenomorph", vision: 28 },
   doom: { name: "Hell on Mars", desc: "Colony base · demons · Praetor HUD", theme: "colony", roster: "demons", vision: 33 },
-  w40k: { name: "Hive City", desc: "Gothic Imperium · Ork WAAAGH! · auspex", theme: "gothic", roster: "orks", vision: 34 },
+  w40k: { name: "Ki-Surge Earth", desc: "West City capsule domes · Frieza Force · ki sense", theme: "capsule", roster: "frieza_force", vision: 34 },
   waste: { name: "Wasteland", desc: "Ruined city · raiders, ghouls & super mutants · Pip-Boy radar", theme: "wasteland", roster: "wasteland", vision: 43 },
   middle: { name: "Middle-earth", desc: "Medieval kingdom · orcs, wargs & Uruk-hai · Istari sight", theme: "medieval", roster: "orcs", vision: 71 },
   witcher: { name: "The Continent", desc: "Medieval kingdom · bandits & monsters · witcher senses", theme: "medieval", roster: "witcher_foes", vision: 48 },

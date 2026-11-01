@@ -72,7 +72,7 @@ function cityTips(p) {
   if (!el) { el = document.createElement("div"); el.id = "cityTip"; document.body.appendChild(el); }
   const vp = typeof visionProfile === "function" ? visionProfile(p.cid) : null;
   const tips = [
-    "🌆 <b>NEXUS CITY</b> — enemies hide in buildings and patrol the streets. Every gunshot is heard.",
+    (typeof RG !== "undefined" && RG.key !== "nexus" && RG.P ? RG.P.icon + " <b>" + RG.P.name.toUpperCase() + "</b> — enemies hide in buildings and roam the wilds. Every gunshot is heard." : "🌆 <b>NEXUS CITY</b> — enemies hide in buildings and patrol the streets. Every gunshot is heard."),
     "🥷 Hold <b>Shift</b> to sneak (and hold fire) · <b>V</b> fits a suppressor on real firearms · blades are nearly silent.",
     "🗺 <b>M</b> map & markers · <b>[ ]</b> zoom the minimap · <b>F</b> drive ANY vehicle (even army trucks), climb ladders 🪜 to the roof · ⛽ refuel at gas stations.",
     vp ? "👁 <b>" + vp[3] + "</b> — " + (typeof VIS_DESC !== "undefined" ? VIS_DESC[vp[0]] || "" : "") : ""
@@ -204,7 +204,7 @@ function cityStep(dt) {
 }
 function cityCacheName() {
   const f = crFam(), k = CITY.themeKey;
-  return k === "wizard" ? "POTION STASH" : k === "medieval" ? "SUPPLY CHEST" : k === "western" ? "STRONGBOX" : k === "gothic" ? "MUNITORUM CACHE" : k === "wasteland" ? "STASH" : f === "scifi" ? "SUPPLY CRATE" : "SUPPLY CACHE";
+  return k === "wizard" ? "POTION STASH" : k === "medieval" ? "SUPPLY CHEST" : k === "western" ? "STRONGBOX" : k === "gothic" ? "SUPPLY CACHE" : k === "wasteland" ? "STASH" : f === "scifi" ? "SUPPLY CRATE" : "SUPPLY CACHE";
 }
 // "NEXUS CITY · Downtown · Meridian Ave"
 function cityUpdateBanner(force) {
@@ -229,70 +229,8 @@ function cityUpdateBanner(force) {
 function cityRenderWorldHook() { if (CITY.on) cityRenderOverlay(); }
 
 /* --- drivable city vehicles --------------------------------------------------------- */
-const CITY_CAR_NAME = { sedan: "CAR", spinner: "SPINNER", speeder: "LANDSPEEDER", hover: "HOVERCAR", apc: "APC", mule: "MULE", wagon: "WAGON", thopter: "ORNITHOPTER", glider: "DEATH GLIDER", rhino: "RHINO", rusted: "WRECK-RUNNER", cart: "CART", anglia: "FLYING ANGLIA" };
-function cityFindCar() {
-  const ptx = cityTX(player.x), pty = cityTY(player.y);
-  let best = null, bd = 46;
-  for (let cy = (pty - 8) >> 7; cy <= (pty + 8) >> 7; cy++) for (let cx = (ptx - 8) >> 7; cx <= (ptx + 8) >> 7; cx++) {
-    const C = cityChunk(cx, cy);
-    for (const p of C.props) {
-      if (p.t !== "car" || p.wreck || (p.key && cityRT.used.has(p.key))) continue;
-      const x = (p.x + p.w / 2) * 16 - CITY.orx, y = (p.y + p.h / 2) * 16 - CITY.ory, d = Math.hypot(x - player.x, y - player.y) - Math.max(p.w, p.h) * 4;
-      if (d < bd) { bd = d; best = { p, x, y }; }
-    }
-  }
-  return best;
-}
-function cityEnterCar(t) {
-  const p = t.p;
-  if (p.dyn) cityRT.dyn.splice(cityRT.dyn.indexOf(p), 1); else cityRT.used.add(p.key);
-  cityRebuildAt(Math.floor(p.x + p.w / 2), Math.floor(p.y + p.h / 2));
-  player.x = t.x; player.y = t.y; player.inVehicle = 3; player.vehicleHp = 170;
-  const o = typeof p.o === "number" ? p.o : 0;
-  player.cityCar = { kind: CITY.theme.car || "sedan", v: p.v | 0, ang: o * Math.PI / 2 - Math.PI / 2 + (p.ang || 0), L: Math.min(p.w, p.h) * 16, D: Math.max(p.w, p.h) * 16 };
-  spawnSpeech(player.x, player.y - 30, (CITY_CAR_NAME[player.cityCar.kind] || "VEHICLE") + " — DRIVE!  [F] TO EXIT", "#80deea", 1.8);
-  if (typeof sfx === "function") sfx(120, 260, 0.35, "sawtooth", 0.12);
-  if (typeof updateHUD === "function") updateHUD();
-}
-function cityExitCar() {
-  const car = player.cityCar || { kind: "sedan", v: 0, ang: 0, L: 64, D: 144 };
-  const a = car.ang, horiz = Math.abs(Math.cos(a)) > Math.abs(Math.sin(a));
-  const w = (horiz ? car.D : car.L) / 16, h = (horiz ? car.L : car.D) / 16, o = horiz ? (Math.cos(a) > 0 ? 1 : 3) : (Math.sin(a) > 0 ? 2 : 0);
-  const d = { t: "car", x: (player.x + CITY.orx) / 16 - w / 2, y: (player.y + CITY.ory) / 16 - h / 2, w, h, s: FS_COVER, o, v: car.v, dyn: true, ang: a - (o * Math.PI / 2 - Math.PI / 2), key: "dyn" + Math.random() };
-  cityRT.dyn.push(d);
-  if (cityRT.dyn.length > 24) cityRT.dyn.shift();
-  player.inVehicle = 0; player.cityCar = null;
-  cityRebuildAt(Math.floor(d.x + w / 2), Math.floor(d.y + h / 2));
-  const q = cityFindWalkable(player.x - Math.sin(a) * 34, player.y + Math.cos(a) * 34, 200, false);
-  player.x = q[0]; player.y = q[1];
-  spawnSpeech(player.x, player.y - 24, "PARKED", "#80deea", 1.0);
-  if (typeof updateHUD === "function") updateHUD();
-}
-function cityCarStep(dt) {
-  if (player.inVehicle !== 3) return;
-  const car = player.cityCar || (player.cityCar = { kind: CITY.theme.car, v: 0, ang: 0, L: 64, D: 144 });
-  const sp = Math.hypot(player.vx || 0, player.vy || 0);
-  if (sp > 20) { let df = Math.atan2(player.vy, player.vx) - car.ang; df = Math.atan2(Math.sin(df), Math.cos(df)); car.ang += df * Math.min(1, dt * 7); }
-  // ramming
-  if (sp > 220) for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j] || (allyCount > 0 && allyIs(j)) || eType[j] >= 99) continue;
-    if (Math.hypot(eX[j] - player.x, eY[j] - player.y) > 26) continue;
-    const dmg = sp * 0.6 * (player.might || 1);
-    eHP[j] -= dmg; eStun[j] = Math.max(eStun[j], 0.8);
-    eX[j] += player.vx / sp * 30; eY[j] += player.vy / sp * 30;
-    if (typeof spawnDmg === "function") spawnDmg(eX[j], eY[j], dmg, true);
-    if (eHP[j] <= 0) killEnemy(j, false);
-    player.vehicleHp -= 6;
-  }
-  if (player.vehicleHp <= 0) { cityExitCar(); spawnBlastWave(player.x, player.y, 75, "#ff7043"); }
-}
-function cityRenderCar(g) {
-  if (!CITY.on || !player || player.inVehicle !== 3 || !player.cityCar) return;
-  const c = player.cityCar;
-  g.save(); g.translate(player.x, player.y); g.rotate(c.ang + Math.PI / 2);
-  crVehicle(g, c.kind, c.L, c.D, c.v, 7, false, false);
-  g.restore();
-}
+const CITY_CAR_NAME = { sedan: "CAR", spinner: "SPINNER", speeder: "LANDSPEEDER", hover: "HOVERCAR", apc: "APC", mule: "MULE", wagon: "WAGON", thopter: "ORNITHOPTER", glider: "DEATH GLIDER", rhino: "ARMORED CARRIER", rusted: "WRECK-RUNNER", cart: "CART", anglia: "FLYING ANGLIA" };
+// cityFindCar / cityEnterCar / cityExitCar / cityCarStep / cityRenderCar live in js/vehicles.js (rigid-body vehicles, v14.1)
 (function cityPatchInteract() {
   const _fit = window.findInteractTarget, _twi = window.triggerWorldInteract;
   if (typeof _fit === "function") window.findInteractTarget = function () {

@@ -42,10 +42,10 @@ function getHeroKinematicStyle(cid) {
   if (cid === CUSTOM_CID && typeof customKinStyle === "function") return customKinStyle();   // v13: follows the creator loadout
   if ([51, 19, 41, 42].includes(cid)) return 0;
   if ([52, 6, 13, 22].includes(cid)) return 1;
-  if ([15, 28, 31, 33, 34, 37, 40, 44, 53].includes(cid)) return 2;
+  if ([15, 28, 31, 33, 40, 44, 53].includes(cid)) return 2;
   if ([1, 16, 25, 47, 54].includes(cid)) return 3;
   if ([0, 14, 18, 24, 32, 48, 50, 76, 77, 78, 79, 80].includes(cid)) return 4;
-  if ([3, 7, 10, 11, 12, 20, 21, 27, 38, 39, 46, 49, 56, 57, 59, 66, 67, 69, 70, 71, 72, 73, 74, 75].includes(cid)) return 5;
+  if ([3, 7, 10, 11, 12, 20, 21, 27, 39, 46, 49, 56, 57, 59, 66, 67, 69, 70, 71, 72, 73, 74, 75].includes(cid)) return 5;
   return 6;
 }
 
@@ -57,11 +57,10 @@ function getHeroBodySpec(cid) {
   if (cid === 61) return { sx: 1.34, sy: 1.28, yOff: -2.5, kind: "hagrid" };   // Rubeus Hagrid Half-Giant
   if (cid === 5)  return { sx: 1.16, sy: 1.20, yOff: -1.8, kind: "wookiee" };  // Chewbacca Tall Wookiee
   if (cid === 30) return { sx: 1.18, sy: 1.24, yOff: -2.0, kind: "xeno" };     // Xenomorph Queen
-  if (cid === 37) return { sx: 1.28, sy: 1.20, yOff: -1.8, kind: "ork" };      // Ork Warboss
   if (cid === 21) return { sx: 1.28, sy: 1.10, yOff: -1.0, kind: "baron" };    // Baron Harkonnen
   if (cid === 76) return { sx: 1.12, sy: 1.15, yOff: -1.5, kind: "vader" };    // Darth Vader Tall Cybernetic Juggernaut
   if (cid === 55) return { sx: 1.12, sy: 1.16, yOff: -1.5, kind: "grievous" }; // General Grievous Tall Cyborg
-  if ([33, 34, 40].includes(cid)) return { sx: 1.14, sy: 1.12, yOff: -1.0, kind: "heavy" };
+  if ([33, 40].includes(cid)) return { sx: 1.14, sy: 1.12, yOff: -1.0, kind: "heavy" };
   if ([14, 56, 57, 58, 59, 60, 62].includes(cid)) return { sx: 0.88, sy: 0.86, yOff: 1.5, kind: "youth" };
   return { sx: 1.0, sy: 1.0, yOff: 0, kind: "adult" };
 }
@@ -123,7 +122,7 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
     const H = ownHilt || canonHiltFor(wpnId);
     const bLen = bladeLenPx > 0 ? bladeLenPx : (wpnId === 79 ? 16.5 : 21.5) * lenMul * ((ownHilt && ownHilt.blade) || 1);
     const isDouble = dblOverride === null ? (wpnId === 77) : !!dblOverride; // Darth Maul Double-Bladed Saberstaff
-    const steelBlade = [14, 18, 19, 24, 34, 48, 50, 68, 71].includes(wpnId);
+    const steelBlade = [14, 18, 19, 24, 37, 48, 50, 68, 71].includes(wpnId);
 
     if (bladeLenPx === 0 && Math.abs(angVel) > 1.2) {
       const trailSweep = Math.max(-0.65, Math.min(0.65, -angVel * 0.045));
@@ -263,14 +262,16 @@ function drawWeaponModel(tCtx, wpnId, style, isLv5, isSuper, bladeCol, rackShift
     return;
   }
 
-  const isHeavy = [15, 28, 31, 33, 34, 37, 40, 44, 53].includes(wpnId) || style === "cone";
+  const isHeavy = [15, 28, 31, 33, 40, 44, 53].includes(wpnId) || style === "cone";
   tCtx.fillStyle = "#263238";
   tCtx.fillRect(-3.5, -1.6, (isHeavy ? 15 : 12) * lenMul, isHeavy ? 3.4 : 2.6);
   tCtx.fillStyle = isSuper ? "#ffd166" : "#90a4ae";
   tCtx.fillRect(1 - rackShift * 3.0, -2.0, 6.5, 1.5);
-  if (style === "beam" || style === "chain") {
-    tCtx.fillStyle = effCol;
+  if (style === "beam" || style === "chain") {               // v14.2: a dark barrel with a tiny energy emitter — guns never get a glowing blade
+    tCtx.fillStyle = "#37474f";
     tCtx.fillRect(6, -0.8, 6 * lenMul, 1.6);
+    tCtx.fillStyle = effCol;
+    tCtx.fillRect(6 + 6 * lenMul - 1.1, -0.65, 1.1, 1.3);
   }
 }
 
@@ -286,7 +287,12 @@ function drawSaberFormSlot(tCtx, w, R, col, handCol, aim, slotIdx) {
 
 function drawSaberBladePose(tCtx, w, R, col, handCol, aim, slotIdx, bladeSt, main) {
   const sideSign = (slotIdx % 2 === 0) ? 1 : -1, upper = slotIdx >= 2 ? -3.5 : 0;
-  if (R.lit < 0.04) {                                     // retracted: hilt clipped to the belt, hand at rest
+  if (R.lit < 0.5 && typeof SF_STEEL_IDS !== "undefined" && SF_STEEL_IDS.includes(w.id) && typeof sheatheDraw === "function") {   // v14.2: steel goes in the scabbard
+    if (main) sheatheDraw(tCtx, w, slotIdx, true, col, handCol);
+    return;
+  }
+  if (bladeSt && bladeSt.fly && typeof sagaDrawFly === "function" && sagaDrawFly(tCtx, w, R, bladeSt, col, handCol, slotIdx)) return;   // v14.2: hilt flying to the hand
+  if (R.lit < 0.04 && !(bladeSt && bladeSt.hand > 0.5)) {  // retracted: hilt clipped to the belt, hand at rest
     tCtx.save();
     tCtx.translate(4.8 * sideSign, 5.2 + upper);
     tCtx.rotate(Math.PI / 2 - 0.3 * sideSign);
@@ -301,7 +307,9 @@ function drawSaberBladePose(tCtx, w, R, col, handCol, aim, slotIdx, bladeSt, mai
   tCtx.translate(R.reach, R.side);
   tCtx.save();
   tCtx.rotate(R.blade - R.arm);
-  drawWeaponModel(tCtx, w.id, "orbit", w.lvl >= 5, w.lvl >= 10, col, 0, 0, Math.max(0.5, R.len), R.dbl, w.hilt);
+  const blade2Grow = R.dbl && bladeSt && bladeSt.len2K != null && bladeSt.len2K < 0.999 && typeof sagaDrawBlade2 === "function";   // v14.2 Maul: the second blade ignites late
+  drawWeaponModel(tCtx, w.id, "orbit", w.lvl >= 5, w.lvl >= 10, col, 0, 0, Math.max(0.5, R.len), blade2Grow ? false : R.dbl, w.hilt);
+  if (blade2Grow) sagaDrawBlade2(tCtx, R, bladeSt, col);
   if (R.grip === 2 || R.dbl) drawBallHand(tCtx, R.dbl ? -4.2 : -3.6, 0, 2.3, handCol);   // second hand on the hilt
   tCtx.restore();
   drawBallHand(tCtx, 0, 0, 2.5, handCol);
@@ -314,7 +322,7 @@ function drawSaberBladePose(tCtx, w, R, col, handCol, aim, slotIdx, bladeSt, mai
 }
 
 /* === 4. CANON 80-HERO SPRITE RENDERER (STATURE SCALING, R2-D2 DROID, YODA, CLINT, VADER) === */
-const HELMET_HEROES = new Set([1, 2, 4, 7, 9, 17, 19, 23, 26, 29, 30, 32, 33, 34, 35, 36, 47, 49, 50, 54, 55, 76]);
+const HELMET_HEROES = new Set([1, 2, 4, 7, 9, 17, 19, 23, 26, 29, 30, 32, 33, 47, 49, 50, 54, 55, 76]);
 
 function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx, guardZone = -1) {
   const out = typeof getOutfit === "function" ? getOutfit(cid) : { head: 0, torso: 0, legs: 0, back: 0, blade: 0 };
@@ -397,7 +405,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     return;
   }
 
-  const hasJetpack = [1, 16, 25, 34, 47, 54].includes(cid) || flyer;
+  const hasJetpack = [1, 16, 25, 47, 54].includes(cid) || flyer;
   if (hasJetpack) {
     tCtx.fillStyle = cBack !== "none" ? cBack : "#37474f";
     tCtx.fillRect(-6.8, -5.5, 13.6, 9.5);
@@ -474,7 +482,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   tCtx.fillRect(-5.8, -5.5, 11.6, 10.5);
   if (cid === CUSTOM_CID && typeof drawCustomArmor === "function") drawCustomArmor(tCtx, stride, cTorso);   // v13 creator armour
 
-  if (cid === 34 || cid === 33) {
+  if (cid === 33) {
     tCtx.fillStyle = cTorso;
     tCtx.fillRect(-8.2, -5.8, 3.2, 5.2);
     tCtx.fillRect(5.0, -5.8, 3.2, 5.2);
@@ -558,19 +566,20 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
         tCtx.fillRect(-3.6 + eyeLookX * 0.5, -11.0, 7.2, 2.6);
         tCtx.strokeStyle = "#111"; tCtx.lineWidth = 0.8;
         tCtx.strokeRect(-3.6 + eyeLookX * 0.5, -11.0, 7.2, 2.6);
-      } else if (cid === 2 || cid === 19 || cid === 34) {
-        tCtx.fillStyle = cid === 34 || cid === 2 ? "#ff1744" : "#ffd166";
+      } else if (cid === 2 || cid === 19) {
+        tCtx.fillStyle = cid === 2 ? "#ff1744" : "#ffd166";
         tCtx.fillRect(-3.2 + eyeLookX, -10.6, 2.2, 1.6);
         tCtx.fillRect(1.0 + eyeLookX, -10.6, 2.2, 1.6);
         tCtx.fillStyle = "#263238"; tCtx.fillRect(-1.8, -7.8, 3.6, 2.0);
       } else {
         tCtx.fillStyle = "#111"; tCtx.fillRect(-3.8, -10.8, 7.6, 2.2);
-        tCtx.fillStyle = cid === 36 ? "#00e676" : "#ff1744";
+        tCtx.fillStyle = "#ff1744";
         tCtx.fillRect(-2.4 + eyeLookX, -10.4, 4.8, 1.5);
       }
     }
   } else {
     const skinCol = (cid === CUSTOM_CID && typeof customSkinCol === "function") ? customSkinCol()
+      : (typeof heroExtraSkin === "function" && heroExtraSkin(cid)) ? heroExtraSkin(cid)
       : cid === 79 ? "#7cb342"
       : (cid === 77 ? "#d50000"
       : (cid === 78 ? "#5d4037"
@@ -579,8 +588,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
       : (cid === 5 ? "#795548"
       : (cid === 10 ? "#b0bec5"
       : (cid === 11 ? "#90a4ae"
-      : (cid === 37 ? "#558b2f"
-      : ([8, 9, 24].includes(cid) ? "#c68642" : "#f1c27d")))))))));
+      : ([8, 9, 24].includes(cid) ? "#c68642" : "#f1c27d"))))))));
 
     if (cid === 79) {
       tCtx.fillStyle = "#7cb342";
@@ -632,12 +640,8 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     } else if ([51, 24, 45, 73].includes(cid)) {
       tCtx.fillStyle = "#212121"; tCtx.fillRect(-3.4, -6.6, 6.8, 1.8);
     }
+    if (typeof heroExtraHead === "function") heroExtraHead(tCtx, cid, cHead);   // v14.2 registered heroes (js/heroreg.js)
 
-    if (cid === 37) {
-      tCtx.fillStyle = "#fff9c4";
-      tCtx.fillRect(-3.6, -7.8, 1.5, 2.2);
-      tCtx.fillRect(2.1, -7.8, 1.5, 2.2);
-    }
 
     if (cid === 10) {
       tCtx.fillStyle = "#0a0a0c";
@@ -767,12 +771,16 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
 
       const sfR = (isLivePlayer && isMeleeBlade && typeof saberRenderState === "function") ? saberRenderState(w) : null;
       if (sfR) { drawSaberFormSlot(tCtx, w, sfR, wActiveCol, handCol, aim, slotIdx); return; }
+      // v14.2: blades sheathe on the back and guns holster when no threat is near (js/sheathe.js)
+      if (isLivePlayer && typeof sheatheStowed === "function" && (isMeleeBlade || kStyle <= 3) && sheatheStowed(w, isMeleeBlade)) { sheatheDraw(tCtx, w, slotIdx, isMeleeBlade, wActiveCol, handCol); return; }
 
       const isTelekineticSlot = (slotIdx >= 2 && kStyle === 5) || (kStyle === 5 && slotIdx >= 1 && w.style !== "chain");
       const armAng = (isLivePlayer && typeof w.armAng === "number")
         ? w.armAng
         : (aim + (slotIdx === 0 ? 0 : (slotIdx === 1 ? 0.18 : (slotIdx === 2 ? -0.35 : 0.42))));
       const wristSpin = (isLivePlayer && typeof w.wristSpin === "number") ? w.wristSpin : 0;
+      // v14.2 low ready: an idle gun stays in hand, muzzle lowered toward the ground ahead (js/sheathe.js)
+      const lowK = (isLivePlayer && !isMeleeBlade && kStyle <= 3 && typeof sheatheLowK === "function") ? sheatheLowK() : 0;
 
       if (isTelekineticSlot) {
         const floatAng = (typeof runTime !== "undefined" ? runTime * 2.6 : 0) + slotIdx * 2.1;
@@ -790,17 +798,18 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
 
       const sideSign = (slotIdx % 2 === 0) ? 1 : -1;
       const upperArmY = slotIdx >= 2 ? -6.5 : -1.5;
-      const reachDist = (kStyle === 0 ? 7.2 : (kStyle === 1 ? 9.2 : 8.5)) + armReach - recoil - reachBack;
+      const reachDist = (kStyle === 0 ? 7.2 : (kStyle === 1 ? 9.2 : 8.5)) + armReach - recoil - reachBack - lowK * 2.6;
 
       tCtx.save();
-      tCtx.rotate(armAng);
+      tCtx.rotate(armAng + lowK * 0.82 * sideSign);
       const hx = reachDist;
       const hy = sideSign * (activeWpns.length === 1 && kStyle <= 2 ? 1.5 : 4.5) + (slotIdx >= 2 ? upperArmY * 0.5 : 0);
 
       tCtx.save();
       tCtx.translate(hx, hy);
       tCtx.save();
-      tCtx.rotate(wristSpin);
+      tCtx.rotate(wristSpin + lowK * 0.35 * sideSign);
+      if (lowK > 0) tCtx.scale(1 - 0.2 * lowK, 1);          // foreshortened: the muzzle points at the ground
       drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, wActiveCol, rackShift, w.angVel || 0, 0, w.dbl ? true : null, w.hilt);
       tCtx.restore();
       drawBallHand(tCtx, 0, 0, 2.5, handCol);
@@ -1201,14 +1210,15 @@ function renderScene() {
 
   renderBiomeAndWorld();
 
+  const ageLv = typeof AGE !== "undefined" ? AGE.level : 0;   // v14.2 age-appropriate filter: hide gore that already exists
   for (let i = 0; i < MAX_DRIP; i++) {
-    if (!drAct[i]) continue;
+    if (!drAct[i] || ageLv) continue;
     ctx.fillStyle = drZ[i] > 0.5 ? "#ff1744" : "rgba(155, 12, 28, 0.72)";
     ctx.beginPath(); ctx.arc(drX[i], drY[i] - drZ[i], drRad[i], 0, Math.PI * 2); ctx.fill();
   }
 
   for (let i = 0; i < MAX_LIMB; i++) {
-    if (!lmbAct[i]) continue;
+    if (!lmbAct[i] || (ageLv && (ageLv > 1 || lmbKind[i] !== 3))) continue;
     ctx.save(); ctx.translate(lmbX[i], lmbY[i]); ctx.rotate(lmbRot[i]);
     ctx.fillStyle = lmbCol[i];
     if (lmbKind[i] === 2) { ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill(); }
@@ -1220,7 +1230,7 @@ function renderScene() {
 
   // Render Intact Corpses (Veterans/Rivals/Bosses keep 100% un-faded outfit colors & head/torso anatomy!)
   for (let i = 0; i < MAX_CORPSE; i++) {
-    if (!corpAct[i]) continue;
+    if (!corpAct[i] || ageLv > 1) continue;
     const isVet = corpType[i] >= 98;
     const scale = corpType[i] === 99 ? 1.55 : (isVet ? 1.15 : 0.95);
     ctx.save();
@@ -1255,7 +1265,7 @@ function renderScene() {
   // Render Bisected Torso Halves (Preserves Head Color, Armor Color & Veteran Trophy Outline!)
   if (typeof slAct !== "undefined") {
     for (let i = 0; i < MAX_SLICE; i++) {
-      if (!slAct[i]) continue;
+      if (!slAct[i] || ageLv) continue;
       const r = slRad[i] || 11;
       const isVet = (typeof slIsVet !== "undefined" && slIsVet[i]);
       ctx.save();
@@ -1329,19 +1339,20 @@ function renderScene() {
         ctx.beginPath(); ctx.arc(ex, ey - baseR * 0.55, baseR * 0.45, 0, Math.PI * 2); ctx.fill();
       } else {
         ctx.fillStyle = ally ? "#cfd8dc" : (et === 99 ? "#ff1744" : (eFormType[i] === 1 ? "#ffd166" : enemyCol2()));
-        const crawlOff = (eLegsLost[i] >= 2 || isKneeling) ? 4 : 0;
+        const lgL = ageLv ? 0 : eLegsLost[i], amL = ageLv ? 0 : eArmsLost[i];   // v14.2 age filter: nobody is drawn maimed
+        const crawlOff = (lgL >= 2 || isKneeling) ? 4 : 0;
         if (!isKneeling) {
-          if (eLegsLost[i] < 1) ctx.fillRect(ex - 4, ey + 4, 3, 6);
-          if (eLegsLost[i] < 2) ctx.fillRect(ex + 1, ey + 4, 3, 6);
+          if (lgL < 1) ctx.fillRect(ex - 4, ey + 4, 3, 6);
+          if (lgL < 2) ctx.fillRect(ex + 1, ey + 4, 3, 6);
         } else {
           ctx.fillRect(ex - 6, ey + 5, 5, 3); ctx.fillRect(ex + 1, ey + 5, 5, 3);
         }
         ctx.fillRect(ex - baseR * 0.6, ey - baseR * 0.5 + crawlOff, baseR * 1.2, baseR);
         ctx.beginPath(); ctx.arc(ex, ey - baseR * 0.75 + crawlOff, baseR * 0.45, 0, Math.PI * 2); ctx.fill();
-        if (spect && eArmsLost[i] < 2) {          // v12: spectators pump their fists while they watch the duel
+        if (spect && amL < 2) {          // v12: spectators pump their fists while they watch the duel
           const pump = Math.sin(runTime * 9 + i) > 0 ? 1.5 : 0;
           ctx.fillRect(ex - baseR * 0.82, ey - baseR * 1.15 - pump, 2.2, baseR * 0.75);
-          if (eArmsLost[i] < 1) ctx.fillRect(ex + baseR * 0.82 - 2.2, ey - baseR * 1.15 - (1.5 - pump), 2.2, baseR * 0.75);
+          if (amL < 1) ctx.fillRect(ex + baseR * 0.82 - 2.2, ey - baseR * 1.15 - (1.5 - pump), 2.2, baseR * 0.75);
         }
 
         ctx.fillStyle = "#111";

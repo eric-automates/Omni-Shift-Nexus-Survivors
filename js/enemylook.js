@@ -140,21 +140,27 @@ erDef("guard_hope", "Hope County Law", RED, [
   ["National Guard", "h", ["#5a6448", "#4a5238", "#2a2a2a"], "helmet", "rifle", 1, 1, 1, "vest"],
   ["K9 Unit", "b", ["#6a4a2e", "#2a1a10", "#1a1a1a"], "shepherd", "none", 0, 0, 0.9, ""],
   ["State Trooper", "h", ["#3a4a6a", "#2a3550", "#d4a537"], "hat", "mg", 1, 1, 1.15, "uniform vest"]]);
-erDef("orks", "Ork WAAAGH!", RED, [
-  ["Ork Boy", "h", ["#4a7a2a", "#5a4a3a", "#2a2a2a"], "ork", "slugga", 1, 1, 1.05, "spikes"],
-  ["Ork Stormboy", "h", ["#4a7a2a", "#3a3a3a", "#c62828"], "ork", "choppa", 0, 0, 1.0, "rokkit"],
-  ["Gretchin", "h", ["#6a8a3a", "#5a4a3a", "#2a2a2a"], "grot", "pistol", 1, 1, 0.62, ""],
-  ["Ork Nob", "g", ["#3e6a22", "#3a3a3a", "#d4a537"], "ork", "klaw", 0, 0, 1.38, "spikes armor"]]);
-erDef("chaos", "Forces of Chaos", RED, [
-  ["Chaos Cultist", "h", ["#5a3a3a", "#3a2a2a", "#8a1a1a"], "hood", "rifle", 1, 1, 1, "rags"],
-  ["Possessed", "h", ["#6a2a2a", "#4a1e1e", "#ff5252"], "horns", "claws", 0, 0, 1.08, "spikes"],
-  ["Nurgling", "f", ["#7a8a4a", "#5a6a3a", "#c8c86a"], "nurgling", "none", 0, 0, 0.5, "ground"],
-  ["Chaos Space Marine", "g", ["#5a1a1a", "#3a1212", "#c9a227"], "chaoshelm", "bolter", 1, 1, 1.3, "spikes armor"]]);
-erDef("imperial_guard", "Astra Militarum", RED, [
-  ["Cadian Guardsman", "h", ["#5a6a4a", "#4a583c", "#2a2a2a"], "helmet", "lasgun", 1, 0, 1, "armor"],
-  ["Commissar", "h", ["#1a1a1e", "#141418", "#c62828"], "commissar", "boltpistol", 1, 1, 1, "coat"],
-  ["Servo-Skull", "f", ["#e8e0c8", "#9a9a9a", "#ff5252"], "skull", "none", 1, 0, 0.55, ""],
-  ["Space Marine", "g", ["#1e3a8a", "#162c6a", "#d4a537"], "marinehelmet40k", "bolter", 1, 1, 1.3, "armor pads"]]);
+// v14.2 Ki-Surge (was the 40K rosters): Frieza Force, Red Ribbon Army, Cell Juniors, Earth's Defenders
+erDef("frieza_force", "Frieza Force", "rgba(80,20,120,0.6)", [
+  ["Frieza Soldier", "h", ["#5e35b1", "#cfd8dc", "#76ff03"], "visorhelm", "wristblaster", 1, 0, 1, "armor pads"],
+  ["Saibaman", "h", ["#7cb342", "#558b2f", "#c62828"], "bald", "claws", 0, 0, 0.82, "thin"],
+  ["Elite Squad Fighter", "h", ["#283593", "#eceff1", "#ffd54f"], "hair", "none", 0, 0, 1.05, "armor pads"],
+  ["Armored Commander", "h", ["#1a237e", "#eceff1", "#e91e63"], "horns", "wristblaster", 1, 0, 1.25, "armor pads bulky"]]);
+erDef("redribbon", "Red Ribbon Army", RED, [
+  ["Red Ribbon Soldier", "h", ["#33691e", "#5d4037", "#c62828"], "cap", "rifle", 1, 0, 1, "belt"],
+  ["Red Ribbon Officer", "h", ["#b71c1c", "#212121", "#ffd54f"], "beret", "pistol", 1, 0, 1, "belt"],
+  ["Battle Robot", "r", ["#9e9e9e", "#616161", "#ff1744"], "visorhelm", "armcannon", 1, 0, 1.15, "bulky"],
+  ["Prototype Android", "h", ["#eceff1", "#424242", "#ff1744"], "bald", "none", 0, 0, 1.2, "glow"]]);
+erDef("cell_jr", "Cell Juniors", "rgba(40,90,200,0.55)", [
+  ["Cell Junior", "h", ["#29b6f6", "#81d4fa", "#76ff03"], "horns", "claws", 0, 0, 0.78, "thin"],
+  ["Cell Junior (Wing-Crest)", "h", ["#039be5", "#4fc3f7", "#76ff03"], "horns", "none", 0, 0, 0.8, "thin glow"],
+  ["Bio-Larva", "b", ["#43a047", "#1b5e20", "#ffeb3b"], "dog", "none", 0, 0, 0.75, ""],
+  ["Cell Junior Elder", "h", ["#0277bd", "#4fc3f7", "#ffd600"], "horns", "claws", 0, 0, 0.95, "glow"]]);
+erDef("zfighters", "Earth's Defenders", "rgba(130,10,16,0.62)", [
+  ["Turtle School Monk", "h", ["#ff9100", "#1565c0", "#212121"], "bald", "none", 0, 0, 0.9, ""],
+  ["Three-Eyed Fighter", "h", ["#2e7d32", "#eceff1", "#c62828"], "bald", "none", 0, 0, 1.1, ""],
+  ["Desert-Bandit Fighter", "h", ["#ff9100", "#1565c0", "#212121"], "hair", "none", 0, 0, 1, ""],
+  ["Namekian Warrior", "h", ["#7b1fa2", "#eceff1", "#76ff03"], "bald", "none", 0, 0, 1.2, "glow"]]);
 erDef("agents", "The Matrix", RED, [
   ["SWAT Officer", "h", ["#1a1a1e", "#141418", "#2a2a2a"], "helmet", "smg", 1, 1, 1, "vest"],
   ["Agent", "h", ["#1e1e22", "#1a1a1e", "#2a2a2a"], "agent", "pistol", 1, 1, 1, "suit tie"],
@@ -261,7 +267,7 @@ const ER_HERO = {
   78: "separatist", 79: "separatist", 8: "goauld", 9: "goauld", 10: "replicator", 7: "sgc", 12: "sgc", 11: "atlantis",
   13: "alliance", 14: "alliance", 15: "alliance", 16: "alliance", 17: "browncoat", 52: "outlaws", 18: "harkonnen", 20: "harkonnen", 19: "fremen", 21: "fremen",
   22: "borg", 24: "borg", 23: "starfleet", 25: "cylon", 26: "colonial", 27: "geth", 28: "xenomorph", 29: "commandos", 30: "colonial_marines", 31: "arachnids",
-  32: "covenant", 33: "demons", 53: "guard_hope", 34: "orks", 35: "chaos", 38: "chaos", 36: "imperial_guard", 37: "imperial_guard", 39: "agents", 40: "lapd",
+  32: "covenant", 33: "demons", 53: "guard_hope", 34: "frieza_force", 35: "frieza_force", 36: "redribbon", 37: "redribbon", 38: "cell_jr", 84: "zfighters", 85: "zfighters", 86: "cell_jr", 87: "zfighters", 88: "zfighters", 39: "agents", 40: "lapd",
   41: "replicants", 42: "arasaka", 43: "wasteland", 44: "warboys", 51: "bratva", 45: "combine", 46: "daleks", 47: "space_pirates", 48: "witcher_foes",
   49: "investigators", 50: "kenshi_foes", 62: "aurors", 68: "aurors", 70: "aurors", 71: "orcs", 72: "rohan", 73: "zealots", 74: "sword", 75: "knights"
 };
@@ -354,18 +360,18 @@ function erHead(g, s, i, dir, back, t) {
     case "stillsuit": g.fillStyle = "#7a6a52"; g.beginPath(); g.arc(0, -9.4, 5.2, 0, 7); g.fill(); if (!back) { g.fillStyle = skin; g.fillRect(-3.4 + dir, -11.6, 6.8, 3.4); g.fillStyle = "#2a7ab8"; g.fillRect(-2.2 + dir, -10.6, 1.4, 1.2); g.fillRect(0.9 + dir, -10.6, 1.4, 1.2); g.fillStyle = "#3a3a3a"; g.fillRect(-0.4 + dir, -8.2, 0.8, 3); } break;
     case "grunt": g.fillStyle = "#8a8a7a"; g.beginPath(); g.ellipse(dir * 1.2, -7.5, 4.4, 3.8, 0, 0, 7); g.fill(); if (!back) { g.fillStyle = "#3a5a8a"; g.fillRect(dir * 2 - 2, -6.6, 4, 2.4); g.fillStyle = "#ff9100"; g.fillRect(-2 + dir * 1.5, -9.2, 1.2, 1.2); g.fillRect(1 + dir * 1.5, -9.2, 1.2, 1.2); } break;
     case "elite": g.fillStyle = c[0]; g.beginPath(); g.ellipse(dir * 1.6, -10, 4.2, 4.6, dir * 0.3, 0, 7); g.fill(); if (!back) { g.fillStyle = "#6a5a4a"; g.beginPath(); g.moveTo(dir * 2, -8); g.lineTo(dir * 6, -6); g.lineTo(dir * 2, -5.6); g.fill(); g.fillStyle = acc; g.fillRect(dir * 1.4 - 0.6, -11.2, 1.4, 1.2); } break;
-    case "imp": case "baron": case "horns": case "chaoshelm": {
-      const base = s.hd === "chaoshelm" ? c[0] : (s.hd === "horns" ? skin : c[0]);
+    case "imp": case "baron": case "horns": {
+      const base = s.hd === "horns" ? skin : c[0];
       g.fillStyle = base; g.beginPath(); g.arc(0, -9.4, 4.9, 0, 7); g.fill();
-      g.fillStyle = s.hd === "chaoshelm" ? acc : "#e8e0c8"; g.beginPath(); g.moveTo(-3.5, -12); g.quadraticCurveTo(-7, -14, -6, -18); g.lineTo(-2.4, -13.4); g.moveTo(3.5, -12); g.quadraticCurveTo(7, -14, 6, -18); g.lineTo(2.4, -13.4); g.fill();
+      g.fillStyle = "#e8e0c8"; g.beginPath(); g.moveTo(-3.5, -12); g.quadraticCurveTo(-7, -14, -6, -18); g.lineTo(-2.4, -13.4); g.moveTo(3.5, -12); g.quadraticCurveTo(7, -14, 6, -18); g.lineTo(2.4, -13.4); g.fill();
       if (!back) { const ec = s.hd === "baron" ? "#76ff03" : "#ff7043"; g.fillStyle = ec; g.fillRect(-2.4 + dir, -10, 1.6, 1.2); g.fillRect(0.9 + dir, -10, 1.6, 1.2); erGlow(g, dir, -9.5, 4, ec, 0.35); }
       break;
     }
-    case "ork": case "grot": case "goblin": case "orc": case "uruk": case "nekker": case "drowner": {
+    case "goblin": case "orc": case "uruk": case "nekker": case "drowner": {
       const base = s.hd === "orc" ? "#6a6a5a" : s.hd === "uruk" ? "#3a3a32" : s.hd === "drowner" ? "#5a7a6a" : s.hd === "nekker" ? "#8a7a6a" : s.hd === "goblin" ? "#9aa088" : c[0];
       g.fillStyle = base; g.beginPath(); g.ellipse(0, -9, 5.2, 4.6, 0, 0, 7); g.fill();
-      if (s.hd === "grot" || s.hd === "goblin" || s.hd === "nekker") { g.beginPath(); g.moveTo(-4, -10); g.lineTo(-8, -12); g.lineTo(-4, -8); g.moveTo(4, -10); g.lineTo(8, -12); g.lineTo(4, -8); g.fill(); }
-      if (!back) { g.fillStyle = s.hd === "orc" || s.hd === "uruk" ? "#ffcc00" : "#ff3b3b"; g.fillRect(-2.4 + dir, -10, 1.4, 1.1); g.fillRect(1 + dir, -10, 1.4, 1.1); if (s.hd === "ork" || s.hd === "orc" || s.hd === "uruk") { g.fillStyle = "#e8e0c8"; g.fillRect(-2.2 + dir, -6.8, 1, 1.6); g.fillRect(1.2 + dir, -6.8, 1, 1.6); } if (s.hd === "uruk") { g.fillStyle = "#f2f2f2"; g.fillRect(-1 + dir, -12, 2.6, 2.6); } }
+      if (s.hd === "goblin" || s.hd === "nekker") { g.beginPath(); g.moveTo(-4, -10); g.lineTo(-8, -12); g.lineTo(-4, -8); g.moveTo(4, -10); g.lineTo(8, -12); g.lineTo(4, -8); g.fill(); }
+      if (!back) { g.fillStyle = s.hd === "orc" || s.hd === "uruk" ? "#ffcc00" : "#ff3b3b"; g.fillRect(-2.4 + dir, -10, 1.4, 1.1); g.fillRect(1 + dir, -10, 1.4, 1.1); if (s.hd === "orc" || s.hd === "uruk") { g.fillStyle = "#e8e0c8"; g.fillRect(-2.2 + dir, -6.8, 1, 1.6); g.fillRect(1.2 + dir, -6.8, 1, 1.6); } if (s.hd === "uruk") { g.fillStyle = "#f2f2f2"; g.fillRect(-1 + dir, -12, 2.6, 2.6); } }
       if (s.hd === "orc" || s.hd === "uruk") erHelm(g, "#2a2a26", -9.6, 5.2);
       break;
     }
@@ -376,15 +382,14 @@ function erHead(g, s, i, dir, back, t) {
       if (!back) { if (s.hd === "demask") { g.fillStyle = "#c8ccd0"; erRR(g, -3 + dir, -12.2, 6, 6.6, 2.5); g.fill(); g.strokeStyle = "#5a5f66"; g.lineWidth = 0.5; g.beginPath(); g.moveTo(-2 + dir, -11); g.quadraticCurveTo(dir, -9, 2 + dir, -11); g.stroke(); g.fillStyle = "#15151a"; g.fillRect(-2 + dir, -10.4, 1.3, 1); g.fillRect(0.8 + dir, -10.4, 1.3, 1); } else { g.fillStyle = "rgba(0,0,0,0.6)"; erRR(g, -3 + dir, -12, 6, 6, 2.5); g.fill(); g.fillStyle = s.hd === "rag" ? skin : "#ff5252"; g.fillRect(-2 + dir, -10, 1.2, 1); g.fillRect(0.8 + dir, -10, 1.2, 1); } }
       break;
     }
-    case "marinehelmet40k": case "knighthelm": case "rohanhelm": case "paladin": case "wildhunt": case "spikehelm": {
-      const base = s.hd === "marinehelmet40k" ? c[0] : s.hd === "wildhunt" ? "#3a4048" : s.hd === "paladin" ? "#d8d0b8" : (s.hd === "spikehelm" ? "#5a5046" : "#b8bec4");
+    case "knighthelm": case "rohanhelm": case "paladin": case "wildhunt": case "spikehelm": {
+      const base = s.hd === "wildhunt" ? "#3a4048" : s.hd === "paladin" ? "#d8d0b8" : (s.hd === "spikehelm" ? "#5a5046" : "#b8bec4");
       g.fillStyle = base; erRR(g, -5, -14.6, 10, 10.4, s.hd === "knighthelm" ? 2 : 4); g.fill();
       if (s.hd === "paladin") { g.beginPath(); g.moveTo(-4, -14); g.lineTo(0, -20); g.lineTo(4, -14); g.fill(); }
       if (s.hd === "rohanhelm") { g.fillStyle = "#e8e0c8"; g.beginPath(); g.moveTo(0, -15); g.quadraticCurveTo(-dir * 7, -14, -dir * 6, -6); g.lineTo(-dir * 4, -8); g.closePath(); g.fill(); }
       if (s.hd === "wildhunt" || s.hd === "spikehelm") { g.fillStyle = s.hd === "wildhunt" ? "#9adcff" : "#8a8a8a"; for (let k = -2; k <= 2; k++) { g.beginPath(); g.moveTo(k * 2 - 0.8, -14); g.lineTo(k * 2.4, -18 - (2 - Math.abs(k))); g.lineTo(k * 2 + 0.8, -14); g.fill(); } }
       if (!back) {
-        if (s.hd === "marinehelmet40k") { g.fillStyle = "#ff1744"; g.fillRect(-2.8 + dir, -10.6, 1.8, 1.4); g.fillRect(1 + dir, -10.6, 1.8, 1.4); g.fillStyle = erShade(base, -0.3); g.fillRect(-1.4 + dir * 1.4, -8, 2.8, 3); }
-        else if (s.hd === "knighthelm") { g.fillStyle = "#15171b"; g.fillRect(-3.6 + dir, -10.6, 7.2, 1.2); g.fillRect(-0.5 + dir, -10.6, 1, 4); }
+        if (s.hd === "knighthelm") { g.fillStyle = "#15171b"; g.fillRect(-3.6 + dir, -10.6, 7.2, 1.2); g.fillRect(-0.5 + dir, -10.6, 1, 4); }
         else if (s.hd === "wildhunt") { g.fillStyle = "#9adcff"; g.fillRect(-2.6 + dir, -10.4, 1.6, 1.2); g.fillRect(1 + dir, -10.4, 1.6, 1.2); erGlow(g, dir, -10, 5, "#9adcff", 0.35); }
         else { g.fillStyle = "#15171b"; g.fillRect(-3 + dir, -10.4, 6, 1.4); }
       }
@@ -392,7 +397,7 @@ function erHead(g, s, i, dir, back, t) {
     }
     case "pirate": g.fillStyle = c[0]; g.beginPath(); g.ellipse(dir * 1.4, -10.4, 4.4, 5.2, dir * 0.3, 0, 7); g.fill(); if (!back) { g.fillStyle = acc; g.fillRect(dir * 1.2 - 2.4, -11.4, 4.8, 1.6); erGlow(g, dir * 1.2, -10.6, 4, acc, 0.4); } g.fillStyle = erShade(c[0], 0.2); g.beginPath(); g.moveTo(-3, -14); g.lineTo(-dir * 6, -17); g.lineTo(-dir * 2, -12); g.fill(); break;
     case "hunter": g.fillStyle = c[0]; erRR(g, -5, -13, 10, 8, 2); g.fill(); if (!back) { g.fillStyle = acc; g.fillRect(-3 + dir, -10, 6, 1.6); erGlow(g, dir, -9, 5, acc, 0.4); } g.fillStyle = erShade(c[0], 0.2); for (let k = -2; k <= 2; k++) g.fillRect(k * 2 - 0.5, -16, 1, 3); break;
-    case "platinum": case "agent": case "buzz": case "slick": case "mohawk": case "dreads": case "scar": case "hair": case "bald": case "warboy": case "ghoul": case "inferi": case "mutant": case "rictus": case "commissar": case "fedora": case "hat": case "sombrero": case "cap": case "helmet": case "boonie": case "beret": case "bandana": default: {
+    case "platinum": case "agent": case "buzz": case "slick": case "mohawk": case "dreads": case "scar": case "hair": case "bald": case "warboy": case "ghoul": case "inferi": case "mutant": case "rictus": case "fedora": case "hat": case "sombrero": case "cap": case "helmet": case "boonie": case "beret": case "bandana": default: {
       let sk = skin;
       if (s.hd === "warboy" || s.hd === "rictus") sk = "#ece8e0"; else if (s.hd === "ghoul") sk = "#9a8a6a"; else if (s.hd === "inferi") sk = "#c8d0c0"; else if (s.hd === "mutant") sk = "#7a9a5a"; else if (s.hd === "bald" && s.c[2] === "#8a6a3a") sk = "#e8dcd0";
       if (s.hd === "scar") sk = "#d8c0a8";
@@ -408,7 +413,6 @@ function erHead(g, s, i, dir, back, t) {
       else if (s.hd === "mohawk") { g.fillStyle = hc; g.fillRect(-0.9, -16, 1.8, 6); }
       else if (s.hd === "dreads") { g.fillStyle = hair; g.beginPath(); g.arc(0, -10.5, 5, Math.PI, 0); g.fill(); for (let k = 0; k < 5; k++) g.fillRect(-4.6 + k * 2.2, -10, 1.2, 7 + (k & 1) * 2); }
       else if (s.hd === "hair" || s.hd === "scar") { g.fillStyle = s.hd === "scar" ? "#3a2a1a" : hair; g.beginPath(); g.arc(0, -10.4, 4.9, Math.PI * 0.98, Math.PI * 2.02); g.fill(); if ((sd & 3) === 1) { g.fillRect(-5, -10.4, 1.8, 6); g.fillRect(3.2, -10.4, 1.8, 6); } }
-      else if (s.hd === "commissar") { g.fillStyle = "#15171b"; g.fillRect(-5.6, -13.4, 11.2, 3.4); g.fillRect(-4.4, -15.4, 8.8, 2.4); g.fillStyle = "#c62828"; g.fillRect(-5.6, -11.4, 11.2, 0.8); g.fillStyle = "#d4a537"; g.fillRect(-1, -14.6, 2, 1.6); }
       else if (s.hd === "fedora") { g.fillStyle = "#3a3028"; g.fillRect(-6.4, -12.6, 12.8, 1.6); erRR(g, -4, -16, 8, 4.2, 1.5); g.fill(); g.fillStyle = "#1a1a1a"; g.fillRect(-4, -13.2, 8, 0.8); }
       else if (s.hd === "hat" || s.hd === "sombrero") { const w2 = s.hd === "sombrero" ? 9.5 : 7.2; g.fillStyle = s.hd === "sombrero" ? "#c8a060" : "#5a3a1e"; g.beginPath(); g.ellipse(0, -12.2, w2, 1.8, 0, 0, 7); g.fill(); erRR(g, -3.6, -16.6, 7.2, 4.8, 2); g.fill(); g.fillStyle = "#2a1a10"; g.fillRect(-3.6, -12.8, 7.2, 0.8); }
       else if (s.hd === "cap") { g.fillStyle = acc === "#d4a537" ? "#1e2a4a" : erShade(c[0], -0.1); g.beginPath(); g.arc(0, -11, 4.8, Math.PI, 0); g.fill(); g.fillRect(dir > 0 ? 0 : -7, -11.4, 7, 1.4); if (acc === "#d4a537") { g.fillStyle = acc; g.fillRect(-0.8, -14, 1.6, 1.4); } }
@@ -425,9 +429,9 @@ function erWeapon(g, w, s, i, swing, firing) {
   const metal = "#2a2d33";
   switch (w) {
     case "none": case "claws": return 0;
-    case "blaster": case "rifleE": case "lasgun": case "pulse": case "pulserifle": case "rifle": case "shotgunE": case "shotgun": case "smg": case "tommy": case "bowcaster": {
+    case "blaster": case "rifleE": case "pulse": case "pulserifle": case "rifle": case "shotgunE": case "shotgun": case "smg": case "tommy": case "bowcaster": {
       const L = w === "smg" || w === "tommy" ? 9 : (w === "shotgun" || w === "shotgunE" ? 11 : 13), th = w === "shotgun" ? 2.6 : 2.2;
-      const body = w === "rifle" || w === "shotgun" ? (s.k ? "#3a2a1e" : metal) : (w === "lasgun" ? "#6a4a2a" : metal);
+      const body = w === "rifle" || w === "shotgun" ? (s.k ? "#3a2a1e" : metal) : metal;
       g.fillStyle = body; g.fillRect(2, -th / 2, L, th);
       g.fillStyle = metal; g.fillRect(L - 1, -0.8, 4, 1.6); g.fillRect(4, th / 2 - 0.5, 1.6, 2.6);
       if (w === "blaster" || w === "rifleE") { g.fillStyle = "#4a4f56"; g.fillRect(5, -th / 2 - 1.2, 4, 1.2); }
@@ -436,21 +440,20 @@ function erWeapon(g, w, s, i, swing, firing) {
       if (w === "bowcaster") { g.strokeStyle = "#8a6a3a"; g.lineWidth = 1; g.beginPath(); g.moveTo(L - 2, -4); g.quadraticCurveTo(L + 1, 0, L - 2, 4); g.stroke(); }
       return L + 3;
     }
-    case "pistol": case "pistolE": case "phaser": case "boltpistol": case "revolver": case "maula": case "plasmapistol": case "zat": {
+    case "pistol": case "pistolE": case "phaser": case "revolver": case "maula": case "plasmapistol": case "zat": {
       const col = w === "phaser" ? "#2a2a2a" : w === "plasmapistol" ? "#5a7ad8" : w === "zat" ? "#5a4a3a" : w === "revolver" ? "#5a5f66" : metal;
       g.fillStyle = col; g.fillRect(2, -1.1, 6.5, 2.2); g.fillRect(3, 0.8, 1.6, 2.4);
       if (w === "zat") { g.beginPath(); g.moveTo(8, -1.5); g.quadraticCurveTo(11, 0, 8, 1.5); g.fill(); }
       if (w === "plasmapistol" || w === "pistolE") { g.fillStyle = s.c[2] && s.hd === "grunt" ? "#4fc3ff" : "#ff5252"; g.fillRect(7, -0.6, 1.6, 1.2); }
       return 9;
     }
-    case "mg": case "minigun": case "smartgun": case "bolter": case "slugga": case "fuelrod": case "armcannon": case "wristgun": case "wristblaster": {
+    case "mg": case "minigun": case "smartgun": case "fuelrod": case "armcannon": case "wristgun": case "wristblaster": {
       if (w === "armcannon" || w === "wristgun" || w === "wristblaster") { g.fillStyle = w === "armcannon" ? "#3a2a4a" : "#5a5f66"; erRR(g, 0, -2, 9, 4, 1.5); g.fill(); g.fillStyle = s.c[2]; g.fillRect(8, -1, 2, 2); if (firing) erGlow(g, 10, 0, 4, s.c[2], 0.6); return 10; }
       const L = w === "minigun" ? 14 : 13;
-      g.fillStyle = w === "bolter" ? "#2a2a2a" : (w === "fuelrod" ? "#3a5a2a" : metal); erRR(g, 1, -2.4, L - 2, 4.8, 1); g.fill();
+      g.fillStyle = w === "fuelrod" ? "#3a5a2a" : metal; erRR(g, 1, -2.4, L - 2, 4.8, 1); g.fill();
       if (w === "minigun") { g.fillStyle = "#4a4f56"; for (let k = -1; k <= 1; k++) g.fillRect(L - 2, k * 1.2 - 0.4, 5, 0.8); }
       else { g.fillStyle = metal; g.fillRect(L - 2, -0.9, 4, 1.8); }
       if (w === "smartgun") { g.strokeStyle = "#5a5f66"; g.lineWidth = 1; g.beginPath(); g.moveTo(1, 2); g.lineTo(-4, 5); g.stroke(); }
-      if (w === "bolter") { g.fillStyle = "#c9a227"; g.fillRect(4, -2.4, 2, 1); }
       return L + 2;
     }
     case "staff": { g.fillStyle = "#c8a040"; g.fillRect(-6, -0.9, 22, 1.8); g.fillStyle = "#e8c860"; g.beginPath(); g.ellipse(16, 0, 2.6, 1.6, 0, 0, 7); g.fill(); if (firing) erGlow(g, 17, 0, 5, "#ffd166", 0.7); return 17; }
@@ -473,11 +476,9 @@ function erWeapon(g, w, s, i, swing, firing) {
       if (w === "lance") erGlow(g, 19, 0, 4, "#ff7043", 0.5);
       g.restore(); return 0;
     }
-    case "mace": case "klaw": case "choppa": case "wrench": case "baton": {
+    case "mace": case "wrench": case "baton": {
       g.save(); g.rotate(swing); g.fillStyle = "#5a3a1e"; g.fillRect(1, -0.8, 7, 1.6);
       if (w === "baton") { g.fillStyle = "#1a1a1a"; g.fillRect(1, -0.9, 10, 1.8); if (Math.sin(runTime * 20 + i) > 0.6) erGlow(g, 11, 0, 3, "#4fc3ff", 0.6); }
-      else if (w === "klaw") { g.fillStyle = "#5a5f66"; erRR(g, 4, -3.5, 7, 7, 2); g.fill(); g.fillStyle = "#c9a227"; g.fillRect(10, -3.5, 3, 1.4); g.fillRect(10, 2.1, 3, 1.4); }
-      else if (w === "choppa") { g.fillStyle = "#9aa0a6"; g.beginPath(); g.moveTo(7, -1); g.lineTo(12, -4); g.lineTo(13, 1); g.lineTo(7, 1.5); g.fill(); }
       else if (w === "wrench") { g.fillStyle = "#9aa0a6"; g.fillRect(4, -0.8, 6, 1.6); g.beginPath(); g.arc(10.5, 0, 1.8, 0, 7); g.fill(); }
       else { g.fillStyle = "#7a7f86"; g.beginPath(); g.arc(9.5, 0, 2.6, 0, 7); g.fill(); g.fillStyle = "#9aa0a6"; for (let k = 0; k < 4; k++) g.fillRect(9.5 + Math.cos(k * 1.57) * 2.6 - 0.6, Math.sin(k * 1.57) * 2.6 - 0.6, 1.2, 1.2); }
       g.restore(); return 0;
@@ -490,22 +491,21 @@ function erWeapon(g, w, s, i, swing, firing) {
 // EOF part 2
 
 /* --- bodies -------------------------------------------------------------------------- */
-const ER_TWO_HANDED = new Set(["blaster", "rifleE", "lasgun", "pulse", "pulserifle", "rifle", "shotgunE", "shotgun", "smg", "tommy", "bowcaster", "mg", "minigun", "smartgun", "bolter", "fuelrod", "staff", "spear", "lance", "polearm", "pitchfork", "bow"]);
+const ER_TWO_HANDED = new Set(["blaster", "rifleE", "pulse", "pulserifle", "rifle", "shotgunE", "shotgun", "smg", "tommy", "bowcaster", "mg", "minigun", "smartgun", "fuelrod", "staff", "spear", "lance", "polearm", "pitchfork", "bow"]);
 function erBodyHuman(g, s, i, face, walk, swing, firing, kneel) {
   const dir = Math.cos(face) >= 0 ? 1 : -1, back = Math.sin(face) < -0.62;
   const c = s.c, x = s.x, robot = s.b === "r", giant = s.b === "g";
   const thin = x.indexOf("thin") >= 0, bulky = x.indexOf("bulky") >= 0 || giant;
   const tw = bulky ? 7.2 : (thin ? 4.4 : 6), limb = thin ? 2 : (bulky ? 3.8 : 3);
   const sw = Math.sin(walk), bob = walk ? Math.abs(Math.cos(walk)) * 0.8 : Math.sin(runTime * 2 + i) * 0.25;
-  const crouch = x.indexOf("crouch") >= 0 ? 2.5 : 0, legsLost = eLegsLost[i] | 0, armsLost = eArmsLost[i] | 0;
+  const crouch = x.indexOf("crouch") >= 0 ? 2.5 : 0, legsLost = (typeof AGE !== "undefined" && AGE.level) ? 0 : eLegsLost[i] | 0, armsLost = (typeof AGE !== "undefined" && AGE.level) ? 0 : eArmsLost[i] | 0;
   g.fillStyle = "rgba(0,0,0,0.28)"; g.beginPath(); g.ellipse(0, 10.6, tw + 2.2, 2.6, 0, 0, 7); g.fill();
   g.save(); g.translate(0, crouch - bob);
   if (x.indexOf("shimmer") >= 0) g.globalAlpha = 0.42 + 0.22 * Math.sin(runTime * 5 + i);
   if (x.indexOf("glow") >= 0) erGlow(g, 0, -2, 18, c[2], 0.22);
   g.scale(dir, 1);
-  // cape / cloak / rokkit pack behind
+  // cape / cloak behind
   if (x.indexOf("cloak") >= 0 || (back && (x.indexOf("robe") >= 0 || x.indexOf("coat") >= 0))) { g.fillStyle = erShade(x.indexOf("cloak") >= 0 && c[0] === "#3a5a3a" ? "#2e5a2e" : c[0], -0.25); g.beginPath(); g.moveTo(-tw - 0.5, -5.5); g.lineTo(tw + 0.5, -5.5); g.lineTo(tw + 2.5, 9); g.lineTo(-tw - 2.5, 9); g.closePath(); g.fill(); }
-  if (x.indexOf("rokkit") >= 0) { g.fillStyle = "#5a5f66"; g.fillRect(-tw - 3, -6, 4, 9); erGlow(g, -tw - 1, 5, 5, "#ff9100", 0.7); }
   if (x.indexOf("pack") >= 0 && back) { g.fillStyle = erShade(c[0], -0.2); erRR(g, -tw + 1, -6, tw * 2 - 2, 8, 2); g.fill(); }
   // legs
   const lc = c[1], boot = robot ? erShade(c[1], -0.3) : "#1e1a16";
@@ -660,7 +660,6 @@ function erBodyFloat(g, s, i, face, walk) {
     case "skull": { g.fillStyle = c[0]; g.beginPath(); g.arc(0, -1, 4.2, 0, 7); g.fill(); g.fillRect(-2.4, 1.6, 4.8, 2.6); g.fillStyle = "#1a1a1a"; g.beginPath(); g.arc(-1.6 + ex * 0.4, -1.2, 1.1, 0, 7); g.arc(1.6 + ex * 0.4, -1.2, 1.1, 0, 7); g.fill(); if (s.hd === "skull") { g.fillStyle = c[2]; g.beginPath(); g.arc(1.6 + ex * 0.4, -1.2, 0.6, 0, 7); g.fill(); g.fillStyle = "#9a9a9a"; g.fillRect(-3, 4.4, 6, 1.2); } break; }
     case "sentinel": g.strokeStyle = "#1a1a1e"; g.lineWidth = 1.1; for (let k = 0; k < 7; k++) { const a = Math.PI * 0.15 + k * 0.12 + face + Math.PI; g.beginPath(); g.moveTo(0, 0); g.quadraticCurveTo(Math.cos(a) * 6, Math.sin(a) * 6 + Math.sin(runTime * 4 + k) * 2, Math.cos(a) * 12, Math.sin(a) * 12); g.stroke(); } g.fillStyle = c[0]; g.beginPath(); g.ellipse(0, 0, 5, 4, face, 0, 7); g.fill(); g.fillStyle = c[2]; for (let k = -1; k <= 1; k++) { g.beginPath(); g.arc(Math.cos(face) * 3.6 + Math.cos(face + 1.57) * k * 1.6, Math.sin(face) * 3.6 + Math.sin(face + 1.57) * k * 1.6, 0.8, 0, 7); g.fill(); } erGlow(g, Math.cos(face) * 4, Math.sin(face) * 4, 5, c[2], 0.4); break;
     case "metroid": erGlow(g, 0, 0, 10, c[2], 0.25); g.fillStyle = "rgba(168,232,106,0.75)"; g.beginPath(); g.arc(0, -1, 6, Math.PI, 0); g.lineTo(6, 2); g.lineTo(-6, 2); g.closePath(); g.fill(); g.fillStyle = c[1]; for (let k = -1; k <= 1; k++) { g.beginPath(); g.arc(k * 2.4, -1.8 + Math.abs(k) * 0.6, 1.3, 0, 7); g.fill(); } g.strokeStyle = "#e8e0c8"; g.lineWidth = 0.9; for (let k = -1; k <= 1; k += 2) { g.beginPath(); g.moveTo(k * 2.5, 2); g.quadraticCurveTo(k * 3, 5, k * 1.4, 6.5); g.stroke(); } break;
-    case "nurgling": g.fillStyle = c[0]; g.beginPath(); g.arc(0, 0, 4, 0, 7); g.fill(); g.fillStyle = c[2]; g.beginPath(); g.arc(-1.4, -1, 0.9, 0, 7); g.arc(1.4, -1, 0.9, 0, 7); g.fill(); g.fillStyle = "#3a2a1a"; g.fillRect(-1.6, 1.2, 3.2, 0.9); break;
     case "flood": g.fillStyle = c[0]; g.beginPath(); g.arc(0, -1, 3.8, 0, 7); g.fill(); g.strokeStyle = c[2]; g.lineWidth = 0.8; for (let k = 0; k < 5; k++) { g.beginPath(); g.moveTo(-2 + k, 2); g.lineTo(-3 + k * 1.5 + Math.sin(runTime * 8 + k) * 0.8, 6); g.stroke(); } break;
     case "patronus": { g.globalAlpha = 0.75; erGlow(g, 0, 0, 12, "#c8e8ff", 0.5); g.fillStyle = "#e8f6ff"; g.beginPath(); g.ellipse(0, 0, 5.5, 3, 0, 0, 7); g.fill(); g.beginPath(); g.arc(Math.cos(face) >= 0 ? 5 : -5, -3, 2.2, 0, 7); g.fill(); g.strokeStyle = "#e8f6ff"; g.lineWidth = 0.8; g.beginPath(); g.moveTo(Math.cos(face) >= 0 ? 5 : -5, -5); g.lineTo(Math.cos(face) >= 0 ? 7 : -7, -9); g.stroke(); g.globalAlpha = 1; break; }
     default: g.fillStyle = c[0]; g.beginPath(); g.arc(0, 0, 4.5, 0, 7); g.fill();

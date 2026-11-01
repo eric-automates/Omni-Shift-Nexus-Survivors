@@ -57,19 +57,19 @@ const SENSE_HERO = {
   23: { k: "droid", label: "COLLECTIVE ALERT", col: "#69f0ae", lines: ["Subspace anomaly detected.", "Hostile vessel on approach.", "Resistance is futile. It arrives.", "ASSIMILATE."] },
   4:  { k: "droid" }, 10: { k: "droid", label: "ASGARD SENSORS" },
   28: { k: "tracker" }, 32: { k: "tracker" },
-  30: { k: "beast", label: "HIVE SENSE" }, 37: { k: "beast", label: "WAAAGH-O-METER", lines: ["Somefink's comin'.", "A big 'un! Get ready ladz!", "WAAAGH! Dat one's close!", "WAAAAAGH!!!"] },
+  30: { k: "beast", label: "HIVE SENSE" },
   5:  { k: "beast" }, 17: { k: "beast", label: "REAVER FRENZY" }, 61: { k: "beast" },
   7:  { k: "omen", label: "THE SYSTEM LORDS STIR" }, 9: { k: "threat", label: "KREE! ENEMY NEAR" }, 11: { k: "seer", label: "HIVE TELEPATHY" },
   12: { k: "seer", label: "THE ORI SEE ALL" }, 19: { k: "bounty", label: "BLOOD HUNT" }, 21: { k: "droid", label: "HUNTER-SEEKER FEED" },
   24: { k: "beast", label: "BATTLE LUST", lines: ["Today is a good day to die.", "An honourable foe approaches!", "It comes. Ready your blade!", "QAPLA'!"] },
-  38: { k: "seer", label: "WARP SIGHT" },
+  34: { k: "jedi", label: "KI SENSE" }, 35: { k: "jedi", label: "KI SENSE" }, 36: { k: "jedi", label: "KI SENSE" }, 37: { k: "jedi", label: "KI SENSE" }, 38: { k: "jedi", label: "KI SENSE" },
   2:  { k: "tracker", label: "IMPERIAL SCANNER" }, 22: { k: "tracker", label: "RED ALERT" }, 25: { k: "tracker", label: "DRADIS CONTACT" },
-  26: { k: "droid", label: "CYLON SENSORS" }, 31: { k: "tracker", label: "BUG RADAR" }, 34: { k: "tracker", label: "AUSPEX SCAN" },
-  36: { k: "droid", label: "TOMB SENSORS" }, 40: { k: "droid", label: "THREAT ASSESSMENT" }, 43: { k: "tracker", label: "PIP-BOY RADAR" },
+  26: { k: "droid", label: "CYLON SENSORS" }, 31: { k: "tracker", label: "BUG RADAR" },
+  40: { k: "droid", label: "THREAT ASSESSMENT" }, 43: { k: "tracker", label: "PIP-BOY RADAR" },
   44: { k: "beast", label: "ROAD WARRIOR'S GUT" }, 45: { k: "tracker", label: "HEV SUIT SENSORS" }, 47: { k: "droid", label: "SCAN VISOR" },
   55: { k: "hunt", label: "TROPHY HUNT", lines: ["*cough* Something approaches…", "A worthy addition to my collection.", "Your lightsaber will make a fine addition!", "KILL HIM!"] }
 };
-const SENSE_TRACKER_IDS = [2, 8, 13, 16, 22, 25, 26, 27, 31, 34, 35, 36, 40, 41, 42, 43, 44, 45, 47, 53];
+const SENSE_TRACKER_IDS = [2, 8, 13, 16, 22, 25, 26, 27, 31, 40, 41, 42, 43, 44, 45, 47, 53];
 const SENSE_BOUNTY_IDS = [1, 6, 15, 50, 51, 52, 54, 64, 65, 67, 74];
 
 function senseStyleFor(cid) {

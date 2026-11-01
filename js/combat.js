@@ -40,11 +40,11 @@ const HERO_SIG_GEAR = [
   ["Morita MK3 Carbine & Shotgun", "MORITA RACKED — ROUGHNECKS HO!", "Bug-Hole Tactical Nuke", 2, 1.5, 7.5],
   ["BR55 Battle Rifle & Energy Sword", "MJOLNIR SHIELDS & CORTANA ONLINE!", "M9 Frag & Plasma Stick", 2, 1.6, 7.0],
   ["Meathook SSG & Unmaykr", "SUPER SHOTGUN & FLAME BELCHER COCKED!", "Shoulder Flame-Belcher", 3, 1.7, 6.0],
-  ["Master-Crafted Bolter & Relic Saw", "CHAINSWORD REVVED FOR THE EMPEROR!", "Backpack Krak Missile", 2, 1.6, 7.5],
-  ["Solar Atomizer & Eradication Ray", "MECHADENDRITES & SERVO-SKULLS BLESSED!", "Mechadendrite Arc-Claw", 5, 1.5, 6.5],
-  ["Synaptic Disintegrator & Warscythe", "REANIMATION PROTOCOLS & GAUSS LIT!", "Tesseract Scarab Swarm", 2, 1.5, 7.5],
-  ["Deffgun & Power Klaw", "POWER KLAW CLAMPED — WAAAGH!", "Stickbomb & Rokkit Salvo", 2, 1.5, 7.0],
-  ["Inquisitor Rosette & Force-Staff", "ROSETTE SHOWN — WARP CHANNELING!", "Purging Smite Bolt", 5, 1.5, 6.5],
+  ["Weighted Turtle Gi", "THE WEIGHTED GI COMES OFF — POWER LEVEL RISING!", "Spirit Sphere", 6, 1.6, 7],
+  ["Saiyan Battle Armor", "THE PRINCE OF ALL SAIYANS — ARMOR ON!", "Final Royal Flash", 6, 1.8, 6.5],
+  ["Weighted Turban & Cape", "THE WEIGHTED CAPE HITS THE GROUND — THUD!", "Hellzone Cage", 6, 1.7, 7],
+  ["Capsule Corp Jacket", "THE SWORD FROM THE FUTURE — DRAWN!", "Burning Barrage", 6, 1.7, 6.8],
+  ["Purple Mentor's Gi", "HIDDEN POTENTIAL UNLOCKED!", "Father-Son Wave", 6, 1.8, 7],
   ["Lobby Arsenal & Awakened Code", "SHADES ON — BULLET TIME ENGAGED!", "Telekinetic Code Wave", 6, 1.6, 6.5],
   ["Phased-Plasma 40W & Minigun", "HUD TARGET ACQUIRED — TITANIUM ARMED!", "M79 Thumper Grenade", 2, 1.6, 7.0],
   ["Deckard Double-Trigger Blaster", "VOIGHT-KAMPFF CALIBRATED!", "Spinner Flechette Burst", 3, 1.5, 7.5],
@@ -647,9 +647,9 @@ function startRun() {
 
   let innateVisor = 0;
   if ([1, 54].includes(cid)) innateVisor = 1;
-  else if ([40, 23, 26, 36, 55, 65, 76].includes(cid)) innateVisor = 2;
-  else if ([28, 29, 31, 32, 33, 34, 47, 59, 77].includes(cid)) innateVisor = 3;
-  else if ([0, 3, 7, 10, 14, 18, 20, 38, 39, 46, 48, 56, 69, 71, 73, 74, 78, 79, 80].includes(cid)) innateVisor = 4;
+  else if ([40, 23, 26, 55, 65, 76, 86, 87, 88].includes(cid)) innateVisor = 2;   // androids: cybernetic HUD
+  else if ([28, 29, 31, 32, 33, 47, 59, 77].includes(cid)) innateVisor = 3;
+  else if ([0, 3, 7, 10, 14, 18, 20, 34, 35, 36, 37, 38, 39, 46, 48, 56, 69, 71, 73, 74, 78, 79, 80, 81, 82, 83, 84, 85].includes(cid)) innateVisor = 4;   // ki sense = prescience
 
   const startVisors = innateVisor > 0 ? [innateVisor] : [];
 
@@ -690,7 +690,7 @@ function startRun() {
     unlockedVisors: startVisors,
     visorsUnlocked: startVisors,
     activeVisor: innateVisor,
-    maxRelics: ([7, 10, 35, 69, 73, 75, 79].includes(cid)) ? 4 : 3,
+    maxRelics: ([7, 10, 69, 73, 75, 79].includes(cid)) ? 4 : 3,
     relics: [], utils: getHeroUtils(cid), spellbook: [],
     xp: 0, nextXp: 10, lvl: 1, kills: 0, dmRun: 0, bossSpawned: false, titanClock: 0,
     pendingLevelUps: 0, sectorCleared: false, dmStage: 0, unlockedStage: 0, bossDmMul: 0, dmGreed: 0, evadeTxtCD: 0,
@@ -740,11 +740,17 @@ function startRun() {
   if (cid === 29) { player.dodge += 0.25; player.cdmg += 0.4; }
   if (cid === 31) { player.cdr *= 0.82; player.area *= 1.25; }
   if (cid === 32) { player.regen += 2.5; player.area *= 1.3; }
-  if (cid === 34) { player.armor += 6; player.might += 0.2; }
-  if (cid === 35) { player.projCnt += 2; player.mag *= 1.25; }
-  if (cid === 36) { player.regen += 2.5; player.revives += 1; }
-  if (cid === 37) { player.projCnt += 2; player.spd *= 1.2; }
-  if (cid === 38) { player.crit += 0.25; player.cdmg += 0.3; }
+  // v14.2 Ki-Surge (js/kisurge.js) — the old 40K slots, plus #84-#88
+  if (cid === 34) { player.might += 0.15; player.spd *= 1.1; }               // Goku: Saiyan battle instinct
+  if (cid === 35) { player.might += 0.2; player.crit += 0.1; }               // Vegeta: Saiyan pride
+  if (cid === 36) { player.regen += 3; player.armor += 3; }                  // Piccolo: Namekian regeneration
+  if (cid === 37) { player.spd *= 1.15; player.crit += 0.1; }                // Trunks: warrior from the future
+  if (cid === 38) { player.projCnt += 1; player.regen += 1.5; }              // Gohan: hidden potential
+  if (cid === 84) { player.might += 0.25; player.area *= 1.1; }              // Frieza: emperor of the universe
+  if (cid === 85) { player.regen += 2; player.might += 0.1; }                // Cell: perfect bio-android
+  if (cid === 86) { player.armor += 6; player.projCnt += 1; }                // Android 16: infinite energy core
+  if (cid === 87) { player.armor += 4; player.cdr = (player.cdr || 1) * 0.85; }   // Android 17
+  if (cid === 88) { player.projCnt += 2; player.spd *= 1.1; }                // Android 18
   if (cid === 39) { player.dodge += 0.35; player.cdr *= 0.8; }
   if (cid === 40) { player.maxHp *= 1.5; player.armor += 6; }
   if (cid === 41) { player.bossMul = 1.5; player.crit += 0.2; }
@@ -1001,8 +1007,7 @@ function spawnEnemy(isBoss = false, isRival = false) {
     const idx = allocEnemySlot(sx, sy, 98, 1.0, 0, -1);
     if (idx >= 0) {
       // v12: rivals come from the 80 canon heroes (never your custom hero #80)
-      let rCid = typeof randomRosterHero === "function" ? randomRosterHero() : Math.floor(Math.random() * 80);
-      if (rCid === player.cid) rCid = (rCid + 1) % 80;
+      const rCid = typeof randomRosterHero === "function" ? randomRosterHero(player.cid) : (player.cid + 1 + Math.floor(Math.random() * 79)) % 80;   // v14.2: any canon hero but you
       eRivalCid[idx] = rCid;
       const callout = typeof getRivalCallout === "function" ? getRivalCallout(rCid, player.cid) : "Bounty target locked!";
       spawnSpeech(player.x, player.y - 24, `${CHAR_RAW[rCid][3].toUpperCase()}: "${callout}"`, "#ff5252", 3.8);
@@ -1081,7 +1086,7 @@ function fireWeapon(w) {
     return;
   }
 
-  if ((typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44, 73].includes(w.id))) {
+  if ((typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 44, 73].includes(w.id))) {
     if (w.id === 71) {
       if (typeof sfxSpell === "function") sfxSpell("wand");
       spawnProj(player.x, player.y, Math.cos(aimAng) * 440, Math.sin(aimAng) * 440, baseDmg * 1.2, 0.75, 9, 3 + player.pierce, 4, sup, 0, 71);
@@ -1147,7 +1152,7 @@ function fireWeapon(w) {
       spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 1.6 * player.dur, 9 * player.area, player.pierce, 2, sup, 0, w.id);
     }
   } else if (w.style === "cone") {
-    const isHeavyMG = [37, 53].includes(w.id);
+    const isHeavyMG = [53].includes(w.id);
     const pellets = isHeavyMG ? (count + 1) : (count + 3);
     const spreadStep = isHeavyMG ? 0.08 : 0.15;
     for (let k = 0; k < pellets; k++) {

@@ -11,7 +11,7 @@ const UI_VISOR_DEFS = [
   { id: 1, short: "BOBA RF", name: "Mandalorian Rangefinder", desc: "Green telemetry lock on strongest on-screen threat (+10% Crit)." },
   { id: 2, short: "T-800 / SITH", name: "Cybernetic / Sith Neural HUD", desc: "Red neural target box with Head Life % & T-Zone readout (+10% Crit)." },
   { id: 3, short: "THERMAL / SPECTRE", name: "Yautja Thermal / Spectrespecs", desc: "Full-spectrum infrared & Wrackspurt heat signatures on all hostiles (+10% Crit)." },
-  { id: 4, short: "PRESCIENCE", name: "Force / Matrix Prescience", desc: "Prophetic Force & construct target lock with vector prediction (+10% Crit)." }
+  { id: 4, short: "PRESCIENCE", name: "Force / Ki / Matrix Prescience", desc: "Prophetic Force, ki & construct target lock with vector prediction (+10% Crit)." }
 ];
 
 function ensurePlayerVisors() {
@@ -26,9 +26,13 @@ function ensurePlayerVisors() {
 }
 
 async function runDynamicEOFScan() {
-  const files = ["js/chaos.js", "js/data-factions.js", "js/data-heroes.js", "js/data-relics.js", "js/state.js", "js/world.js", "js/combat.js", "js/sim.js", "js/render.js",
-                 "js/fx.js", "js/rewind.js", "js/arsenal.js", "js/squad.js", "js/glory.js", "js/showdown.js", "js/biomes.js", "js/campaign.js", "js/proving.js", "js/saberforms.js", "js/creator.js", "js/ui.js"];
+  // v14.2: audit exactly what index.html loads (the old hand-kept list had fallen 17 modules behind)
+  const files = [...document.querySelectorAll("script[src]")].map(sc => sc.getAttribute("src").split("?")[0]).filter(f => /^js\/[\w.-]+\.js$/.test(f));
   const results = [];
+  if (location.protocol === "file:") {   // opened from disk: the browser blocks fetch(), and every module already proved itself in checkLoadedScripts
+    eofAuditResults = files.map(f => ({ file: f, status: "LOADED (file://)", ok: true }));
+    return;
+  }
   for (let i = 0; i < files.length; i++) {
     const f = files[i], marker = "// " + "EOF:" + f;
     try {
@@ -72,7 +76,14 @@ function checkLoadedScripts() {
     ["citythemes.js", typeof cityApplyTheme === "function"], ["cityrender.js", typeof cityRenderGround === "function"],
     ["stealth.js", typeof stealthEnemyStep === "function"], ["enemylook.js", typeof drawEnemyDetailed === "function"],
     ["cityplay.js", typeof cityRunStart === "function"], ["vision.js", typeof visionRenderWorld === "function"],
-    ["minimap.js", typeof mapOpen === "function"]
+    ["minimap.js", typeof mapOpen === "function"],
+    ["sense.js", typeof senseRenderScreen === "function"], ["force.js", typeof forceReset === "function"],
+    ["vehicles.js", typeof vehStepAll === "function"], ["convoy.js", typeof convoyReset === "function"],
+    ["cityaccess.js", typeof accReset === "function"], ["hudlayout.js", typeof hudPreview === "function"],
+    ["sheathe.js", typeof sheatheDraw === "function"], ["heroreg.js", typeof heroRegister === "function"], ["saga.js", typeof sagaLitStep === "function"], ["weaponart.js", typeof waWand === "function"],
+    ["regiongen.js", typeof regionGenerate === "function"], ["regionsites.js", typeof rgTownBays === "function"], ["regionart.js", typeof rgBake === "function"], ["regionworlds.js", typeof rgWater === "function"], ["location.js", typeof locOpen === "function"], ["locals.js", typeof enemySpecJ === "function"],
+    ["realdata.js", typeof rmMvt === "function"], ["realgen.js", typeof rmGenBlock === "function"], ["realart.js", typeof rmBake === "function"], ["realui.js", typeof rmPreload === "function"],
+    ["agefilter.js", typeof ageInfoHTML === "function"], ["items.js", typeof itSearch === "function"], ["scenario.js", typeof scnRunStart === "function"], ["townsfolk.js", typeof tfStep === "function"], ["economy.js", typeof ecoHourTick === "function"], ["apoc.js", typeof apocTag === "function"], ["flight.js", typeof flyStep === "function"], ["kisurge.js", typeof kiITOpen === "function"], ["rivalchase.js", typeof rvcStep === "function"]
   ];
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
   if (failed.length > 0) {
@@ -411,7 +422,7 @@ function triggerLevelUp() {
   // FIX: the 4 random "NEW WEAPON" rolls could pick the same weapon twice (duplicate cards).
   const offeredNew = new Set();
   for (let k = 0; k < 4; k++) {
-    const rc = CHAR_RAW[Math.floor(Math.random() * 80)];      // v12: canon weapons only (never the custom hero #80)
+    const rc = CHAR_RAW[typeof randomRosterHero === "function" ? randomRosterHero() : Math.floor(Math.random() * 80)];      // canon weapons only (never the custom hero #80; v14.2: incl. #81+)
     if (offeredNew.has(rc[0])) continue;
     if (!player.weapons.some(w => w.id === rc[0]) && player.weapons.length < (typeof MAX_WEAPONS !== "undefined" ? MAX_WEAPONS : 6)) {
       offeredNew.add(rc[0]);
@@ -844,6 +855,7 @@ function updateMenuUI() {
   const campNode = (typeof campaignSelectedNode === "function") ? campaignSelectedNode() : null;
   document.getElementById("menuSelStage").textContent = campNode ? `🗺️ ${campaignNodeLabel(campNode)}` : `Stage ${stg.id}: ${f.worlds[stg.tier]} ${stg.suffix}`;
   document.getElementById("menuDiff").textContent = `Difficulty: ${df.name}`;
+  const ma = document.getElementById("menuAge"); if (ma && typeof AGE !== "undefined") { ma.textContent = `🛡️ Content: ${AGE_NAMES[AGE.level]}${AGE.pin ? " 🔒" : ""}`; ma.style.borderColor = AGE.level ? "#00e676" : ""; }
   const gc = document.getElementById("goChars"); if (gc) gc.textContent = `CHARACTER ROSTER (80 + YOUR HERO)`;
   const gcr = document.getElementById("goCreate");
   if (gcr) gcr.textContent = (typeof customHeroCreated === "function" && customHeroCreated()) ? `✨ EDIT YOUR HERO: ${CHAR_RAW[80][3].toUpperCase()}` : "✨ CREATE YOUR OWN HERO";
@@ -946,7 +958,18 @@ function renderCodex() {
 function renderOpts() {
   const box = document.getElementById("optList"); box.innerHTML = "";
   const df = DIFFICULTIES[meta.diff] || DIFFICULTIES[1];
+  const hasAge = typeof AGE !== "undefined";
+  if (hasAge) { const info = document.createElement("div"); info.innerHTML = ageInfoHTML(); box.appendChild(info.firstChild); }
+  const ageRows = !hasAge ? [] : [
+    ["🛡️ Age-Appropriate Content", AGE_NAMES[AGE.level] + (AGE.pin ? " 🔒" : ""), () => { ageCycle(); }],
+    ...(AGE.level === 1 ? [["↳ Hit Effect (Normal mode)", AGE_FX_NAMES[AGE.fx], () => { ageCycleFx(); }]] : []),
+    ["↳ Parent PIN Lock", AGE.pin ? "ON (TAP TO REMOVE)" : "OFF (TAP TO SET)", () => { agePinToggle(); }],
+    ...(typeof sheatheBladeMode === "function" ? [
+      ["⚔️ Idle Steel Blades (glowing blades always retract)", sheatheBladeMode() === "sheathe" ? "SHEATHE ON BACK (AUTO-DRAW)" : "ALWAYS IN HAND", () => { sheatheCycleBlade(); }],
+      ["🔫 Idle Guns", SHEATHE_GUN_NAMES[sheatheGunMode()], () => { sheatheCycleGun(); }]] : [])
+  ];
   const rows = [
+    ...ageRows,
     ["Difficulty Tier", df.name, () => { meta.diff = (meta.diff + 1) % 5; saveMeta(); }],
     ["Double-Tap Distant Dash", opts.doubleTapDash !== false ? "ON (DOUBLE-TAP GROUND)" : "OFF (BUTTON ONLY)", () => { opts.doubleTapDash = opts.doubleTapDash === false ? true : false; }],
     ["Limbs, Blood & Bodies Persist Count", String(opts.persistCount || 100), () => {
@@ -1035,6 +1058,7 @@ campaignInitUI();
 document.getElementById("goMeta").onclick = () => { if (checkLoadedScripts()) { renderMeta(); showScreen("scrMeta"); } };
 document.getElementById("goCodex").onclick = () => { if (checkLoadedScripts()) { renderCodex(); showScreen("scrCodex"); } };
 document.getElementById("goOpts").onclick = () => { if (checkLoadedScripts()) { renderOpts(); showScreen("scrOpts"); } };
+{ const ma = document.getElementById("menuAge"); if (ma) ma.onclick = () => { if (checkLoadedScripts()) { renderOpts(); showScreen("scrOpts"); } }; }
 document.getElementById("goHealth").onclick = () => { if (checkLoadedScripts()) { renderHealth(); showScreen("scrHealth"); } };
 document.getElementById("goHelp").onclick = () => showScreen("scrHelp");
 // FIX: the Character-screen respec used respecAll(), which also wiped every Shop upgrade.

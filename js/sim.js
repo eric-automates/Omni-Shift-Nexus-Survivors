@@ -342,7 +342,7 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
 
   // Rival Bounty Hunter & Boss Signature Weapon Drop on Death!
   if (et >= 98 && !isEcho) {
-    const dropWpnId = (et === 98 && rCid >= 0) ? rCid : Math.floor(Math.random() * 80);   // v12: canon weapons only
+    const dropWpnId = (et === 98 && rCid >= 0) ? rCid : (typeof randomRosterHero === "function" ? randomRosterHero() : Math.floor(Math.random() * 80));   // canon weapons only (v14.2: incl. #81+)
     if (typeof spawnWeaponDrop === "function") {
       spawnWeaponDrop(ex, ey, dropWpnId);
     } else if (typeof activeWeaponDrops !== "undefined" && CHAR_RAW[dropWpnId]) {
@@ -962,7 +962,7 @@ function stepSimulation(rawDt) {
   if (typeof saberEngineBeginStep === "function") saberEngineBeginStep(simDt);
   for (let s = 0; s < activeSlots; s++) {
     const w = enabledWpns[(player.handSlotOffset + s) % enabledWpns.length];
-    const isMeleeBlade = (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44, 73].includes(w.id));
+    const isMeleeBlade = (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 44, 73].includes(w.id));
 
     if (s === 0 && thrownBlade.active && isMeleeBlade) continue;
 
@@ -1245,6 +1245,8 @@ function stepSimulation(rawDt) {
 
       if (player.invulnT > 0) {
         // v10: brief invulnerability (glory-kill finishers, Proving Ground) - no contact damage
+      } else if ((player.flyAlt || 0) > 3) {
+        // v14.2: in the air (js/flight.js) — out of reach of anything on the ground
       } else if ((player.acrobatZ || 0) > 8 || (player.dodge > 0 && Math.random() < Math.min(0.65, player.dodge))) {
         // FIX: this text used to be spawned on EVERY dodged frame, flooding the damage-number pool.
         if (!(player.evadeTxtCD > 0)) {
@@ -1376,6 +1378,7 @@ function stepSimulation(rawDt) {
         if (typeof sfxRicochet === "function") sfxRicochet();
         continue;
       }
+      if (dp < 14 && (player.flyAlt || 0) > 60) continue;   // v14.2: shots from the ground don't reach that high (js/flight.js)
       if (dp < 14 && player.invulnT > 0) { pAct[i] = 0; spawnParticles(pX[i], pY[i], 2, 9); continue; }
       if (dp < 14) {
         player.combatAlertTimer = 2.0;

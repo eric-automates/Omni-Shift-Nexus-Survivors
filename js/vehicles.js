@@ -69,7 +69,7 @@ const VK = {
 };
 // what each universe calls its fuel (gas-station names come from js/citythemes.js: TIBANNA FUEL, VOLT CHARGE, ...)
 const VEH_FUEL_NAME = { modern: "FUEL", neon: "CHARGE", galactic: "FUEL CELL", coruscant: "REPULSOR FUEL", starship: "DEUTERIUM", colony: "HYDROGEN",
-  frontier: "FUEL", western: "HORSES", desert: "FUEL", pharaoh: "NAQUADAH", gothic: "PROMETHIUM", wasteland: "GUZZOLINE", medieval: "HORSE", wizard: "PETROL" };
+  frontier: "FUEL", western: "HORSES", desert: "FUEL", pharaoh: "NAQUADAH", gothic: "LAMP OIL", wasteland: "GUZZOLINE", medieval: "HORSE", wizard: "PETROL" };
 const VEH_PROP_T = new Set(["car", "bus", "trailer", "armytruck", "tractor"]);
 const VEH_FURN_T = new Set(["car", "firetruck", "forklift", "tractor"]);
 

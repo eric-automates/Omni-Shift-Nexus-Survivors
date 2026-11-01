@@ -24,6 +24,7 @@ const GLORY_STYLES = {
   doom:   { label: "RIP & TEAR", heal: 0.30, col: "#ff1744" },
   gun:    { label: "POINT-BLANK EXECUTION", heal: 0.12, col: "#ffd166" },
   arcane: { label: "DISINTEGRATED", heal: 0.14, col: "#e040fb" },
+  ki:     { label: "KI BLAST FINISH", heal: 0.14, col: "#ffd54f" },
   beast:  { label: "LIMBS TORN", heal: 0.16, col: "#ff9100" }
 };
 
@@ -44,11 +45,12 @@ function gloryStyleForCid(cid, hasSaber) {
   if (cid === CUSTOM_CID && typeof customGloryStyle === "function") return customGloryStyle(hasSaber);   // v13 creator builds
   if (cid === 29) return "spine";
   if (cid === 33) return "doom";
-  if ([5, 17, 30, 37, 61].includes(cid)) return "beast";
+  if ([5, 17, 30, 61].includes(cid)) return "beast";
   const c = CHAR_RAW[cid];
   const sword = hasSaber || (typeof isSwordWeapon === "function" && isSwordWeapon(cid)) || (c && c[6] === "orbit" && (cid < 56 || cid >= 76));
   if (sword) return "saber";
-  if ((c && c[1] === 10) || [7, 10, 12, 18, 20, 38, 46, 49].includes(cid)) return "arcane";
+  if ([34, 35, 36, 38, 84, 85, 86, 87, 88].includes(cid)) return "ki";   // v14.2 Ki-Surge: an energy blast at point-blank range
+  if ((c && c[1] === 10) || [7, 10, 12, 18, 20, 46, 49].includes(cid)) return "arcane";
   return "gun";
 }
 
@@ -177,7 +179,7 @@ function gloryImpact(E) {
   } else if (E.style === "beast") {
     spawnGroundLimb(ex + 9, ey - 2, bodyCol, 1); spawnGroundLimb(ex - 9, ey + 2, bodyCol, 1);
     killEnemy(i, false, null);
-  } else if (E.style === "arcane") {
+  } else if (E.style === "arcane" || E.style === "ki") {
     for (let k = 0; k < (opts.lowPart ? 8 : 26); k++) {
       const a = Math.random() * Math.PI * 2, sp = 40 + Math.random() * 120;
       spawnPt(ex, ey, Math.cos(a) * sp, Math.sin(a) * sp, 0.4 + Math.random() * 0.4, 2.5, k & 1 ? 11 : 9, 4);
@@ -231,7 +233,7 @@ function gloryFrame(rawDt) {
     G.btnMode = ""; return;
   }
   const btn = gloryButton();
-  let mode, main = "☠ EXECUTE", sub = "";
+  let mode, main = (typeof ageExecWord === "function" ? ageExecWord() : "☠ EXECUTE"), sub = "";
   if (G.exec) {
     mode = "busy";
     if (G.queued) { main = "☠ CHAIN QUEUED"; sub = "next: " + (G.best >= 0 ? GLORY_RANK_NAMES[gloryRank(G.best)] : "—"); }

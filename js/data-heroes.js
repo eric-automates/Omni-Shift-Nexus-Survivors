@@ -42,11 +42,11 @@ const CHAR_RAW = [
   [31, 5, 0, "Klendathu Drop-Trooper", "Morita MK1 Split-Rifle", "Tactical Mini-Nuke", "cone", "Live Forever", "+20% Fire Rate & +25% Area"],
   [32, 5, 8, "Mjolnir Spartan-117", "MA5B & Type-1 Energy Sword", "Spartan Laser & Sword", "beam", "Mjolnir Energy Shield", "+2.5 HP/s Regen & +30% Area"],
   [33, 5, 12, "Praetor Crucible Slayer", "Lucifer Super Shotgun", "BFG-10000 Tendril Orb", "chain", "Rip & Tear Glory-Heal", "Kills within 90px heal 1.5 HP"],
-  [34, 6, 0, "Astartes Chainsword", "Godwyn Bolter & Chainsword", "Exterminatus Lance", "cone", "Know No Fear", "+6 Flat Armor & +20% Might"],
-  [35, 6, 8, "Omnissiah Tech-Magos", "Floating Servo-Skulls", "Noospheric Arc Hexagon", "orbit", "Machine Spirit Canticle", "+2 Projectiles, +1 Relic Slot & +25% Magnet"],
-  [36, 6, 10, "Tomb-World Gauss Necron", "Emerald Gauss Flayer", "C'tan Tesseract Vault", "beam", "Reanimation Protocol", "+2.5 HP/s Regen & +1 Revival"],
-  [37, 6, 6, "Waaagh Dakka Warboss", "Twin Belt-Fed Big-Shoota", "Rokkit & Squig Storm", "cone", "More Dakka!", "+2 Extra Projectiles & +20% Move Speed"],
-  [38, 6, 8, "Warp Psyker Inquisitor", "Purging Force-Staff Flame", "Astronomican Sun Nova", "nova", "Emperor's Tarot", "100% Warp Vacuum, +25% Crit & +30% Crit Dmg"],
+  [34, 6, 0, "Goku", "Turtle School Ki Wave", "Spirit Sphere", "beam", "Saiyan Battle Instinct", "A Saiyan raised on Earth who loves a fight: Ki Wave beams, the golden form (and no higher), INSTANT TRANSMISSION across the map in a second, ki flight"],
+  [35, 6, 1, "Vegeta", "Royal Flash Beam", "Final Royal Flash", "beam", "Saiyan Pride", "The proud Saiyan prince: piercing royal beams, a Big Bang burst, the golden form (and no higher), ki flight; never backs down"],
+  [36, 6, 2, "Piccolo", "Piercing Spiral Beam", "Hellzone Cage", "beam", "Namekian Regeneration", "The Namekian mentor: a spiralling beam that pierces everything in its line, stretching arms, regeneration, ki flight"],
+  [37, 6, 3, "Trunks", "Brave Sword", "Burning Barrage", "orbit", "Warrior from the Future", "The swordsman from a ruined future: lightning-fast sword work, Burning Barrage blasts, the golden form (and no higher), ki flight"],
+  [38, 6, 4, "Gohan", "Rising Ki Blast", "Father-Son Wave", "nova", "Hidden Potential", "Goku's son, a prodigy with hidden potential: rising ki blasts, a father-son wave, the golden form (and no higher), ki flight; stronger when he's hurt"],
   [39, 7, 11, "Zion Bullet-Time One", "Dual Micro-Uzis & Telekinesis", "Source-Code Decompiler", "nova", "There Is No Spoon", "100% Telekinetic Vacuum, +35% Dodge & -20% CD"],
   [40, 7, 7, "T-800 Endo-Enforcer", "Westinghouse M-25 Plasma", "Time-Sphere Lightning", "beam", "Hyperalloy Titanium Arm", "+50% HP, +6 Armor; Guarding Head (HD) blocks 95% eye/head damage!"],
   [41, 7, 0, "Neon Origami Runner", "LAPD 2019 PKD Blaster", "Spinner Railgun Sweep", "missile", "Voight-Kampff Lock", "+50% Damage vs Bosses & +20% Crit"],
@@ -63,7 +63,7 @@ const CHAR_RAW = [
   [52, 2, 14, "The Man With No Name", "Colt 1851 Navy Six-Shooter", "Deadeye Eight-Shooter", "cone", "High-Noon Deadeye", "Poncho gunslinger: blazing 6-shot right-hand bursts with lethal crit & 0.55s quick-reload"],
   [53, 5, 14, "Green-Beret Last-Stand Vet", "Belt-Fed M60 & Comp-Bow", "First Blood Firestorm", "cone", "Last-Stand Fortifier", "Staying within 180px for 120s (or Utility) deploys shoot-over Fort & Claymore mines"],
   [54, 0, 15, "Slav-1 Bounty Tracker", "Sawed-Stock EE-3 Carbine", "Disintegrations Authorized", "beam", "Mandalorian Arsenal", "ESB Jetpack Missile & Cape + Knee Darts + Auto-Flamethrower + Disintegrator"],
-  [55, 6, 16, "General Kaleesh Cyborg", "Quad-Saber Lunge & Blasters", "General's Grievous Wrath", "orbit", "Four-Armed General", "4-Armed Cyborg Warlord: fires 4 weapons simultaneously with built-in Saber Deflection!"],
+  [55, 0, 16, "General Kaleesh Cyborg", "Quad-Saber Lunge & Blasters", "General's Grievous Wrath", "orbit", "Four-Armed General", "4-Armed Cyborg Warlord: fires 4 weapons simultaneously with built-in Saber Deflection!"],
   [56, 10, 0, "Scarred Boy-Wizard", "Holly Phoenix-Feather Wand", "Master of Death Hallows", "beam", "Chosen Boy-Who-Lived", "Unlocks cumulative spells on top bar (Stupefy, Leviosa, Expelliarmus, Stag Patronus) + 100% Vacuum!"],
   [57, 10, 2, "Time-Turner Arithmancer", "Vine Dragon-Heartstring Wand", "Chronos Arithmancy Storm", "beam", "Brightest Witch of Her Age", "-20% Spell Cooldowns, Cumulative Spellbook Bar & Time-Turner Rewind"],
   [58, 10, 3, "Red-Mane Pyro-Keeper", "Ash Wand & Wildfire Whiz-Bangs", "Weasley Dragon-Fire Barrage", "cone", "Wizard's Chess Tactician", "+25% Spell Area, Cumulative Spell Bar & Summons Allied Chess Knight"],
@@ -91,16 +91,16 @@ const CHAR_RAW = [
   [79, 0, 15, "Grandmaster Yoda — Ataru Sage", "Emerald Shoto Lightsaber", "Grandmaster Ataru Somersault", "orbit", "900-Year Acrobatic Ataru", "Compact Master (+35% Dodge, +30% Speed): leaps, flips & somersaults mid-air while slicing!"]
 ];
 
-const FORCE_VACUUM_HEROES = [0, 3, 7, 10, 12, 14, 18, 20, 27, 38, 39, 45, 49, 56, 57, 59, 66, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79];
+const FORCE_VACUUM_HEROES = [0, 3, 7, 10, 12, 14, 18, 20, 27, 39, 45, 49, 56, 57, 59, 66, 67, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79];
 function hasInnateVacuum(cid) { return FORCE_VACUUM_HEROES.includes(cid); }
 
-const SWORD_HEROES = [0, 3, 14, 18, 19, 24, 32, 33, 34, 48, 50, 55, 67, 71, 76, 77, 78, 79];
+const SWORD_HEROES = [0, 3, 14, 18, 19, 24, 32, 33, 37, 48, 50, 55, 67, 71, 76, 77, 78, 79];
 function isSwordWeapon(wpnId) { return SWORD_HEROES.includes(wpnId); }
 
 function getHeroArmCap(cid) {
   if (cid === 55) return 4;
   if (cid === CUSTOM_CID) return 3;          // v12 custom hero: both dual sabers + one more weapon
-  if ([0, 3, 7, 12, 38, 39, 56, 57, 66, 69, 70, 71, 73, 74, 75, 76, 77, 78, 79].includes(cid)) return 3;
+  if ([0, 3, 7, 12, 39, 56, 57, 66, 69, 70, 71, 73, 74, 75, 76, 77, 78, 79].includes(cid)) return 3;
   return 2;
 }
 
@@ -135,8 +135,12 @@ const HERO_STANCE_TABLE = {
   32: [[8, "UNSC CQC Bayonet", 1.05, 0.80, 0.45], [4, "Sangheili Energy Lunge", 1.35, 1.15, 0.85], [6, "Mythic Energy Sword Cleave", 1.60, 1.38, 1.15], [2, "Mjolnir Counter-Slash"]],
   // #33 Doom Slayer: Praetor Brawling -> Meathook Rip & Tear -> Crucible Arch-Slayer
   33: [[4, "Praetor Brutal Cleave", 1.20, 1.05, 0.70], [6, "Rip & Tear Frenzy", 1.50, 1.32, 1.05], [6, "Crucible Titan-Slayer", 1.85, 1.60, 1.40], [4, "Argent Blade Smash"]],
-  // #34 Astartes: Neophyte Chainsword -> Tactical Brother -> Chapter Champion
-  34: [[0, "Astartes Neophyte Sweep", 1.05, 0.88, 0.55], [4, "Crux Terminatus Cleave", 1.32, 1.18, 0.88], [6, "Emperor's Champion", 1.60, 1.42, 1.20], [2, "Storm-Shield Parry"]],
+  // #34-#38 Ki-Surge (js/kisurge.js registers #84-#88): career stages; Trunks's sword goes Makashi -> Djem So -> Juyo
+  34: [[5, "Turtle School Student", 1.05, 0.9, 0.6], [5, "Saiyan Warrior", 1.3, 1.15, 0.9], [5, "Earth's Mightiest", 1.6, 1.4, 1.2], [2, "Ki Guard"]],
+  35: [[5, "Saiyan Elite Soldier", 1.05, 0.9, 0.6], [5, "Prince on Namek", 1.3, 1.15, 0.9], [5, "Prince of All Saiyans", 1.6, 1.4, 1.2], [2, "Ki Guard"]],
+  36: [[5, "Demon King's Heir", 1.05, 0.9, 0.6], [5, "Gohan's Mentor", 1.3, 1.15, 0.9], [5, "Fused Namekian", 1.6, 1.4, 1.2], [2, "Namekian Guard"]],
+  37: [[1, "Gohan's Pupil", 1.1, 0.85, 0.6], [4, "Future Warrior", 1.35, 1.2, 0.9], [6, "Time-Traveller Swordmaster", 1.7, 1.45, 1.3], [2, "Sword Guard"]],
+  38: [[5, "Hidden Potential", 1.05, 0.9, 0.6], [5, "Time-Chamber Trained", 1.3, 1.15, 0.9], [5, "Cell Games Champion", 1.65, 1.45, 1.25], [2, "Ki Guard"]],
   // #48 Geralt: Kaer Morhen Fast Style -> Strong Ursine Cleave -> Grandmaster Whirl
   48: [[1, "Wolf School Fast Style", 1.18, 0.92, 0.65], [4, "Wolf School Strong Style", 1.42, 1.22, 0.98], [7, "Grandmaster Aerondight Whirl", 1.78, 1.50, 1.45], [1, "Witcher Arrow-Deflection"]],
   // #50 Kenshi Ronin: Starving Drifter -> Desert Sabre Guard -> Meitou Falling-Sun Master
@@ -202,7 +206,7 @@ function getHeroDashSpec(cid) {
     const col = typeof getWeaponColor === "function" ? getWeaponColor(cid) : "#00f0ff";
     return { name: "Force Dash & Saber Cleave", cd: 4.0, dist: 155, style: "saberRush", col: col === "#212121" ? "#cfd8dc" : col, callout: "FORCE DASH!", desc: "Force-dashes through enemy ranks, sabers leading, bisecting foes in the path!" };
   }
-  if ([0, 3, 14, 18, 19, 24, 32, 33, 34, 48, 50, 55].includes(cid)) {
+  if ([0, 3, 14, 18, 19, 24, 32, 33, 48, 50, 55].includes(cid)) {
     return { name: "Saber / Blade Cleave Rush", cd: 4.2, dist: 150, style: "saberRush", col: "#00f0ff", callout: "BLADE BLITZ!", desc: "Dashes through enemy ranks with a spinning blade cleave that bisects foes in the path!" };
   }
   if ([1, 16, 21, 25, 47, 54].includes(cid)) {
@@ -259,11 +263,11 @@ const CANON_56 = [
   [["M3 Tactical Helm","#455a64"],["Rico Crew-Cut","#3e2723"],["Fleet Cap","#263238"],["Mobile Infantry Gray","#37474f"],["Marauder Exo-Suit","#546e7a"],["Medic White Trim","#cfd8dc"],["Charcoal BDU","#263238"],["Armored Boots","#1c2228"],["No Cape","none"],["Ammo Rucksack","#455a64"]],
   [["Mark-VI Green & Gold","#33691e"],["EVA Gold Dome","#ffd166"],["ODST Recon Black","#263238"],["Mjolnir Olive Green","#2e5736"],["Blue Team Cobalt","#1565c0"],["Red Team Crimson","#b71c1c"],["Mjolnir Greaves","#2e5736"],["Dark Greaves","#1c2228"],["No Cape","none"],["Mag-Mount Weapon Pack","#455a64"]],
   [["Praetor Visor Helm","#334d2b"],["Classic Marine Helm","#546e7a"],["Sentinel Horned","#4e342e"],["Praetor Green Plate","#2e4c2b"],["Phobos Orange","#d84315"],["Doomicorn White","#eceff1"],["Armored Boots","#263824"],["Dark Greaves","#1b241a"],["No Cape","none"],["Shoulder Flame-Belcher","#78909c"]],
-  [["Mk-X Tacticus Blue","#1565c0"],["Blood Angel Red","#b71c1c"],["Chaplain Skull Helm","#eceff1"],["Ultramarine Blue","#0d47a1"],["Blood Angel Plate","#8e0000"],["Black Templar","#16181b"],["Power Greaves","#0d47a1"],["Dark Greaves","#16181b"],["No Cape","none"],["Power Pack & Purity Seal","#546e7a"]],
-  [["Red Cog Cowl","#b71c1c"],["Ryza Orange Hood","#e65100"],["Stygies Black Hood","#181a1d"],["Mars Crimson Robe","#8e0000"],["Ryza Ochre Robe","#d84315"],["Metallica White","#eceff1"],["Bionic Tentacles","#78909c"],["Crimson Hem","#5f0000"],["Omnissiah Robe","#8e0000"],["Servo-Arm Rig","#90a4ae"]],
-  [["Silver Death-Mask","#cfd8dc"],["Szarekhan Bronze","#8d6e63"],["Novokh Crimson","#b71c1c"],["Living Metal Silver","#90a4ae"],["Royal Gold & Teal","#00838f"],["Obsidian Necrodermis","#263238"],["Skeletal Struts","#78909c"],["Bronze Struts","#5d4037"],["No Cape","none"],["Gauss Spine Coil","#00e676"]],
-  [["Fungoid Green Jaw","#2e7d32"],["Iron Gob Jawplate","#78909c"],["Horned Goff Helm","#212121"],["Goff Checker Plate","#1c2024"],["Evil Sunz Red","#d32f2f"],["Bad Moons Yellow","#fbc02d"],["Strapped Boots","#3e2723"],["Iron Greaves","#455a64"],["No Cape","none"],["Bosspole & Skulls","#8d6e63"]],
-  [["Inquisitor Wide Hat","#212121"],["Psychic Hood","#1565c0"],["Puritan Band","#b71c1c"],["Carapace Greatcoat","#261c18"],["Ordo Malleus Gold","#fbc02d"],["Crimson Judge","#7f1d1d"],["High Boots","#141414"],["Gold Greaves","#c8a15a"],["Inquisitor Cloak","#3e1419"],["No Cloak","none"]],
+  [["Spiky Black Hair","#151515"],["Golden Hair","#ffd54f"],["Headband","#c62828"],["Orange Turtle Gi","#ff9100"],["Yardrat Garb","#5e35b1"],["Training Vest","#1565c0"],["Orange Gi Trousers","#ff9100"],["Blue Training Pants","#1565c0"],["No Back Gear","none"],["Turtle Shell (Training)","#2e7d32"]],
+  [["Flame Black Hair","#151515"],["Golden Hair","#ffd54f"],["Widow's Peak","#212121"],["Blue Battle Suit","#1a237e"],["White Armor","#eceff1"],["Pink 'Badman' Shirt","#f48fb1"],["Blue Battle Suit","#1a237e"],["Black Leggings","#212121"],["No Back Gear","none"],["Gravity-Room Weights","#455a64"]],
+  [["Bald (Antennae)","#7cb342"],["White Turban","#eceff1"],["Purple Turban","#7b1fa2"],["Purple Gi","#6a1b9a"],["Blue Sash","#1e88e5"],["Red Sash","#c62828"],["Purple Gi Trousers","#6a1b9a"],["Blue Gi Trousers","#1e88e5"],["White Weighted Cape","#eceff1"],["No Cape","none"]],
+  [["Lavender Hair","#b39ddb"],["Golden Hair","#ffd54f"],["Long Lavender Hair","#9575cd"],["Capsule Corp Jacket","#5d4037"],["Black Tank Top","#212121"],["Saiyan Armor","#eceff1"],["Grey Trousers","#455a64"],["Black Trousers","#212121"],["No Back Gear","none"],["Capsule Corp Backpack","#5d4037"]],
+  [["Spiky Black Hair","#151515"],["Golden Hair","#ffd54f"],["Bowl Cut","#212121"],["Purple Gi","#6a1b9a"],["Orange Gi","#ff9100"],["Saiyan Armor","#eceff1"],["Purple Gi Trousers","#6a1b9a"],["Orange Gi Trousers","#ff9100"],["No Back Gear","none"],["Piccolo's White Cape","#eceff1"]],
   [["Dark Sunglasses","#0a0a0c"],["Blindfold Vision","#d84315"],["Real-World Buzz","#263238"],["Black Lobby Trench","#101216"],["Reloaded Cassock","#181b20"],["White Dojo Gi","#eceff1"],["Black Combat Boots","#0a0a0c"],["Dark Slacks","#1c2024"],["Flowing Trenchcoat","#101216"],["No Coat","none"]],
   [["T2 Shades & Hair","#212121"],["Battle-Damaged Eye","#b71c1c"],["Pure Endoskeleton","#cfd8dc"],["Black Biker Leather","#16181b"],["Bullet-Riddled Jacket","#263238"],["Chrome Endoskeleton","#90a4ae"],["Biker Leather Pants","#111111"],["Chrome Alloy Legs","#b0bec5"],["No Cape","none"],["Time-Sphere Ring","#00e5ff"]],
   [["Tousled Brown Hair","#4e342e"],["2049 High Collar","#263238"],["Replicant Blonde","#e6c27a"],["Brown Trenchcoat","#5d4037"],["2049 Shearling Coat","#37474f"],["Gray Shirt & Tie","#607d8b"],["Charcoal Slacks","#263238"],["Wet Street Boots","#181a1d"],["No Cape","none"],["Coat Tails","#4e342e"]],
@@ -356,11 +360,11 @@ const UTILS_56 = [
   [["Morita Underbarrel",6.5,"fanHammer","cone","Fires shotgun pelts across the front arc"],["Nuke Bug-Hole",12,"factionPulse","nova","Launches a tactical mini-nuke shockwave"]],
   [["Energy Sword Lunge",6.5,"executeDash","orbit","Lunges forward to cleave priority targets"],["Spartan Bubble",14,"buildFort","fort","Deploys drop-wall cover and mines"]],
   [["Meathook Grapple",7,"grappleHook","grapple","Hooks the strongest demon and blasts them"],["Flame Belcher",7.5,"flameCone","flame","Torches enemies for armor and glory"]],
-  [["Chainsword Sweep",6,"quadSpin","orbit","Revs relic chainsword in a 360-degree gore arc"],["Bolter Kraken",8.5,"fanHammer","cone","Fires mass-reactive bolts across the line"]],
-  [["Servo-Arc Web",7.5,"critBurst","chain","Discharges noospheric lightning in all directions"],["Magos Turret",15,"buildFort","fort","Sanctifies a fortified Mechanicus bunker"]],
-  [["Gauss Flay-Wave",7,"fanHammer","beam","Strips target atoms with emerald gauss beams"],["Scarab Tether",8.5,"grappleHook","grapple","Swarms and locks down the toughest enemy"]],
-  [["Dakka-Dakka-Dakka",6,"critBurst","cone","Fires an absurd 360-degree storm of bullets"],["Power Klaw Krump",8.5,"executeDash","beam","Crushes nearby enemies with hydraulic klaw"]],
-  [["Purging Flame",7,"flameCone","flame","Incinerates heretics in psychic promethium"],["Exterminatus Seal",10.5,"factionPulse","nova","Calls down an Inquisitorial shockwave"]],
+  [["Instant Transmission",1,"kiIT","nova","Two fingers to the forehead: the map opens — tap anywhere and you're there"],["Spirit Sphere",12,"factionPulse","nova","Raises a sphere of borrowed energy and brings it down on everything ahead"]],
+  [["Big Bang Burst",8,"critBurst","nova","A single crushing ball of ki thrown from an open palm"],["Royal Barrage",10,"fanHammer","cone","A furious volley of ki blasts across the line"]],
+  [["Regenerate",14,"kiRegen","nova","Regrows what was lost: heals 40% and restores every limb"],["Hellzone Cage",11,"factionPulse","nova","Ki spheres circle the enemy, then all close in at once"]],
+  [["Burning Barrage",9,"fanHammer","cone","Arms flash through a sign, then a barrage of ki blasts"],["Sword Rush",6,"executeDash","orbit","Dashes through the line, the sword cutting a path"]],
+  [["Rising Blast",7,"flameCone","flame","Both hands above the head: a rising burst of yellow ki"],["Father-Son Wave",12,"factionPulse","nova","A huge ki wave — with a little help from his father"]],
   [["Bullet-Time Wall",7.5,"factionPulse","nova","Stops and reflects all nearby threats"],["Lobby Kata",8,"executeDash","beam","Executes surrounding agents in a blur"]],
   [["Minigun Sweep",6.5,"fanHammer","beam","Rakes the horizon with 40W plasma & lead"],["Hydrogen Cell",11,"factionPulse","nova","Detonates a ruptured power cell blast"]],
   [["Spinner Barrage",7,"critBurst","missile","Fires precision LAPD blaster bolts in 360 degrees"],["Baseline Lock",9,"executeDash","beam","Retires rogue targets with headshots"]],
@@ -449,11 +453,11 @@ const Q_56 = [
   ["Come on you apes—do you want to live forever?!", "The only good bug is a neutralized bug!", "Rico's Roughnecks—drop pods away!"],
   ["I need a weapon.", "Finishing this fight, Cortana.", "Wake me when you need me."],
   ["Rip and tear, until it is done!", "Against all the wickedness of Hell, we send only you.", "Super shotgun loaded—they fear the mark!"],
-  ["For the Golden Throne and the Emperor!", "Know no fear—rev the chainswords!", "Even in dreadnought steel, I still serve!"],
-  ["Praise the Omnissiah and the Machine Spirit!", "From the moment I understood the weakness of flesh, I craved steel.", "Noospheric canticle uploaded—servo-skulls fire!"],
-  ["Our tomb world awakens after sixty million years.", "Living metal reanimation protocols active.", "Gauss flayers will strip their atoms bare."],
-  ["WAAAGH! Always needs more dakka!", "Red ones go faster—rev the trukks!", "Da biggest boss krumps da whole sector!"],
-  ["Innocence proves nothing—show the Rosette!", "Purge the warp anomaly in holy promethium!", "The Emperor's Tarot foresaw your defeat."],
+  ["Hi, I'm Goku! Let's see how strong you are!", "I won't let you get away with this!", "This is going to be fun!"],
+  ["I am the prince of all Saiyans!", "You're nothing but a low-class clown.", "Don't you ever compare me to them."],
+  ["Stop holding back!", "Fear is a luxury you can't afford.", "I'll be watching."],
+  ["I came from the future to stop this!", "My mother built that time machine for this moment.", "Not this time."],
+  ["I won't let you hurt anyone else!", "Mr. Piccolo taught me well.", "I'm not afraid of you anymore."],
   ["Whoa... I know Kung Fu.", "There is no spoon.", "No, Trinity—I don't have to dodge bullets anymore."],
   ["Hasta la vista, baby.", "I'll be back.", "Come with me if you want to live."],
   ["All those moments will be lost in time, like tears in rain.", "More human than human is our motto.", "Voight-Kampff baseline confirmed."],
@@ -504,7 +508,7 @@ function getBossQuote(cid, facId) {
 }
 
 /* === 7. HERO ALIGNMENTS & RIVAL INVASION CALLOUTS === */
-const BAD_HEROES = [2, 3, 7, 9, 11, 12, 17, 19, 21, 23, 26, 30, 36, 37, 49, 55, 62, 68, 70, 72, 75, 76, 77];
+const BAD_HEROES = [2, 3, 7, 9, 11, 12, 17, 19, 21, 23, 26, 30, 35, 49, 55, 62, 68, 70, 72, 75, 76, 77, 84, 85];
 const BOUNTY_HEROES = [1, 6, 15, 29, 41, 42, 48, 50, 51, 52, 54, 64, 65, 67, 74];
 function getHeroAlign(cid) {
   return BOUNTY_HEROES.includes(cid) ? "bounty" : (BAD_HEROES.includes(cid) ? "bad" : "good");

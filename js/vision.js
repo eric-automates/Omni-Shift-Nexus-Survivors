@@ -29,8 +29,8 @@ const VIS_HERO = {
   24: ["keen", "#ffab91", 18, "KLINGON SENSES", 54], 25: ["tracker", "#ff8a65", 34, "DRADIS", 52], 26: ["ir", "#ff1744", 22, "CENTURION SCAN", 54],
   27: ["pulse", "#ff9100", 28, "OMNI-TOOL SCAN", 54], 28: ["tracker", "#b2ff59", 30, "MOTION TRACKER", 52], 29: ["particles", "#69f0ae", 28, "BIO-MASK THERMAL", 56],
   30: ["hive", "#c6ff00", 26, "PHEROMONE SENSE", 52], 31: ["tracker", "#ffe082", 30, "BUG RADAR", 52], 32: ["tracker", "#80d8ff", 30, "MOTION TRACKER", 54],
-  33: ["ir", "#69f0ae", 16, "PRAETOR HUD", 54], 34: ["tracker", "#ff8a80", 30, "AUSPEX", 52], 35: ["pulse", "#ff5252", 32, "MECHANICUS AUSPEX", 54],
-  36: ["ir", "#00e676", 20, "GAUSS SIGHT", 56], 37: ["rage", "#ff1744", 8, "WAAAGH! RAGE", 50], 38: ["telepathy", "#b388ff", 26, "PSYKER SIGHT", 54],
+  33: ["ir", "#69f0ae", 16, "PRAETOR HUD", 54], 34: ["aura", "#ffd54f", 26, "KI SENSE", 58], 35: ["aura", "#4fc3f7", 24, "SCOUTER SENSE", 56],
+  36: ["aura", "#76ff03", 28, "NAMEKIAN HEARING", 60], 37: ["aura", "#b39ddb", 24, "FUTURE SENSE", 56], 38: ["aura", "#ffee58", 24, "KI SENSE", 56],
   39: ["code", "#ffd54f", 30, "THE CODE", 58], 40: ["ir", "#ff1744", 22, "T-800 HUD", 58], 41: ["pulse", "#80deea", 26, "ESPER SCAN", 54],
   42: ["ir", "#ffea00", 18, "KIROSHI OPTICS", 56], 43: ["tracker", "#69f0ae", 28, "PIP-BOY RADAR", 52], 44: ["keen", "#ffcc80", 18, "ROAD WARRIOR", 54],
   45: ["keen", "#ffb74d", 14, "HEV SENSORS", 54], 46: ["pulse", "#69f0ae", 26, "SONIC SWEEP", 54], 47: ["xray", "#80d8ff", 14, "X-RAY VISOR", 54],
@@ -61,7 +61,7 @@ function visionProfile(cid) {
 }
 function visionRadiusTiles(cid) { const p = visionProfile(cid); let r = p[4] || 52; if (CITY.theme && CITY.theme.dark > 0.35 && p[0] !== "ir" && p[0] !== "thermal" && p[0] !== "particles") r -= 6; return r; }
 function visionStealthMul() { return player && player.cid === 29 ? 0.75 : 1; }   // the Predator's cloak shimmer
-function visLiving(j) { const s = typeof enemySpec === "function" ? enemySpec(eType[j]) : null; return !s || (s.b !== "r" && s.b !== "k" && s.b !== "f"); }
+function visLiving(j) { const s = typeof enemySpecJ === "function" ? enemySpecJ(j) : typeof enemySpec === "function" ? enemySpec(eType[j]) : null; return !s || (s.b !== "r" && s.b !== "k" && s.b !== "f"); }
 
 /* --- per-frame bookkeeping ------------------------------------------------------- */
 function visionStep(dt) {
@@ -132,7 +132,7 @@ function visionRenderWorld(g) {
       g.fillStyle = "rgba(60,36,20,0.75)";
       if (tr) for (const f of tr) { const age = t - f.t; if (age > 5) continue; g.save(); g.translate(f.x + Math.cos(f.a + 1.57) * (f.s ? 3 : -3), f.y + Math.sin(f.a + 1.57) * (f.s ? 3 : -3)); g.rotate(f.a); g.globalAlpha = 0.7 * (1 - age / 5); g.beginPath(); g.ellipse(0, 0, 2.6, 1.3, 0, 0, 7); g.fill(); g.restore(); }
       if (!cityVisibleAt(eX[j], eY[j])) {
-        const nm = typeof enemySpec === "function" ? enemySpec(eType[j]).n : "Hostile";
+        const nm = typeof enemySpecJ === "function" ? enemySpecJ(j).n : typeof enemySpec === "function" ? enemySpec(eType[j]).n : "Hostile";
         g.save(); g.font = "italic 700 9px Georgia, serif"; g.textAlign = "center"; g.globalAlpha = 0.85;
         const w = g.measureText(nm).width + 8; g.fillStyle = "rgba(240,226,190,0.9)"; g.fillRect(eX[j] - w / 2, eY[j] - 22, w, 11);
         g.fillStyle = "#3e2723"; g.fillText(nm, eX[j], eY[j] - 13.5); g.restore();
