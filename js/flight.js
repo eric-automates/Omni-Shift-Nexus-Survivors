@@ -73,6 +73,8 @@ const FLY_LOD0 = 0.13;   // below this camera zoom the ground is drawn from aeri
 function flySpec(v) { return v && FLY_SPECS[v.kind] ? FLY_SPECS[v.kind] : null; }
 function flyZoomFor(alt) { const z0 = typeof opts !== "undefined" ? opts.zoom || 1 : 1; return 1 / (1 + Math.max(0, alt) * z0 / 34); }   // relative to opts.zoom
 function flyUnits(ms) { const mph = typeof opts !== "undefined" && opts.vehUnits === "kmh" ? false : true; return mph ? Math.round(ms * 2.237) + " mph" : Math.round(ms * 3.6) + " km/h"; }
+// v14.3: on a scaled real map (1:3) horizontal speeds run at the same factor as cars (FLY_K); gauges show nominal speeds
+function flyK() { return typeof RG !== "undefined" && RG.real && typeof RM !== "undefined" && RM.S < 1 && typeof vehSpeedK === "function" ? vehSpeedK(RM.S) : 1; }
 function flyAltTxt(m) { return m >= 10000 ? (m / 1000).toFixed(1) + " km" : Math.round(m) + " m"; }
 function flySelfSpec() {
   if (!player) return null;
@@ -154,11 +156,11 @@ function flyPartsMul() {
 function flyStep(dt) {
   if (!FLY.on || !player) return;
   if (!FLY.self && (!FLY.v || VEH.me !== FLY.v || player.inVehicle !== 3)) { if (!FLY.chute) flyEnd("left"); return; }
-  const S = FLY.S, I = flyInput(), unsafe = !FLY.safe, PM = flyPartsMul();
+  const S = FLY.S, I = flyInput(), unsafe = !FLY.safe, PM = flyPartsMul(), FK = flyK();
   const v = FLY.v, px0 = FLY.self ? player.x : v.x, py0 = FLY.self ? player.y : v.y;
   // non-VTOL on the ground: it's a car until it's fast enough
   if (!FLY.self && !S.vtol && !FLY.air) {
-    const gs = Math.hypot(v.vx, v.vy) / 32;
+    const gs = Math.hypot(v.vx, v.vy) / 32 / FK;
     v.flyAir = false;
     if (I.up > 0 && gs >= S.takeoff && PM.thrust > 0.3) { FLY.air = true; FLY.alt = 0.6; FLY.vz = 4; FLY.vxm = v.vx / 32; FLY.vym = v.vy / 32; flyTip("🛫 ROTATE — airborne"); }
     else { if (I.up > 0 && runTime - FLY.warnT > 3) { FLY.warnT = runTime; flyTip("🛫 " + flyUnits(S.takeoff) + " for takeoff — open road or a runway"); } FLY.alt = 0; player.flyAlt = 0; return; }
@@ -170,8 +172,8 @@ function flyStep(dt) {
   }
   if (v) v.flyAir = true;
   const altK = Math.min(14, Math.sqrt(1 + FLY.alt / 350));   // the higher you are, the faster the ground goes by
-  const top = S.top * (unsafe ? 2 : 1) * altK * (0.25 + 0.75 * PM.thrust);
-  const acc = S.acc * (unsafe ? 1.7 : 1) * altK * PM.thrust;
+  const top = S.top * FK * (unsafe ? 2 : 1) * altK * (0.25 + 0.75 * PM.thrust);
+  const acc = S.acc * FK * (unsafe ? 1.7 : 1) * altK * PM.thrust;
   const drag = FLY.brake > 0 || I.brake ? 3.4 : unsafe ? 0.07 : 0.5;
   // horizontal thrust where the stick points (screen up = north)
   if (I.mag > 0.12) {
@@ -195,19 +197,20 @@ function flyStep(dt) {
   else if (I.up < 0) FLY.vz += (-climb * 1.2 - FLY.vz) * Math.min(1, dt * 2.2);
   else if (!unsafe) FLY.vz *= Math.exp(-4 * dt);   // assists hold the altitude
   else FLY.vz *= Math.exp(-0.3 * dt);
-  if (!S.vtol && !FLY.self && sp < S.stall) FLY.vz -= 9.8 * (1 - sp / S.stall) * dt;   // a plane needs airspeed
+  if (!S.vtol && !FLY.self && sp < S.stall * FK) FLY.vz -= 9.8 * (1 - sp / (S.stall * FK)) * dt;   // a plane needs airspeed
   if (PM.lift < 0.5) FLY.vz -= 9.8 * (0.5 - PM.lift) * 1.6 * dt;                        // a lost rotor / wings: you come down
   if (FLY.alt >= ceil && FLY.vz > 0) { FLY.vz = 0; if (runTime - FLY.warnT > 5) { FLY.warnT = runTime; flyTip(ceil >= 60000 ? "🌌 THE EDGE OF SPACE — this is as high as it goes" : "⛔ SERVICE CEILING — " + flyAltTxt(ceil)); } }
   FLY.alt = Math.min(ceil + 50, FLY.alt + FLY.vz * dt);
   // the world's edge: the airspace ends a little past the map
-  const [xm, ym] = cityWorldM(px0, py0), lo = typeof RG !== "undefined" && RG.real ? 7400 : 200, hi = typeof RG !== "undefined" && RG.real ? 56600 : 63800;
+  const rl = typeof RG !== "undefined" && RG.real && typeof RM_LO !== "undefined";
+  const [xm, ym] = cityWorldM(px0, py0), lo = rl ? RM_LO - 600 : 200, hi = rl ? RM_HI + 600 : 63800;
   if (xm < lo || xm > hi || ym < lo || ym > hi) { const cx = Math.max(lo, Math.min(hi, xm)), cy = Math.max(lo, Math.min(hi, ym)); FLY.vxm += (cx - xm) * 2 * dt; FLY.vym += (cy - ym) * 2 * dt; if (runTime - FLY.warnT > 4) { FLY.warnT = runTime; flyTip("⛔ END OF THE MAP — turn back"); } }
   // obstacles: flying into something taller than you (a building's side, a tree) — rooftops below you are ground
   const low = FLY.alt < 340, ghHere = low ? flyGroundAt(px0, py0) : 0;
   if (low) {
     const ghNext = flyGroundAt(px0 + FLY.vxm * 32 * dt * 3, py0 + FLY.vym * 32 * dt * 3);
     if (ghNext > FLY.alt + 0.3 && ghNext > ghHere + 0.3) {
-      const hit = Math.hypot(FLY.vxm, FLY.vym);
+      const hit = Math.hypot(FLY.vxm, FLY.vym) / FK;
       if (hit > 6 && runTime - FLY.lastHit > 0.6) { FLY.lastHit = runTime; flyDamage(hit * 3, "front", "crash"); flyTip("💥 HIT A " + (ghNext > 3.5 ? "BUILDING" : "TREE")); }
       FLY.vxm *= -0.3; FLY.vym *= -0.3;
     }
@@ -220,7 +223,7 @@ function flyStep(dt) {
   }
   // touching down
   if (FLY.alt <= 0) {
-    const hs = Math.hypot(FLY.vxm, FLY.vym), vs = -FLY.vz, gearOK = !(FLY.v && FLY.v.fparts && "gear" in FLY.v.fparts && FLY.v.fparts.gear <= 0);
+    const hs = Math.hypot(FLY.vxm, FLY.vym) / FK, vs = -FLY.vz, gearOK = !(FLY.v && FLY.v.fparts && "gear" in FLY.v.fparts && FLY.v.fparts.gear <= 0);
     FLY.alt = 0; FLY.vz = 0;
     if (FLY.self) {
       if (vs > 14) { player.hp -= player.maxHp * 0.15; if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 20, "OOF — HARD LANDING", "#ffab40", 1.2); }
@@ -332,8 +335,9 @@ function flyAirfieldScan() {
       FLY.fields.add(key);
       const lx = cxm * 32 - CITY.orx, ly = cym * 32 - CITY.ory, area = (a.bb[2] - a.bb[0]) * (a.bb[3] - a.bb[1]);
       const spot = (dx, dy) => { const q = cityFindWalkable(lx + dx, ly + dy, 400, true); return q; };
-      const h = spot(0, 0); vehNew("heli", h[0], h[1], Math.random() * 6.28, FLY_DIMS.heli[0], FLY_DIMS.heli[1], { key: "heli:" + key, from: "airfield", fuel: 1 });
-      if (a.cls === "apron" && area > 6000) { const q = spot(900, 300); vehNew("jet", q[0], q[1], Math.random() * 6.28, FLY_DIMS.jet[0], FLY_DIMS.jet[1], { key: "jet:" + key, from: "airfield", fuel: 1 }); }
+      const wk = typeof vehWorldK === "function" ? vehWorldK() : 1, ra = typeof rmRealA === "function" ? rmRealA(area) : area;
+      const h = spot(0, 0); vehNew("heli", h[0], h[1], Math.random() * 6.28, FLY_DIMS.heli[0], FLY_DIMS.heli[1], { key: "heli:" + key, from: "airfield", fuel: 1, k: wk });
+      if (a.cls === "apron" && ra > 6000) { const q = spot(900 * wk, 300 * wk); vehNew("jet", q[0], q[1], Math.random() * 6.28, FLY_DIMS.jet[0], FLY_DIMS.jet[1], { key: "jet:" + key, from: "airfield", fuel: 1, k: wk }); }
     }
   }
 }
@@ -557,7 +561,7 @@ function flySafetyToggle() {
 }
 function flyRenderScreen(g) {
   if (!FLY.on && !FLY.chute) return;
-  const cv = g.canvas, W0 = cv.width, H0 = cv.height, alt = FLY.chute ? FLY.chute.alt : FLY.alt, sp = Math.hypot(FLY.vxm, FLY.vym);
+  const cv = g.canvas, W0 = cv.width, H0 = cv.height, alt = FLY.chute ? FLY.chute.alt : FLY.alt, sp = Math.hypot(FLY.vxm, FLY.vym) / flyK();
   g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
   const dpr = W0 / Math.max(1, window.innerWidth || W0);
   // you, when the world is far below: a marker at the centre

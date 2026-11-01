@@ -15,7 +15,7 @@
    ========================================================================= */
 "use strict";
 
-const RMUI = { busy: false, bypass: false, fallback: "", search: [], searchMsg: "", lastQuery: "", loadEl: null, cancel: false, packsOk: null };
+const RMUI = { busy: false, bypass: false, fallback: "", search: [], searchMsg: "", lastQuery: "", loadEl: null, cancel: false, packsOk: null, renderT: 0, streamNote: false };
 const RM_INDIANA = [   // name, lat, lon, population (2020 census; GeoNames for the smallest towns) — matches data/realmap/index.json
   ["Indianapolis", 39.76838, -86.15804, 887642], ["Carmel", 39.97837, -86.11804, 99757], ["Fishers", 39.95559, -86.01387, 98977],
   ["Noblesville", 40.04559, -86.0086, 69604], ["Gary", 41.59337, -87.34643, 69093], ["Greenwood", 39.61366, -86.10665, 63830],
@@ -54,20 +54,22 @@ function rmState() {
   if (!R.city || !RM_INDIANA.some(c => c[0] === R.city)) R.city = "Indianapolis";
   if (!Array.isArray(R.recent)) R.recent = [];
   if (R.place && !(typeof R.place.lat === "number" && typeof R.place.lon === "number")) R.place = null;
+  R.scale = rmScaleNorm(R.scale == null ? 1 / 3 : R.scale);   // v14.3 map scale (1:3 default)
   S.real = R;
   return R;
 }
 function rmChosenPlace() {
   const R = rmState();
-  if (R.mode === "offline") { const c = RM_INDIANA.find(q => q[0] === R.city) || RM_INDIANA[0]; return { name: c[0], region: "Indiana", lat: c[1], lon: c[2], mode: "offline", key: "in:" + c[0] }; }
+  if (R.mode === "offline") { const c = RM_INDIANA.find(q => q[0] === R.city) || RM_INDIANA[0]; return { name: c[0], region: "Indiana", lat: c[1], lon: c[2], mode: "offline", key: "in:" + c[0], S: R.scale }; }
   const p = R.place || { name: "Chicago", lat: 41.8781, lon: -87.6298, region: "Illinois, USA" };
-  return { name: p.name, region: p.region || "", lat: p.lat, lon: p.lon, mode: "online", key: "w:" + p.lat.toFixed(4) + "," + p.lon.toFixed(4) };
+  return { name: p.name, region: p.region || "", lat: p.lat, lon: p.lon, mode: "online", key: "w:" + p.lat.toFixed(4) + "," + p.lon.toFixed(4), S: R.scale };
 }
 function rmSeedOf(place) { let h = 2166136261; for (const ch of place.key) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0) || 7; }
 // point RM at a place (drops loaded data when it changes)
 function rmUsePlace(place) {
-  if (RM.place && RM.place.key === place.key && RM.mode === place.mode) return false;
-  rmResetData(); RM.place = place; RM.mode = place.mode; rmSetCentre(place.lat, place.lon);
+  const S = rmScaleNorm(place.S != null ? place.S : RM.S);
+  if (RM.place && RM.place.key === place.key && RM.mode === place.mode && Math.abs(RM.S - S) < 1e-6) return false;
+  rmResetData(); RM.place = place; RM.mode = place.mode; rmScaleSet(S); rmSetCentre(place.lat, place.lon);
   RM.conc = place.mode === "offline" ? 3 : 6;
   return true;
 }
@@ -104,7 +106,11 @@ function rmPreload(place, drop, onProg) {
   return rmLoadOverview().then(() => {
     if (gen !== RM.gen) throw new Error("cancelled");
     const [xm, ym] = drop || [32000, 32000], cx = Math.floor(xm / 1000), cy = Math.floor(ym / 1000), set = new Set();
-    for (let my = cy - 1; my <= cy + 1; my++) for (let mx = cx - 1; mx <= cx + 1; mx++) for (const k of rmCellKeys(mx, my)) set.add(k);   // the 3 × 3 km round the drop, complete
+    // the drop's km cell complete, plus every cell within ~1.5 real km of the drop (1:1 → the 3 × 3 km round it as before;
+    // 1:3 → 1 to 4 cells instead of 9, so the start loads about as much real map as it always did)
+    const near = Math.max(450, rmZ(1500)), cells = new Set([cx + "," + cy]);
+    for (const [qx, qy] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]]) cells.add(Math.floor((xm + qx * near) / 1000) + "," + Math.floor((ym + qy * near) / 1000));
+    for (const c of cells) { const [mx, my] = c.split(",").map(Number); for (const k of rmCellKeys(mx, my)) set.add(k); }
     const keys = [...set];
     let done = 0;
     const ps = keys.map(k => rmRequest([k], 9).then(r => { done++; if (onProg) onProg(done, keys.length); return r; }));
@@ -117,7 +123,7 @@ function rmPreload(place, drop, onProg) {
 }
 function rmDropMetres() {   // the drop zone picked on the map for this place (world tiles → metres), if any
   if (typeof meta === "undefined") return null;
-  const P = rmChosenPlace(), wk = "real|" + P.lat.toFixed(3) + "," + P.lon.toFixed(3);
+  const P = rmChosenPlace(), wk = "real|" + P.lat.toFixed(3) + "," + P.lon.toFixed(3) + (Math.abs(P.S - 1) < 1e-6 ? "" : "|" + rmScaleLabel(P.S));
   let d = null;
   if (typeof LOC !== "undefined" && LOC.dropKey === wk && Array.isArray(meta.cityDrop)) d = meta.cityDrop;
   else if (meta.cityDrops && Array.isArray(meta.cityDrops[wk])) d = meta.cityDrops[wk];
@@ -157,8 +163,9 @@ function rmDropMetres() {   // the drop zone picked on the map for this place (w
       if (RMUI.busy) return;
       const P = rmChosenPlace(), drop = rmDropMetres(), args = arguments, self = this;
       RMUI.busy = true; RMUI.cancel = false; RMUI.fallback = "";
-      rmLoading(true, "Building " + P.name + "…", 0);
-      rmPreload(P, drop, (d, n) => rmLoading(true, "Building " + P.name + "… " + d + " / " + n + " map tiles", d / Math.max(1, n)))
+      const title = "Building " + P.name + (P.region ? ", " + P.region.replace(/, USA$/, "") : "") + " · " + rmScaleLabel(P.S);
+      rmLoading(true, title + "…", 0);
+      rmPreload(P, drop, (d, n) => rmLoading(true, title + "… " + d + " / " + n + " map tiles", d / Math.max(1, n)))
         .then(() => { if (RMUI.cancel) throw new Error("cancelled"); })
         .catch(e => { if (String(e && e.message) === "cancelled" || RMUI.cancel) throw e; RMUI.fallback = (e && e.message) || "no data"; })
         .then(() => {
@@ -166,8 +173,8 @@ function rmDropMetres() {   // the drop zone picked on the map for this place (w
           RMUI.bypass = true;
           try { _sr.apply(self, args); } finally { RMUI.bypass = false; RMUI.busy = false; }
           const why = RMUI.fallback;
-          if (why && typeof fxBanner === "function") setTimeout(() => fxBanner("REAL MAP UNAVAILABLE", "Playing a generated map · " + (P.mode === "offline" ? "built-in maps not found and no internet to stream them" : why), "#ffb300", 3.6, true, "city"), 600);
-          else if (P.mode === "offline" && RM.viaOnline > 0 && typeof fxBanner === "function") setTimeout(() => fxBanner("BUILT-IN MAPS NOT FOUND", "Streaming " + P.name + " online instead · " + rmOfflineMissingWhy(), "#ffd166", 4.2, true, "city"), 4300);
+          if (why && typeof fxBanner === "function") setTimeout(() => fxBanner("REAL MAP UNAVAILABLE", "Playing a generated map · " + (P.mode === "offline" ? "no built-in maps on this site and no internet to stream them" : why), "#ffb300", 3.6, true, "city"), 600);
+          else if (P.mode === "offline" && RM.viaOnline > 0 && !RMUI.streamNote && typeof fxBanner === "function") { RMUI.streamNote = true; setTimeout(() => fxBanner("STREAMING " + P.name.toUpperCase() + " ONLINE", "Same real map · the built-in copy isn't on this site, so it streams (needs internet)", "#80deea", 3.4, false, "city"), 4300); }
           RMUI.fallback = "";
         })
         .catch(() => { rmLoading(false); RMUI.busy = false; });
@@ -263,7 +270,7 @@ function rmFmtPop(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e4 ?
         const d = document.createElement("div"); d.className = "lc-card"; d.dataset.where = "real";
         d.innerHTML = "<b>🗺️ REAL MAP</b>" + LOC_WHERE.real.desc;
         const nexus = row.querySelector('[data-where="nexus"]'); row.insertBefore(d, nexus);
-        d.onclick = () => { S.where = "real"; locChanged(); };
+        rmTap(d, () => { S.where = "real"; locChanged(); });
       }
       return;
     }
@@ -274,19 +281,24 @@ function rmFmtPop(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e4 ?
   st.textContent = "#locBody .lc-row.lc-where .lc-card{flex:1 1 160px;max-width:200px}#locBody .rm-chips{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;max-height:150px;overflow:auto;padding:4px;border:1px solid #00e5ff22;border-radius:8px;background:#060d16}" +
     "#locBody .rm-chip{padding:4px 8px;border-radius:12px;border:1px solid #00e5ff44;background:#0b1622;color:#cfe;cursor:pointer;font-size:11px;white-space:nowrap}#locBody .rm-chip i{color:#7aa;font-style:normal;margin-left:4px;font-size:10px}" +
     "#locBody .rm-chip.on{border-color:#ffd166;background:#2a2410;color:#fff;box-shadow:0 0 8px #ffd16655}#locBody .rm-search{display:flex;gap:6px;justify-content:center;margin:6px 0}#locBody .rm-search input{width:260px}" +
-    "#locBody .rm-foot{font-size:10.5px;color:#89a;text-align:center;margin:8px auto;max-width:620px;line-height:1.5}#locBody .rm-foot a{color:#80deea;cursor:pointer;text-decoration:underline}#locBody .rm-msg{font-size:11px;color:#9ab;text-align:center;margin:4px}";
+    "#locBody .rm-sel{text-align:center;margin:8px auto 2px;font-size:15px;color:#e8fbff;background:#0b1a26;border:1px solid #ffd16688;border-radius:10px;padding:7px 12px;max-width:520px}#locBody .rm-sel i{color:#9bb;font-style:normal;font-size:12px}" +
+    "#locBody .rm-chip{touch-action:pan-y}#locBody .rm-foot{font-size:10.5px;color:#89a;text-align:center;margin:8px auto;max-width:620px;line-height:1.5}#locBody .rm-foot a{color:#80deea;cursor:pointer;text-decoration:underline}#locBody .rm-msg{font-size:11px;color:#9ab;text-align:center;margin:4px}";
   document.head.appendChild(st);
 })();
 function rmRenderReal(body, S) {
   const R = rmState(), cid = typeof meta !== "undefined" ? meta.selChar : 0, home = locHomeKey(cid), H = RG_PROFILES[home], hero = (CHAR_RAW[cid] || [0, 0, 0, "Hero"])[3];
   const card = (k) => { const w = LOC_WHERE[k], on = S.where === k; return '<div class="lc-card' + (on ? " on" : "") + '" data-where="' + k + '"><b>' + w.icon + " " + w.name + "</b>" + (k === "home" ? "<u>" + H.icon + " " + H.name + "</u> for " + hero + "<br>" : "") + w.desc + "</div>"; };
+  const P = rmChosenPlace();
   let html = '<div class="lc-sec">WHERE</div><div class="lc-row lc-where">' + card("home") + card("world") + card("real") + card("nexus") + "</div>";
+  // v14.3: what is picked, said plainly (a mis-tap can't hide)
+  html += '<div class="rm-sel" id="rmSel">📍 <b>' + rmEsc(P.name) + "</b>" + (P.region ? ", " + rmEsc(P.region) : "") + ' <i>· scale ' + rmScaleLabel(R.scale) + (R.mode === "offline" ? " · built-in" : " · online") + "</i></div>";
   html += '<div class="lc-sec">REAL MAP</div><div class="lc-row">' +
     '<div class="lc-card' + (R.mode === "offline" ? " on" : "") + '" data-rmmode="offline"><b>🏛️ INDIANA CITY</b>Indianapolis and 13 more Indiana places, built into the game. Works without internet.</div>' +
     '<div class="lc-card' + (R.mode === "online" ? " on" : "") + '" data-rmmode="online"><b>🌍 ANY CITY IN THE WORLD</b>Search any town or city on Earth. Needs internet: streets stream in as you go and stay cached for next time.</div></div>';
   if (R.mode === "offline") {
     html += '<div class="rm-chips">' + RM_INDIANA.map(c => '<span class="rm-chip' + (R.city === c[0] ? " on" : "") + '" data-rmcity="' + c[0] + '">' + c[0] + "<i>" + rmFmtPop(c[3]) + "</i></span>").join("") + "</div>";
-    if (RMUI.packsOk === false) html += '<div class="rm-msg" style="color:#ffd166;max-width:640px;margin:6px auto">⚠ Built-in maps not found: ' + rmEsc(rmOfflineMissingWhy()) + '.<br>Until then, Indiana cities <b>stream online</b> instead (same real map, needs internet).</div>';
+    if (RMUI.packsOk === true) html += '<div class="rm-msg" style="color:#69f0ae">✓ Built-in Indiana maps installed — plays without internet.</div>';
+    else if (RMUI.packsOk === false) html += '<div class="rm-msg" style="color:#ffd166;max-width:640px;margin:6px auto">ℹ The built-in Indiana maps aren\'t on this site (' + rmEsc(rmOfflineMissingWhy()) + ').<br>No problem with internet: the same real map <b>streams online</b> instead.</div>';
   } else {
     html += '<div class="rm-search"><input id="rmQ" placeholder="Town, city or address…" value="' + rmEsc(RMUI.lastQuery || "") + '"><button class="btn" id="rmGo">🔎 SEARCH</button></div>';
     if (RMUI.searchMsg) html += '<div class="rm-msg">' + rmEsc(RMUI.searchMsg) + "</div>";
@@ -295,24 +307,50 @@ function rmRenderReal(body, S) {
     if (R.recent.length) html += '<div class="rm-msg">Recent</div><div class="rm-chips">' + R.recent.map((p, i) => '<span class="rm-chip' + (cur && cur.lat === p.lat && cur.lon === p.lon ? " on" : "") + '" data-rmrecent="' + i + '">' + rmEsc(p.name) + "<i>" + rmEsc(p.region || "") + "</i></span>").join("") + "</div>";
     html += '<div class="rm-msg">Quick picks</div><div class="rm-chips">' + RM_WORLD_PICKS.map((p, i) => '<span class="rm-chip' + (cur && cur.lat === p[1] && cur.lon === p[2] ? " on" : "") + '" data-rmpick="' + i + '">' + p[0] + "<i>" + p[3] + "</i></span>").join("") + "</div>";
   }
+  // v14.3 map scale: roads, houses and cars sized to the heroes (1:3), or roomier
+  html += '<div class="lc-sec">MAP SCALE</div><div class="lc-row">' + RM_SCALES.map(q => '<div class="lc-card' + (Math.abs(R.scale - q[0]) < 1e-3 ? " on" : "") + '" data-rmscale="' + q[0] + '" style="flex:1 1 150px;max-width:190px"><b>📏 ' + q[1] + "</b><i style=\"font-size:10.5px;color:#9bb\">" + q[2] + (q[0] < 0.4 ? " — streets, houses and cars sized to your hero" : q[0] < 0.9 ? " — wider streets, bigger rooms" : " — real metres, everything huge next to the heroes") + "</i></div>").join("") + "</div>";
   html += '<div class="lc-sec">WHO\'S AFTER YOU</div><div class="lc-row">' + Object.keys(RM_THREATS).map(k => { const T = RM_THREATS[k]; return '<div class="lc-card lc-world' + (R.threat === k ? " on" : "") + '" data-rmthreat="' + k + '" style="flex:1 1 170px;max-width:185px"><b>' + T.icon + " " + T.name + "</b><i style=\"font-size:10.5px;color:#9bb\">" + T.desc + "</i></div>"; }).join("") + "</div>";
   html += '<div class="lc-sec">THE MAP</div><div class="lc-prev"><canvas id="locCv" width="300" height="300"></canvas><div class="lc-info" id="locInfo"></div></div>';
   html += '<div class="rm-foot">' + rmAttr(true, R.mode === "offline") + ' · Real names appear only because they are on the map — <a id="rmDisc">ⓘ disclaimer</a>' + (R.mode === "online" ? ' · <a id="rmClear">🗑 clear downloaded maps</a>' : "") + "</div>";
   body.innerHTML = html;
-  body.querySelectorAll("[data-where]").forEach(b => b.onclick = () => { S.where = b.dataset.where; locChanged(); });
-  body.querySelectorAll("[data-rmmode]").forEach(b => b.onclick = () => { R.mode = b.dataset.rmmode; locChanged(); });
-  body.querySelectorAll("[data-rmcity]").forEach(b => b.onclick = () => { R.city = b.dataset.rmcity; locChanged(); });
-  body.querySelectorAll("[data-rmthreat]").forEach(b => b.onclick = () => { R.threat = b.dataset.rmthreat; locChanged(); });
-  const pickPlace = (p) => { R.place = { name: p.name, region: p.region || "", lat: +p.lat, lon: +p.lon }; R.recent = [R.place].concat(R.recent.filter(q => !(q.lat === R.place.lat && q.lon === R.place.lon))).slice(0, 6); locChanged(); };
-  body.querySelectorAll("[data-rmres]").forEach(b => b.onclick = () => pickPlace(RMUI.search[+b.dataset.rmres]));
-  body.querySelectorAll("[data-rmrecent]").forEach(b => b.onclick = () => pickPlace(R.recent[+b.dataset.rmrecent]));
-  body.querySelectorAll("[data-rmpick]").forEach(b => b.onclick = () => { const p = RM_WORLD_PICKS[+b.dataset.rmpick]; pickPlace({ name: p[0], region: p[3], lat: p[1], lon: p[2] }); });
+  RMUI.renderT = performance.now();
+  const changed = (msg) => { locChanged(); rmMenuToast(msg); };
+  body.querySelectorAll("[data-where]").forEach(b => rmTap(b, () => { if (S.where === b.dataset.where) return; S.where = b.dataset.where; locChanged(); }));
+  body.querySelectorAll("[data-rmmode]").forEach(b => rmTap(b, () => { if (R.mode === b.dataset.rmmode) return; R.mode = b.dataset.rmmode; changed(R.mode === "offline" ? "🏛️ Indiana city · " + R.city : "🌍 Any city in the world"); }));
+  body.querySelectorAll("[data-rmcity]").forEach(b => rmTap(b, () => { if (R.city === b.dataset.rmcity) return; R.city = b.dataset.rmcity; changed("📍 " + R.city + " selected"); }));
+  body.querySelectorAll("[data-rmthreat]").forEach(b => rmTap(b, () => { R.threat = b.dataset.rmthreat; locChanged(); }));
+  body.querySelectorAll("[data-rmscale]").forEach(b => rmTap(b, () => { const v = rmScaleNorm(+b.dataset.rmscale); if (Math.abs(v - R.scale) < 1e-6) return; R.scale = v; changed("📏 Map scale " + rmScaleLabel(v)); }));
+  const pickPlace = (p) => { R.place = { name: p.name, region: p.region || "", lat: +p.lat, lon: +p.lon }; R.recent = [R.place].concat(R.recent.filter(q => !(q.lat === R.place.lat && q.lon === R.place.lon))).slice(0, 6); changed("📍 " + p.name + " selected"); };
+  body.querySelectorAll("[data-rmres]").forEach(b => rmTap(b, () => pickPlace(RMUI.search[+b.dataset.rmres])));
+  body.querySelectorAll("[data-rmrecent]").forEach(b => rmTap(b, () => pickPlace(R.recent[+b.dataset.rmrecent])));
+  body.querySelectorAll("[data-rmpick]").forEach(b => rmTap(b, () => { const p = RM_WORLD_PICKS[+b.dataset.rmpick]; pickPlace({ name: p[0], region: p[3], lat: p[1], lon: p[2] }); }));
   const q = body.querySelector("#rmQ"), go = body.querySelector("#rmGo");
   if (q && go) { const run = () => rmSearch(q.value); go.onclick = run; q.onkeydown = e => { if (e.key === "Enter") run(); }; }
   const dsc = body.querySelector("#rmDisc"); if (dsc) dsc.onclick = () => rmDisclaimer(true);
   const clr = body.querySelector("#rmClear"); if (clr) clr.onclick = async () => { try { if (typeof caches !== "undefined") await caches.delete(RM_SRC.cacheName); } catch (e) { /* none */ } clr.textContent = "cleared ✓"; };
-  if (R.mode === "offline" && RMUI.packsOk === null) rmLoadIndex().then(() => { RMUI.packsOk = true; }).catch(() => { RMUI.packsOk = false; if (locState().where === "real") locRender(); });
+  if (R.mode === "offline" && RMUI.packsOk === null) rmLoadIndex().then(() => { RMUI.packsOk = true; if (locState().where === "real") locRender(); }).catch(() => { RMUI.packsOk = false; if (locState().where === "real") locRender(); });
   setTimeout(locPreview, 20);
+}
+// v14.3: a tap must start and end on the same item, move < 10 px, and not land within 350 ms of the list being redrawn
+// (phones fire a late "ghost" click at the old finger spot — it used to pick whatever chip had moved under it)
+function rmTap(el, fn) {
+  let st = null;
+  el.addEventListener("pointerdown", e => { st = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId }; });
+  el.addEventListener("pointercancel", () => { st = null; });
+  el.addEventListener("pointerleave", e => { if (e.pointerType !== "mouse") st = null; });
+  el.addEventListener("pointerup", e => {
+    const s = st; st = null;
+    if (!s || s.id !== e.pointerId || Math.hypot(e.clientX - s.x, e.clientY - s.y) > 10 || s.t - RMUI.renderT < 350) return;
+    e.preventDefault(); fn(e);
+  });
+  el.addEventListener("click", e => { if (e.detail === 0) fn(e); });   // keyboard (Enter / Space)
+  if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "0");
+}
+function rmMenuToast(msg) {
+  let el = document.getElementById("rmToast");
+  if (!el) { el = document.createElement("div"); el.id = "rmToast"; el.style.cssText = "position:fixed;left:50%;bottom:14%;transform:translateX(-50%);z-index:99995;background:rgba(10,22,34,0.95);border:1px solid #ffd166;color:#fff;font:700 14px 'Segoe UI',sans-serif;padding:9px 16px;border-radius:20px;box-shadow:0 4px 18px #0008;pointer-events:none;transition:opacity .3s"; document.body.appendChild(el); }
+  el.textContent = msg; el.style.opacity = "1";
+  clearTimeout(rmMenuToast.t); rmMenuToast.t = setTimeout(() => { el.style.opacity = "0"; }, 1700);
 }
 async function rmSearch(q) {
   q = (q || "").trim(); if (!q) return;
@@ -341,7 +379,7 @@ function rmPreview() {
   g.fillStyle = "#060b14"; g.fillRect(0, 0, 300, 300); g.fillStyle = "#80deea"; g.font = "700 12px 'Segoe UI', sans-serif"; g.textAlign = "center"; g.fillText("Loading " + P.name + "…", 150, 150);
   const T = RM_THREATS[R.threat];
   const head = "<b>🗺️ " + rmEsc(P.name) + "</b>" + (P.region ? " — " + rmEsc(P.region) : "") + "<br><small>48 × 48 km, the city in the middle · Highway 365 (under construction) rings the edge</small>";
-  const srcLine = () => P.mode === "offline" ? (RM.viaOnline > 0 ? "🌐 Built-in maps not found here — streaming from OpenFreeMap" : "📦 Offline data shipped with the game") : "🌐 Streams from OpenFreeMap" + (RM.stats.cacheHits ? " · " + RM.stats.cacheHits + " cached tiles reused" : "");
+  const srcLine = () => P.mode === "offline" ? (RM.viaOnline > 0 ? "🌐 Streaming the same map from OpenFreeMap (the built-in copy isn't on this site)" : "📦 Offline data shipped with the game") : "🌐 Streams from OpenFreeMap" + (RM.stats.cacheHits ? " · " + RM.stats.cacheHits + " cached tiles reused" : "");
   info.innerHTML = head + "<br><br><small>" + srcLine() + "</small>";
   const key = P.key;
   rmLoadOverview().then(() => {
@@ -351,10 +389,11 @@ function rmPreview() {
     if (typeof MAPV !== "undefined") { MAPV.tiles.clear(); MAPV.lastSig = ""; }
     const draw = () => {
       if (!document.getElementById("locCv")) return;
-      mapDraw(g, 0, 0, 300, 300, 32000, 32000, 50000 / 300, 9);
+      const span = 50000 * RM.S;   // the 48 real km (+ a margin) at the map scale
+      mapDraw(g, 0, 0, 300, 300, 32000, 32000, span / 300, 9);
       const St = mapStyle(); g.save(); g.textAlign = "center"; g.lineWidth = 3; g.strokeStyle = St.halo; g.fillStyle = St.txt;
       const towns = CITY.cities.filter(c => c.kind <= 1).slice(0, 14);
-      for (const c of towns) { const x = 150 + (c.x - 32000) / 50000 * 300, y = 150 + (c.y - 32000) / 50000 * 300; g.font = (c.idx === 0 ? "900 12px" : "700 9.5px") + " 'Segoe UI', sans-serif"; g.strokeText(c.name, x, y); g.fillText(c.name, x, y); }
+      for (const c of towns) { const x = 150 + (c.x - 32000) / span * 300, y = 150 + (c.y - 32000) / span * 300; g.font = (c.idx === 0 ? "900 12px" : "700 9.5px") + " 'Segoe UI', sans-serif"; g.strokeText(c.name, x, y); g.fillText(c.name, x, y); }
       g.restore();
     };
     draw(); setTimeout(draw, 150); setTimeout(draw, 500);

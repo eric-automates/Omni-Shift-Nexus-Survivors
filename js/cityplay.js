@@ -119,7 +119,7 @@ function cityShortName() { const [xm, ym] = cityWorldM(player.x, player.y), ci =
   const _tm = window.threatMult;
   if (typeof _tm === "function") window.threatMult = function () { return (CITY.on && player) ? CITY_THREAT[cityDistrictAt(player.x, player.y)] : _tm(); };
   const _gdb = window.getDistBiome;
-  if (typeof _gdb === "function") window.getDistBiome = function (x, y) { if (!CITY.on) return _gdb(x, y); const c = cityDistrictAt(x, y); return { id: c, name: CL_NAMES[c], minDist: 0, maxDist: 1e9, tint: "rgba(0,0,0,0)" }; };
+  if (typeof _gdb === "function") window.getDistBiome = function (x, y) { if (!CITY.on) return _gdb(x, y); const c = cityDistrictAt(x, y); return { id: c, name: CL_NAMES[c] || "Open Country", minDist: 0, maxDist: 1e9, tint: "rgba(0,0,0,0)" }; };
 })();
 // after the biome module set the hero's look: use the city theme's weather / grade, no arena hazards
 V10.onRunStart.push(function cityAfterBiome(p) {

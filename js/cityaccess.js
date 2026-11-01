@@ -591,7 +591,7 @@ function cityAccessGarageBreak(tx, ty, v) {
   if (typeof vehQueueRebuild === "function") vehQueueRebuild(tx, ty, lx, ly, Math.max(b.w, b.h) * 16 + 40);
   cityRT.visGen++;
   for (let k = 0; k < 14; k++) spawnPt(lx, ly, v.vx * 0.4 + (Math.random() - 0.5) * 200, v.vy * 0.4 + (Math.random() - 0.5) * 200, 0.6, 2.4, 15, 3);
-  const [l2x, l2y] = vehToLocal(v, lx, ly); vehDamage(v, l2x, l2y, Math.hypot(v.vx, v.vy) * 0.8, "crash", 0, 0, v.drv === "P" ? "player" : null);
+  const [l2x, l2y] = vehToLocal(v, lx, ly); vehDamage(v, l2x, l2y, Math.hypot(v.vx, v.vy) * 0.8 / (v.sv || 1), "crash", 0, 0, v.drv === "P" ? "player" : null);
   if (typeof noiseEmit === "function") noiseEmit(lx, ly, 100, "crash", v.drv === "P" ? 0 : 1);
   if (typeof sfx === "function") sfx(200, 50, 0.3, "sawtooth", 0.14);
 }

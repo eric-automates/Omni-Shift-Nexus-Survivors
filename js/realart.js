@@ -52,20 +52,22 @@ function rmLine(g, s, w, col, off) {
 function rmRoadPass(g, segs, pass, cls) {
   if (!segs.length) return;
   const T = CITY.theme.g, town = cls === CL_DOWNTOWN || cls === CL_URBAN || cls === CL_SUBURB || cls === CL_INDUSTRIAL;
+  // v14.3: every real-metre width / offset × the map scale (Z); painted lines never thinner than 1.5 px (Wl)
+  const z = RM.S, Z = v => v * z, Wl = v => Math.max(1.5 / 32, v * z);
   g.save(); g.lineCap = "round"; g.lineJoin = "round";
   if (pass === 0) {
     for (const s of segs) {   // pavements, parking stalls, verges
       const R = s.r;
-      if (R.svc === "parking_aisle") { rmLine(g, s, s.w + 10.8, T.lot || "#3a3c41"); continue; }
-      if (R.hwy) { rmLine(g, s, s.w + 3, "#9c968a"); continue; }
-      if (R.rank >= 3 && R.rank <= 6 && town && R.br !== "bridge" && !R.ramp) { rmLine(g, s, s.w + 4.6, T.walk); rmLine(g, s, s.w + 0.7, T.curb); }
-      else if (R.rank >= 5 && R.br !== "bridge") rmLine(g, s, s.w + 2.4, crSh(T.grass, -0.12));
+      if (R.svc === "parking_aisle") { rmLine(g, s, s.w + Z(10.8), T.lot || "#3a3c41"); continue; }
+      if (R.hwy) { rmLine(g, s, s.w + Z(3), "#9c968a"); continue; }
+      if (R.rank >= 3 && R.rank <= 6 && town && R.br !== "bridge" && !R.ramp) { rmLine(g, s, s.w + Z(4.6), T.walk); rmLine(g, s, s.w + Math.max(3 / 32, Z(0.7)), T.curb); }
+      else if (R.rank >= 5 && R.br !== "bridge") rmLine(g, s, s.w + Z(2.4), crSh(T.grass, -0.12));
     }
   } else if (pass === 1) {
     for (const s of segs) {
       const R = s.r, k = R.kind;
-      if (k === "rail" || k === "transit") { rmLine(g, s, 3.4, "#6f6a64"); continue; }
-      if (R.br === "bridge") { g.save(); g.lineCap = "butt"; rmLine(g, s, s.w + 2.2, "rgba(0,0,0,0.35)"); rmLine(g, s, s.w + 1.4, "#8d8a84"); g.restore(); }
+      if (k === "rail" || k === "transit") { rmLine(g, s, Z(3.4), "#6f6a64"); continue; }
+      if (R.br === "bridge") { g.save(); g.lineCap = "butt"; rmLine(g, s, s.w + Z(2.2), "rgba(0,0,0,0.35)"); rmLine(g, s, s.w + Z(1.4), "#8d8a84"); g.restore(); }
       let col = RM_ROADCOL[k] || "#3a3c41";
       if (k === "path") col = R.surf === "unpaved" || R.surf === "dirt" || R.surf === "gravel" || (!town && R.sub === "path") ? "#b9a988" : R.sub === "pedestrian" ? (T.plaza || "#b8b1a3") : "#c8c3b8";
       if (k === "service" && R.svc === "driveway") col = T.drive || "#9b9993";
@@ -76,57 +78,59 @@ function rmRoadPass(g, segs, pass, cls) {
   } else {
     // markings stop short of junctions (no lane dashes painted across a crossing road)
     const jn = new Map(); for (const s of segs) { if (s.r.rank < 3 || s.r.hwy) continue; for (const [x, y] of [[s.ax, s.ay], [s.bx, s.by]]) { const k = Math.round(x * 2) + "," + Math.round(y * 2); let e = jn.get(k); if (!e) jn.set(k, e = new Set()); e.add(s.r); } }
-    const trim = (s) => { const L = Math.hypot(s.bx - s.ax, s.by - s.ay) || 1, ka = Math.round(s.ax * 2) + "," + Math.round(s.ay * 2), kb = Math.round(s.bx * 2) + "," + Math.round(s.by * 2), ta = jn.has(ka) && jn.get(ka).size > 1 ? Math.min(0.45, 7 / L) : 0, tb = jn.has(kb) && jn.get(kb).size > 1 ? Math.min(0.45, 7 / L) : 0; if (!ta && !tb) return s; return { ax: s.ax + (s.bx - s.ax) * ta, ay: s.ay + (s.by - s.ay) * ta, bx: s.bx - (s.bx - s.ax) * tb, by: s.by - (s.by - s.ay) * tb, w: s.w, r: s.r }; };
+    const trim = (s) => { const L = Math.hypot(s.bx - s.ax, s.by - s.ay) || 1, ka = Math.round(s.ax * 2) + "," + Math.round(s.ay * 2), kb = Math.round(s.bx * 2) + "," + Math.round(s.by * 2), ta = jn.has(ka) && jn.get(ka).size > 1 ? Math.min(0.45, Z(7) / L) : 0, tb = jn.has(kb) && jn.get(kb).size > 1 ? Math.min(0.45, Z(7) / L) : 0; if (!ta && !tb) return s; return { ax: s.ax + (s.bx - s.ax) * ta, ay: s.ay + (s.by - s.ay) * ta, bx: s.bx - (s.bx - s.ax) * tb, by: s.by - (s.by - s.ay) * tb, w: s.w, r: s.r }; };
     const usa = RM.lon0 < -30 && RM.lon0 > -170, centre = usa ? T.line : T.line2;
     for (const s0 of segs) {
       const s = s0.r.rank >= 3 && !s0.r.hwy ? trim(s0) : s0;
       const R = s.r, k = R.kind;
       if (k === "rail" || k === "transit") {   // ties + two rails
         const L = Math.hypot(s.bx - s.ax, s.by - s.ay) || 1, ux = (s.bx - s.ax) / L, uy = (s.by - s.ay) / L;
-        g.strokeStyle = "#4a3c30"; g.lineWidth = 7; g.lineCap = "butt"; g.beginPath();
-        for (let d = 0; d < L; d += 0.7) { const x = s.ax + ux * d, y = s.ay + uy * d; g.moveTo((x - uy * 1.25) * 32, (y + ux * 1.25) * 32); g.lineTo((x + uy * 1.25) * 32, (y - ux * 1.25) * 32); }
+        g.strokeStyle = "#4a3c30"; g.lineWidth = Math.max(2, 7 * z); g.lineCap = "butt"; g.beginPath();
+        for (let d = 0; d < L; d += Z(0.7)) { const x = s.ax + ux * d, y = s.ay + uy * d; g.moveTo((x - uy * Z(1.25)) * 32, (y + ux * Z(1.25)) * 32); g.lineTo((x + uy * Z(1.25)) * 32, (y - ux * Z(1.25)) * 32); }
         g.stroke(); g.lineCap = "round";
-        for (const o of [-0.72, 0.72]) rmLine(g, s, 0.14, "#c5c9cd", o);
+        for (const o of [-0.72, 0.72]) rmLine(g, s, Wl(0.14), "#c5c9cd", Z(o));
         continue;
       }
       if (R.svc === "parking_aisle") {   // stall lines both sides
-        const L = Math.hypot(s.bx - s.ax, s.by - s.ay) || 1, ux = (s.bx - s.ax) / L, uy = (s.by - s.ay) / L, a = s.w / 2 + 0.2, b2 = s.w / 2 + 5.2;
-        g.strokeStyle = "rgba(240,240,232,0.75)"; g.lineWidth = 3; g.lineCap = "butt"; g.beginPath();
-        for (let d = 0.2; d < L; d += 2.75) for (const sd of [-1, 1]) { const x = s.ax + ux * d, y = s.ay + uy * d; g.moveTo((x - uy * a * sd) * 32, (y + ux * a * sd) * 32); g.lineTo((x - uy * b2 * sd) * 32, (y + ux * b2 * sd) * 32); }
+        const L = Math.hypot(s.bx - s.ax, s.by - s.ay) || 1, ux = (s.bx - s.ax) / L, uy = (s.by - s.ay) / L, a = s.w / 2 + Z(0.2), b2 = s.w / 2 + Z(5.2);
+        g.strokeStyle = "rgba(240,240,232,0.75)"; g.lineWidth = Math.max(1.5, 3 * z); g.lineCap = "butt"; g.beginPath();
+        for (let d = Z(0.2); d < L; d += Z(2.75)) for (const sd of [-1, 1]) { const x = s.ax + ux * d, y = s.ay + uy * d; g.moveTo((x - uy * a * sd) * 32, (y + ux * a * sd) * 32); g.lineTo((x - uy * b2 * sd) * 32, (y + ux * b2 * sd) * 32); }
         g.stroke(); g.lineCap = "round"; continue;
       }
       if (R.hwy) { rmHwyMarks(g, s); continue; }
       if (k === "path" || k === "track" || k === "service") continue;
       const dual = R.ow && (k === "motorway" || k === "trunk" || k === "primary");
-      if (!R.ow && (k === "primary" || k === "secondary" || k === "trunk")) { if (usa) for (const o of [-0.16, 0.16]) rmLine(g, s, 0.12, centre, o); else { g.setLineDash([4 * 32, 2 * 32]); rmLine(g, s, 0.12, centre); g.setLineDash([]); } }
-      else if (!R.ow && k === "tertiary") { g.setLineDash([3 * 32, 3 * 32]); rmLine(g, s, 0.12, centre); g.setLineDash([]); }
-      if (s.w >= 13 || dual) {   // lane dashes
-        g.setLineDash([3 * 32, 9 * 32]);
-        const lanes = Math.max(2, Math.round(s.w / 3.6)), lw = s.w / lanes;
-        for (let q = 1; q < lanes; q++) { const o = -s.w / 2 + lw * q; if (!R.ow && Math.abs(o) < 0.5) continue; rmLine(g, s, 0.12, T.line2, o); }
+      if (!R.ow && (k === "primary" || k === "secondary" || k === "trunk")) { if (usa) for (const o of [-0.16, 0.16]) rmLine(g, s, Wl(0.12), centre, Math.max(1.6 / 32, Z(Math.abs(o))) * Math.sign(o)); else { g.setLineDash([4 * 32 * z, 2 * 32 * z]); rmLine(g, s, Wl(0.12), centre); g.setLineDash([]); } }
+      else if (!R.ow && k === "tertiary") { g.setLineDash([3 * 32 * z, 3 * 32 * z]); rmLine(g, s, Wl(0.12), centre); g.setLineDash([]); }
+      if (s.w >= Z(13) || dual) {   // lane dashes (3.6 real m lanes)
+        g.setLineDash([3 * 32 * z, 9 * 32 * z]);
+        const lanes = Math.max(2, Math.round(s.w / Z(3.6))), lw = s.w / lanes;
+        for (let q = 1; q < lanes; q++) { const o = -s.w / 2 + lw * q; if (!R.ow && Math.abs(o) < Z(0.5)) continue; rmLine(g, s, Wl(0.12), T.line2, o); }
         g.setLineDash([]);
       }
-      if (k === "motorway" || k === "trunk") for (const o of [-(s.w / 2 - 0.5), s.w / 2 - 0.5]) rmLine(g, s, 0.12, T.line2, o);
+      if (k === "motorway" || k === "trunk") for (const o of [-(s.w / 2 - Z(0.5)), s.w / 2 - Z(0.5)]) rmLine(g, s, Wl(0.12), T.line2, o);
     }
   }
   g.restore();
 }
 // Highway 365: lanes, the median barrier, milled closed lanes, the outer barrier and fence
 function rmHwyMarks(g, s) {
-  const L = Math.hypot(s.bx - s.ax, s.by - s.ay) || 1, mid = ((s.t0 || 0) + (s.t1 || 0)) / 2, z = rmZoneAt(mid);
+  // the cross-section in real metres × the map scale: median ±0.75, lanes to 7.9, shoulder, barrier, fence
+  const L = Math.hypot(s.bx - s.ax, s.by - s.ay) || 1, mid = ((s.t0 || 0) + (s.t1 || 0)) / 2, zn = rmZoneAt(mid), k = RM.S, Z = v => v * k, Wl = v => Math.max(1.5 / 32, v * k);
   // closed lanes: milled asphalt with grooves
-  if (z && mid > z.s0 - 20 && mid < z.s1) { g.save(); g.lineCap = "butt"; for (const sd of z.lanes === 2 ? [1, -1] : [z.side]) {
-    rmLine(g, s, 3.6, "#4a4844", sd * 6.0);
-    g.setLineDash([2, 6]); rmLine(g, s, 3.2, "rgba(20,18,16,0.35)", sd * 6.0); g.setLineDash([]);
+  if (zn && mid > zn.s0 - Z(20) && mid < zn.s1) { g.save(); g.lineCap = "butt"; for (const sd of zn.lanes === 2 ? [1, -1] : [zn.side]) {
+    rmLine(g, s, Z(3.6), "#4a4844", sd * Z(6.0));
+    g.setLineDash([2, 6]); rmLine(g, s, Z(3.2), "rgba(20,18,16,0.35)", sd * Z(6.0)); g.setLineDash([]);
   } g.restore(); }
-  g.setLineDash([3 * 32, 9 * 32]); for (const o of [-4.2, 4.2]) rmLine(g, s, 0.13, "#e7e7e2", o); g.setLineDash([]);
-  for (const o of [-7.9, -0.75, 0.75, 7.9]) rmLine(g, s, 0.12, Math.abs(o) < 1 ? "#e3c24a" : "#e7e7e2", o);
+  g.setLineDash([3 * 32 * k, 9 * 32 * k]); for (const o of [-4.2, 4.2]) rmLine(g, s, Wl(0.13), "#e7e7e2", Z(o)); g.setLineDash([]);
+  for (const o of [-7.9, -0.75, 0.75, 7.9]) rmLine(g, s, Wl(0.12), Math.abs(o) < 1 ? "#e3c24a" : "#e7e7e2", Z(o));
   // median barrier (gaps at the crossovers)
-  if (!rmInCross(mid)) { g.save(); g.lineCap = "butt"; rmLine(g, s, 0.95, "rgba(0,0,0,0.3)", 0.18); rmLine(g, s, 0.8, "#bdb8ae"); rmLine(g, s, 0.22, "#d8d4ca"); g.restore(); }
+  if (!rmInCross(mid)) { g.save(); g.lineCap = "butt"; rmLine(g, s, Math.max(4 / 32, Z(0.95)), "rgba(0,0,0,0.3)", Z(0.18)); rmLine(g, s, Math.max(3 / 32, Z(0.8)), "#bdb8ae"); rmLine(g, s, Wl(0.22), "#d8d4ca"); g.restore(); }
   // outer barrier + chain-link fence beyond it
+  const ob = rmHwyOuter(), wl = rmHwyWall();
   g.save(); g.lineCap = "butt";
-  rmLine(g, s, 1.1, "rgba(0,0,0,0.3)", -(RM_HWY_W / 2 + 0.9)); rmLine(g, s, 0.9, "#bdb8ae", -(RM_HWY_W / 2 + 1.0)); rmLine(g, s, 0.25, "#d8d4ca", -(RM_HWY_W / 2 + 1.0));
-  g.setLineDash([2, 4]); rmLine(g, s, 0.12, "#8a9096", -(RM_HWY_W / 2 + 1.9)); g.setLineDash([]);
+  rmLine(g, s, wl - ob + 1 / 32, "rgba(0,0,0,0.3)", -(ob + wl) / 2 - 0.03); rmLine(g, s, (wl - ob) * 0.85, "#bdb8ae", -(ob + wl) / 2); rmLine(g, s, Wl(0.25), "#d8d4ca", -(ob + wl) / 2);
+  g.setLineDash([2, 4]); rmLine(g, s, Wl(0.12), "#8a9096", -(wl + Math.max(0.25, Z(0.3)))); g.setLineDash([]);
   g.restore();
 }
 // EOF part 1 (realart.js continues)
@@ -142,7 +146,7 @@ function rmOutline(b) {   // world-px rings of what the walls follow
   return b.rmOut;
 }
 function rmBldShadow(g, b) {
-  const h = Math.max(3, b.rm.h || 5), d = Math.min(14, 1.2 + h * 0.2) * 32, dx = d * 0.55, dy = d * 0.8;
+  const h = Math.max(3, b.rm.h || 5), d = Math.max(3, Math.min(14, 1.2 + h * 0.2) * 32 * RM.S), dx = d * 0.55, dy = d * 0.8;   // height shadow, real metres × scale
   g.save(); g.fillStyle = "rgba(0,0,0,0.2)"; g.beginPath();
   for (const R of rmOutline(b)) { const n = R.length; g.moveTo(R[0] + dx, R[1] + dy); for (let i = 2; i < n; i += 2) g.lineTo(R[i] + dx, R[i + 1] + dy); g.closePath(); }
   g.fill("evenodd"); g.restore();
@@ -181,6 +185,16 @@ function rmRotLocalRect(b, X, tx0, ty0, tx1, ty1) {
       try { RM_CF0(g, f.lf, b.bl, P, fam, st); } finally { g.restore(); }
     };
   }
+  // v14.3: cars / fire engines parked inside are drawn at the map's scale (the art shrinks, it doesn't squash)
+  if (typeof crFurn === "function") {
+    const RM_CF1 = crFurn;
+    window.crFurn = crFurn = function (g, f, b, P, fam, st) {
+      const fk = f && (f.k || (f.lf && f.lf.k));
+      if (!fk || fk === 1 || typeof crVehicle !== "function") return RM_CF1(g, f, b, P, fam, st);
+      const k0 = crVehicle.k; crVehicle.k = fk;
+      try { return RM_CF1(g, f, b, P, fam, st); } finally { crVehicle.k = k0; }
+    };
+  }
   if (typeof crRoofCanvas === "function") {
     const RM_RC0 = crRoofCanvas;
     window.crRoofCanvas = crRoofCanvas = function (b) {
@@ -216,11 +230,12 @@ function rmRoof(b, RC0) {
     const gr = g.createLinearGradient(bb[0], bb[1], bb[2], bb[3]); gr.addColorStop(0, "rgba(255,255,255,0.12)"); gr.addColorStop(1, "rgba(0,0,0,0.16)"); g.fillStyle = gr; g.fillRect(bb[0], bb[1], bb[2] - bb[0], bb[3] - bb[1]);
     // rooftop kit on flat roofs: HVAC boxes, a mechanical penthouse on towers
     if (!homey) {
-      const area = b.rm.area || 100, n = Math.min(14, Math.max(1, Math.floor(area / 260))), hh = b.seed >>> 0;
+      // units per real roof area; a unit is ~2.4 × 1.9 real m (never under 13 × 10 px)
+      const area = b.rm.area || 100, n = Math.min(14, Math.max(1, Math.floor(rmRealA(area) / 260))), hh = b.seed >>> 0, us = Math.max(0.5, Math.min(1, RM.S * 1.25)), uw = 26 * us, uh = 20 * us;
       for (let k = 0; k < n; k++) {
-        const x = bb[0] + 20 + ((hh >>> (k % 24)) * 7919 + k * 104729) % Math.max(1, bb[2] - bb[0] - 60), y = bb[1] + 20 + ((hh >>> ((k * 3) % 24)) * 6271 + k * 130363) % Math.max(1, bb[3] - bb[1] - 50);
-        if (!rmPipPoly(x / 32 + 0.5, y / 32 + 0.4, b.rm.pg)) continue;
-        g.fillStyle = "rgba(0,0,0,0.25)"; g.fillRect(x + 3, y + 3, 26, 20); g.fillStyle = r.hvac; g.fillRect(x, y, 26, 20); g.fillStyle = crSh(r.hvac, -0.3); g.beginPath(); g.arc(x + 13, y + 10, 7, 0, 7); g.fill();
+        const x = bb[0] + 20 * us + ((hh >>> (k % 24)) * 7919 + k * 104729) % Math.max(1, bb[2] - bb[0] - 60 * us), y = bb[1] + 20 * us + ((hh >>> ((k * 3) % 24)) * 6271 + k * 130363) % Math.max(1, bb[3] - bb[1] - 50 * us);
+        if (!rmPipPoly((x + uw / 2) / 32, (y + uh / 2) / 32, b.rm.pg)) continue;
+        g.fillStyle = "rgba(0,0,0,0.25)"; g.fillRect(x + 3 * us, y + 3 * us, uw, uh); g.fillStyle = r.hvac; g.fillRect(x, y, uw, uh); g.fillStyle = crSh(r.hvac, -0.3); g.beginPath(); g.arc(x + uw / 2, y + uh / 2, 7 * us, 0, 7); g.fill();
       }
       if (tall) { const cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, w = (bb[2] - bb[0]) * 0.28, h2 = (bb[3] - bb[1]) * 0.24; g.fillStyle = "rgba(0,0,0,0.3)"; g.fillRect(cx - w / 2 + 8, cy - h2 / 2 + 10, w, h2); g.fillStyle = "#77797c"; g.fillRect(cx - w / 2, cy - h2 / 2, w, h2); if ((b.rm.h || 0) >= 70 && area > 1500) { g.strokeStyle = "#f2f2f2"; g.lineWidth = 3; g.beginPath(); g.arc(cx + w, cy + h2, 38, 0, 7); g.stroke(); g.fillStyle = "#f2f2f2"; g.font = "bold 26px sans-serif"; g.textAlign = "center"; g.fillText("H", cx + w, cy + h2 + 9); } }
     } else { g.strokeStyle = crSh(base, 0.25); g.lineWidth = 2; const F = b.rm.F, cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2, L = Math.max(bb[2] - bb[0], bb[3] - bb[1]); const ax = F.W >= F.H ? F.ex : F.ey; g.beginPath(); g.moveTo(cx - ax[0] * L * 0.32, cy - ax[1] * L * 0.32); g.lineTo(cx + ax[0] * L * 0.32, cy + ax[1] * L * 0.32); g.stroke(); }
@@ -265,7 +280,7 @@ function rmPropArt(g, p) {
 }
 function rmBoxArt(g, p) {   // a tiny shed / kiosk / utility box: a little roof on its real outline
   const pg = p.pg; if (!pg || pg.length < 3) return;
-  const d = Math.min(6, 1 + (p.hgt || 3) * 0.2) * 32;
+  const d = Math.max(2, Math.min(6, 1 + (p.hgt || 3) * 0.2) * 32 * RM.S);
   g.fillStyle = "rgba(0,0,0,0.22)"; g.beginPath(); g.moveTo(pg[0][0] * 16 + d * 0.55, pg[0][1] * 16 + d * 0.8); for (const q of pg) g.lineTo(q[0] * 16 + d * 0.55, q[1] * 16 + d * 0.8); g.closePath(); g.fill();
   g.fillStyle = "#7f7c74"; g.beginPath(); g.moveTo(pg[0][0] * 16, pg[0][1] * 16); for (const q of pg) g.lineTo(q[0] * 16, q[1] * 16); g.closePath(); g.fill();
   g.strokeStyle = "#4e4b45"; g.lineWidth = 2; g.stroke();
@@ -276,10 +291,12 @@ function rmBoxArt(g, p) {   // a tiny shed / kiosk / utility box: a little roof 
   window.crProp = crProp = function (g, p, h) {
     if (p.t === "rmpolice") {   // a cruiser on the shoulder, lights going
       const cx = (p.x + p.w / 2) * 16, cy = (p.y + p.h / 2) * 16, o = p.o | 0, W = p.w * 16, H = p.h * 16, L = (o & 1) ? H : W, D = (o & 1) ? W : H;
-      for (const [c, k] of [["rgba(255,23,68,0.3)", -1], ["rgba(41,121,255,0.3)", 1]]) { const gr = g.createRadialGradient(cx + k * 12, cy, 2, cx + k * 12, cy, 70); gr.addColorStop(0, c); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.beginPath(); g.arc(cx + k * 12, cy, 70, 0, 7); g.fill(); }
-      g.save(); g.translate(cx, cy); g.rotate(o * Math.PI / 2 + (p.ang || 0)); try { crVehicle(g, "police", Math.min(L, D), Math.max(L, D), 0, h, false, false); } finally { g.restore(); }
+      const pk = p.k || 1;
+      for (const [c, k] of [["rgba(255,23,68,0.3)", -1], ["rgba(41,121,255,0.3)", 1]]) { const gr = g.createRadialGradient(cx + k * 12 * pk, cy, 2, cx + k * 12 * pk, cy, 70 * Math.max(0.5, pk)); gr.addColorStop(0, c); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.beginPath(); g.arc(cx + k * 12 * pk, cy, 70 * Math.max(0.5, pk), 0, 7); g.fill(); }
+      g.save(); g.translate(cx, cy); g.rotate(o * Math.PI / 2 + (p.ang || 0)); crVehicle.k = pk; try { crVehicle(g, "police", Math.min(L, D), Math.max(L, D), 0, h, false, false); } finally { crVehicle.k = 0; g.restore(); }
       return;
     }
+    if (p.k && p.k !== 1 && (p.t === "car" || p.t === "bus" || p.t === "trailer" || p.t === "armytruck" || p.t === "tractor")) { crVehicle.k = p.k; try { return RM_CP0(g, p, h); } finally { crVehicle.k = 0; } }
     if (p.t && p.t.charCodeAt(0) === 114 && p.t.charCodeAt(1) === 109) { if (p.t === "rmbox") return rmBoxArt(g, p); return rmPropArt(g, p); }
     return RM_CP0(g, p, h);
   };
@@ -316,16 +333,16 @@ function rmBake(rx, ry) {
     lands.sort((a, b) => a[0] - b[0]);
     for (const [, L, st] of lands) { g.fillStyle = crPat(st[0], st[1]); rmPolyFill(g, L.pg); }
     // runway markings
-    for (const [, A] of lands) if (A.cls === "runway" && A.pg) { g.save(); g.beginPath(); for (const R of A.pg) rmPath(g, R, 32); g.clip("evenodd"); g.strokeStyle = "rgba(240,240,232,0.7)"; g.lineWidth = 12; g.setLineDash([30 * 32 / 10, 20 * 32 / 10]); const bb = A.bb; g.beginPath(); if (bb[2] - bb[0] > bb[3] - bb[1]) { g.moveTo(bb[0] * 32, (bb[1] + bb[3]) * 16); g.lineTo(bb[2] * 32, (bb[1] + bb[3]) * 16); } else { g.moveTo((bb[0] + bb[2]) * 16, bb[1] * 32); g.lineTo((bb[0] + bb[2]) * 16, bb[3] * 32); } g.stroke(); g.restore(); }
+    for (const [, A] of lands) if (A.cls === "runway" && A.pg) { g.save(); g.beginPath(); for (const R of A.pg) rmPath(g, R, 32); g.clip("evenodd"); g.strokeStyle = "rgba(240,240,232,0.7)"; g.lineWidth = Math.max(3, 12 * RM.S); g.setLineDash([96 * RM.S, 64 * RM.S]); const bb = A.bb; g.beginPath(); if (bb[2] - bb[0] > bb[3] - bb[1]) { g.moveTo(bb[0] * 32, (bb[1] + bb[3]) * 16); g.lineTo(bb[2] * 32, (bb[1] + bb[3]) * 16); } else { g.moveTo((bb[0] + bb[2]) * 16, bb[1] * 32); g.lineTo((bb[0] + bb[2]) * 16, bb[3] * 32); } g.stroke(); g.restore(); }
     // water: a soft shore, then the water
     if (waters.length) {
       g.save(); g.lineJoin = "round";
-      for (const w of waters) { g.strokeStyle = crSh(T.g.water, 0.25); g.lineWidth = 2.2 * 32; g.beginPath(); for (const R of w.pg) rmPath(g, R, 32); g.stroke(); }
+      for (const w of waters) { g.strokeStyle = crSh(T.g.water, 0.25); g.lineWidth = Math.max(3, 2.2 * 32 * RM.S); g.beginPath(); for (const R of w.pg) rmPath(g, R, 32); g.stroke(); }
       for (const w of waters) { g.fillStyle = crPat("water", w.cls === "swimming_pool" ? T.g.pool : T.g.water); rmPolyFill(g, w.pg); }
       g.restore();
     }
     // streams, ditches, canals and rivers drawn as lines
-    if (wways.length) { g.save(); g.lineCap = "round"; g.lineJoin = "round"; for (const w of wways) { const wd = w.cls === "river" ? 10 : w.cls === "canal" ? 7 : w.cls === "stream" ? 2.4 : 1.4; g.strokeStyle = crPat("water", T.g.water); g.lineWidth = wd * 32; g.beginPath(); const a = w.pts; g.moveTo(a[0] * 32, a[1] * 32); for (let i = 2; i < a.length; i += 2) g.lineTo(a[i] * 32, a[i + 1] * 32); g.stroke(); } g.restore(); }
+    if (wways.length) { g.save(); g.lineCap = "round"; g.lineJoin = "round"; for (const w of wways) { const wd = w.cls === "river" ? 10 : w.cls === "canal" ? 7 : w.cls === "stream" ? 2.4 : 1.4; g.strokeStyle = crPat("water", T.g.water); g.lineWidth = Math.max(3, wd * 32 * RM.S); g.beginPath(); const a = w.pts; g.moveTo(a[0] * 32, a[1] * 32); for (let i = 2; i < a.length; i += 2) g.lineTo(a[i] * 32, a[i + 1] * 32); g.stroke(); } g.restore(); }
     const cls = cityMacroClass(Math.floor((m0x + 8) / 1000), Math.floor((m0y + 8) / 1000)), segs = rmSegsIn(blocks, m0x, m0y, m1x, m1y);
     rmRoadPass(g, segs, 0, cls); rmRoadPass(g, segs, 1, cls); rmRoadPass(g, segs, 2, cls);
     const blds = [], props = [];
@@ -352,7 +369,7 @@ function rmBake(rx, ry) {
     for (const p of props) if (p.t === "streetlight" || p.t === "pole" || p.t === "trafficlight") crProp(g, p, 0);
     // beyond the border: fenced-off construction land
     if (Math.min(rmEdgeDist(m0x, m0y), rmEdgeDist(m1x, m1y), rmEdgeDist(m0x, m1y), rmEdgeDist(m1x, m0y)) < 60) {
-      g.save(); g.beginPath(); g.rect(wx0, wy0, S, S); rmBarrierPath(g, -(RM_HWY_W / 2 + 1.6)); g.fillStyle = crPat("dirt", "#7d6e58"); g.fill("evenodd");
+      g.save(); g.beginPath(); g.rect(wx0, wy0, S, S); rmBarrierPath(g, -rmHwyWall()); g.fillStyle = crPat("dirt", "#7d6e58"); g.fill("evenodd");
       g.fillStyle = "rgba(10,12,16,0.38)"; g.fill("evenodd"); g.restore();
     }
     if (pending) { g.save(); g.fillStyle = "rgba(12,18,26,0.28)"; g.fillRect(wx0, wy0, S, S); g.strokeStyle = "rgba(128,222,234,0.12)"; g.lineWidth = 6; g.beginPath(); for (let k = -S; k < S; k += 48) { g.moveTo(wx0 + k, wy0); g.lineTo(wx0 + k + S, wy0 + S); } g.stroke(); g.restore(); }
@@ -388,7 +405,7 @@ function rmMapTile(g, m0x, m0y, mpp, S) {
   for (const R of O.roads) if (rank(R.cls) >= Math.max(minR, cells.length && mpp <= 8 ? 5 : 0) && hit(R.bb)) lines.push(R);
   lines.sort((a, b) => rank(a.cls) - rank(b.cls));
   for (const edge of mpp <= 16 ? [true, false] : [false]) for (const R of lines) {
-    const k = rank(R.cls), w = Math.max(k >= 6 ? 1.8 : 1, (RM_RW[(R.cls || "").replace("_construction", "")] || 6) / mpp) + (edge ? 1.6 : 0);
+    const k = rank(R.cls), w = Math.max(k >= 6 ? 1.8 : 1, (RM_RW[(R.cls || "").replace("_construction", "")] || 6) * RM.S / mpp) + (edge ? 1.6 : 0);
     g.strokeStyle = edge ? (k >= 7 ? S.hwEdge : S.edge) : (k >= 7 ? S.hw : k >= 4 ? S.road : S.road2); g.lineWidth = w;
     const a = R.pts; g.beginPath(); g.moveTo(X(a[0]), Y(a[1])); for (let i = 2; i < a.length; i += 2) g.lineTo(X(a[i]), Y(a[i + 1])); g.stroke();
   }
@@ -396,7 +413,7 @@ function rmMapTile(g, m0x, m0y, mpp, S) {
   g.save(); g.setTransform(1 / mpp / 32, 0, 0, 1 / mpp / 32, -m0x / mpp, -m0y / mpp);
   g.beginPath(); rmBarrierPath(g, 0); g.strokeStyle = S.hwEdge; g.lineWidth = Math.max(3, RM_HWY_W / mpp + 2) * mpp * 32; g.stroke(); g.strokeStyle = "#ffb300"; g.lineWidth = Math.max(2, RM_HWY_W / mpp) * mpp * 32; g.stroke();
   if (mpp <= 16) { g.setLineDash([6 * mpp * 32, 6 * mpp * 32]); g.strokeStyle = "#1a1a1a"; g.lineWidth = Math.max(1, 4 / mpp) * mpp * 32; g.stroke(); g.setLineDash([]); }
-  g.beginPath(); g.rect(m0x * 32, m0y * 32, span * 32, span * 32); rmBarrierPath(g, -(RM_HWY_W / 2 + 1.6)); g.fillStyle = "rgba(20,22,28,0.55)"; g.fill("evenodd");
+  g.beginPath(); g.rect(m0x * 32, m0y * 32, span * 32, span * 32); rmBarrierPath(g, -rmHwyWall()); g.fillStyle = "rgba(20,22,28,0.55)"; g.fill("evenodd");
   g.restore();
 }
 (function rmMapWire() {

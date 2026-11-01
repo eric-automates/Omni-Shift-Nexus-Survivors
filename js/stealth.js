@@ -708,7 +708,8 @@ function stealthRenderScreen(g) {
   const p = stHeroProfile(player.cid), tags = [];
   if (ST.sneak) tags.push("SNEAKING");
   if (typeof visionProfile === "function") tags.push("👁 " + visionProfile(player.cid)[3]);
-  if (p[1] === "g") tags.push(p[2] ? (ST.suppressed ? "SUPPRESSED [V]" : "LOUD [V]") : "LOUD");
+  const vk = typeof actIsTouch === "function" && actIsTouch() ? "" : " [V]";   // v14.3: no key hints on touch
+  if (p[1] === "g") tags.push(p[2] ? (ST.suppressed ? "SUPPRESSED" + vk : "LOUD" + vk) : "LOUD");
   else if (p[1] === "x") tags.push("BLADE · QUIET");
   const HL = typeof HUDL !== "undefined" && HUDL.enabled ? HUDL : null;   // v14.1: placed / scaled by the HUD layout manager
   if (HL && HL.stealthHidden) return;

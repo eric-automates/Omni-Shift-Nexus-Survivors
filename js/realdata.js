@@ -18,8 +18,13 @@
    ========================================================================= */
 "use strict";
 
-const RM_HALF = 24000;                 // metres from the centre to the border highway
-const RM_LO = 32000 - RM_HALF, RM_HI = 32000 + RM_HALF;
+// v14.3 MAP SCALE: world metres per real metre (RM.S). Real places are drawn at 1:3 by default — roads, houses and cars
+// sized to the hero (his sprite is ~0.75 m tall at 32 px/m) — and the player can pick 1:2 or true size (1:1) in the menu.
+// Everything real lands scaled at the projection; real-size constants elsewhere multiply by RM.S (rmZ).
+const RM_HALF0 = 24000;               // REAL metres from the centre to the border highway (48 km across)
+let RM_HALF = RM_HALF0 / 3;           // world metres (set by rmScaleSet)
+let RM_LO = 32000 - RM_HALF, RM_HI = 32000 + RM_HALF;
+const RM_SCALES = [[1 / 3, "1:3", "Hero-sized (default)"], [1 / 2, "1:2", "Roomier"], [1, "1:1", "True size"]];
 // attribution the map data needs wherever it shows (OpenFreeMap's required wording + the OSM copyright link)
 const RM_ATTR = "OpenFreeMap © OpenMapTiles · Data from OpenStreetMap";
 const RM_ATTR_HTML = 'OpenFreeMap © OpenMapTiles · Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" style="color:inherit">OpenStreetMap</a> (ODbL)';
@@ -41,8 +46,23 @@ const RM = {
   tpl: "", tplP: null, index: null, indexP: null, packs: new Map(),
   tiles: new Map(), cells: new Map(), q: [], active: 0, conc: 6, gen: 0,
   ovw: null, stats: { req: 0, ok: 0, fail: 0, bytes: 0, decodeMs: 0, cacheHits: 0 },
-  readyCb: [], lastStream: 0, err: "", worldId: "", viaOnline: 0, offlineErr: "", noOnline: false
+  readyCb: [], lastStream: 0, err: "", worldId: "", viaOnline: 0, offlineErr: "", noOnline: false, S: 1 / 3
 };
+// real metres → world metres
+function rmZ(v) { return v * RM.S; }
+// world m² → real m² (classification thresholds are real sizes)
+function rmRealA(a) { return a / (RM.S * RM.S); }
+function rmScaleNorm(S) { S = +S; for (const q of RM_SCALES) if (Math.abs(q[0] - S) < 1e-3) return q[0]; return RM_SCALES[0][0]; }
+function rmScaleLabel(S) { const q = RM_SCALES.find(q => Math.abs(q[0] - S) < 1e-3); return q ? q[1] : "1:3"; }
+// set the scale before a place is built; a different scale forgets the decoded tiles (they are stored scaled)
+function rmScaleSet(S) {
+  S = rmScaleNorm(S);
+  const changed = Math.abs(S - RM.S) > 1e-6;
+  RM.S = S; RM_HALF = RM_HALF0 * S; RM_LO = 32000 - RM_HALF; RM_HI = 32000 + RM_HALF; RM_PAD = Math.max(90, Math.round(260 * S));
+  if (typeof rmGenScale === "function") rmGenScale(S);
+  if (changed && typeof rmResetData === "function" && (RM.tiles.size || RM.cells.size || RM.ovw)) rmResetData();
+  return S;
+}
 
 /* --- 1. MVT DECODER ------------------------------------------------------------------- */
 const RM_TD = typeof TextDecoder !== "undefined" ? new TextDecoder() : null;
@@ -110,7 +130,7 @@ function rmT2Lat(ty, z) { const n = Math.PI - 2 * Math.PI * ty / Math.pow(2, z);
 function rmSetCentre(lat, lon) {
   RM.lat0 = lat; RM.lon0 = lon; RM.k = Math.cos(lat * Math.PI / 180);
   RM.cx14 = rmLon2T(lon, 14); RM.cy14 = rmLat2T(lat, 14);
-  RM.mpt = 40075016.686 / 16384 * RM.k;   // world metres across one z14 tile at this latitude
+  RM.mpt = 40075016.686 / 16384 * RM.k * RM.S;   // world metres across one z14 tile at this latitude (real metres × map scale)
 }
 function rmLL2W(lat, lon) { return [32000 + (rmLon2T(lon, 14) - RM.cx14) * RM.mpt, 32000 + (rmLat2T(lat, 14) - RM.cy14) * RM.mpt]; }
 function rmW2LL(xm, ym) { const tx = RM.cx14 + (xm - 32000) / RM.mpt, ty = RM.cy14 + (ym - 32000) / RM.mpt; return [rmT2Lat(ty, 14), tx / 16384 * 360 - 180]; }
@@ -201,8 +221,8 @@ function rmExtract(z, x, y, L) {
               if (mnx < 0) cut |= 1; if (mxx > e) cut |= 2; if (mny < 0) cut |= 4; if (mxy > e) cut |= 8;
             }
             const W = rings.map(r => rmToW(r, ox, oy, sc)), area = Math.abs(rmArea(W[0]));
-            if (area < 4) continue;
-            T.bld.push({ pg: W, h, bb: rmBBox(W[0]), area, cut, t: T.k, c: rmCentroid(W[0]) });
+            if (rmRealA(area) < 4) continue;
+            T.bld.push({ pg: W, h, bb: rmBBox(W[0]), area, cut, t: T.k, c: rmCentroid(W[0]), src: P.src === "ms" ? "ms" : "" });
           }
         }
         break;
@@ -430,17 +450,18 @@ function rmResetData() {
 // unload far tiles (keep memory bounded): decoded features of tiles > 4.5 km from the player
 function rmTrim(xm, ym) {
   if (RM.tiles.size < 90) return;
+  const far = Math.max(1600, rmZ(4500)), farC = Math.max(2200, rmZ(5000));
   for (const [k, T] of RM.tiles) {
     if (T.st < 2 || k.indexOf("14/") !== 0) continue;
     const [, x, y] = k.split("/").map(Number), b = rmTileBox(14, x, y);
-    if (Math.max(b[0] - xm, xm - b[2], b[1] - ym, ym - b[3]) > 4500) { RM.tiles.delete(k); }
+    if (Math.max(b[0] - xm, xm - b[2], b[1] - ym, ym - b[3]) > far) { RM.tiles.delete(k); }
   }
-  for (const [ck, C] of RM.cells) if (Math.hypot(C.mx * 1000 + 500 - xm, C.my * 1000 + 500 - ym) > 5000) RM.cells.delete(ck);
+  for (const [ck, C] of RM.cells) if (Math.hypot(C.mx * 1000 + 500 - xm, C.my * 1000 + 500 - ym) > farC) RM.cells.delete(ck);
 }
 // EOF part 5 (realdata.js continues)
 
 /* --- 7. KM CELLS: everything under one 1 km cell, buildings stitched across seams ----- */
-const RM_PAD = 260;   // metres of neighbouring tiles a cell waits for (big buildings, roads crossing the edge)
+let RM_PAD = 260;   // world metres of neighbouring tiles a cell waits for (big buildings, roads crossing the edge) — 260 real m × scale
 function rmCellKeys(mx, my) { return rmTilesIn(mx * 1000 - RM_PAD, my * 1000 - RM_PAD, (mx + 1) * 1000 + RM_PAD, (my + 1) * 1000 + RM_PAD); }
 function rmCellReady(mx, my) { for (const k of rmCellKeys(mx, my)) if (rmTileState(k) < 2) return false; return true; }
 function rmCellData(mx, my) {
@@ -456,7 +477,7 @@ function rmCellData(mx, my) {
     F.used = performance.now();
     for (const b of F.bld) {
       if (b.cut) { if (rmBoxHit(b.bb, x0 - RM_PAD, y0 - RM_PAD, x1 + RM_PAD, y1 + RM_PAD)) cuts.push(b); continue; }
-      if (b.c[0] >= x0 && b.c[0] < x1 && b.c[1] >= y0 && b.c[1] < y1) C.blds.push({ pg: b.pg, h: b.h, bb: b.bb, area: b.area, c: b.c });
+      if (b.c[0] >= x0 && b.c[0] < x1 && b.c[1] >= y0 && b.c[1] < y1) C.blds.push({ pg: b.pg, h: b.h, bb: b.bb, area: b.area, c: b.c, src: b.src });
     }
     const pad = 40;
     for (const r of F.roads) if (rmBoxHit(r.bb, x0 - pad, y0 - pad, x1 + pad, y1 + pad)) C.roads.push(r);
@@ -470,13 +491,13 @@ function rmCellData(mx, my) {
   }
   // stitch seam-cut pieces: same height, touching along a shared tile edge
   if (cuts.length) {
-    const par = cuts.map((_, i) => i), find = i => { while (par[i] !== i) i = par[i] = par[par[i]]; return i; };
+    const par = cuts.map((_, i) => i), find = i => { while (par[i] !== i) i = par[i] = par[par[i]]; return i; }, tol = Math.max(0.2, 0.6 * RM.S), ovl = Math.max(0.27, 0.8 * RM.S);
     for (let i = 0; i < cuts.length; i++) for (let j = i + 1; j < cuts.length; j++) {
       const a = cuts[i], b = cuts[j];
       if (a.t === b.t || Math.abs(a.h - b.h) > 0.6) continue;
-      if (a.bb[2] < b.bb[0] - 0.6 || b.bb[2] < a.bb[0] - 0.6 || a.bb[3] < b.bb[1] - 0.6 || b.bb[3] < a.bb[1] - 0.6) continue;
+      if (a.bb[2] < b.bb[0] - tol || b.bb[2] < a.bb[0] - tol || a.bb[3] < b.bb[1] - tol || b.bb[3] < a.bb[1] - tol) continue;
       const ov = Math.min(a.bb[2], b.bb[2]) - Math.max(a.bb[0], b.bb[0]), oh = Math.min(a.bb[3], b.bb[3]) - Math.max(a.bb[1], b.bb[1]);
-      if (Math.max(ov, oh) > 0.8) par[find(i)] = find(j);
+      if (Math.max(ov, oh) > ovl) par[find(i)] = find(j);
     }
     const groups = new Map();
     cuts.forEach((b, i) => { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(b); });
@@ -485,17 +506,18 @@ function rmCellData(mx, my) {
       for (const b of g) { A += b.area; cx += b.c[0] * b.area; cy += b.c[1] * b.area; for (const r of b.pg) pg.push(r); bb[0] = Math.min(bb[0], b.bb[0]); bb[1] = Math.min(bb[1], b.bb[1]); bb[2] = Math.max(bb[2], b.bb[2]); bb[3] = Math.max(bb[3], b.bb[3]); }
       cx /= A; cy /= A;
       // pieces abut along the seam, so an even-odd fill of every ring is their union (holes stay holes)
-      if (cx >= x0 && cx < x1 && cy >= y0 && cy < y1) C.blds.push({ pg, multi: g.length > 1 ? 1 : 0, h: Math.max(...g.map(b => b.h)), bb, area: A, c: [cx, cy] });
+      if (cx >= x0 && cx < x1 && cy >= y0 && cy < y1) C.blds.push({ pg, multi: g.length > 1 ? 1 : 0, h: Math.max(...g.map(b => b.h)), bb, area: A, c: [cx, cy], src: g[0].src });
     }
   }
   RM.cells.set(ck, C);
   return C;
 }
-// tiles a position needs soon (on foot ~1.4 km, driving / flying look further ahead)
+// tiles a position needs soon (on foot ~1.4 real km, driving / flying look further ahead) — radii in real terms × scale,
+// never under one cell's worth of world so a 1:3 map still streams the block you are in and its neighbours
 function rmWantAround(xm, ym, vx, vy) {
-  const sp = Math.hypot(vx || 0, vy || 0), ahead = Math.min(5000, sp * 25), R = 1400 + Math.min(1600, sp * 30);
-  const ax = xm + (sp > 1 ? vx / sp * ahead : 0), ay = ym + (sp > 1 ? vy / sp * ahead : 0);
-  const near = rmTilesIn(xm - R, ym - R, xm + R, ym + R), far = sp > 6 ? rmTilesIn(ax - 1200, ay - 1200, ax + 1200, ay + 1200) : [];
+  const sp = Math.hypot(vx || 0, vy || 0), z = RM.S, ahead = Math.min(rmZ(5000) + 1200, sp * 25), R = Math.max(650, rmZ(1400)) + Math.min(Math.max(700, rmZ(1600)), sp * 30);
+  const ax = xm + (sp > 1 ? vx / sp * ahead : 0), ay = ym + (sp > 1 ? vy / sp * ahead : 0), fr = Math.max(600, rmZ(1200));
+  const near = rmTilesIn(xm - R, ym - R, xm + R, ym + R), far = sp > 6 * z ? rmTilesIn(ax - fr, ay - fr, ax + fr, ay + fr) : [];
   return { near, far };
 }
 function rmStream(xm, ym, vx, vy) {

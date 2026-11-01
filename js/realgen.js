@@ -20,9 +20,17 @@
 RG_PROFILES.real = { name: "Real Map", style: "real", icon: "🗺️", group: "Real Life", theme: "modern", roster: "lapd",
   sub: "A real place from OpenStreetMap, 48 km across with the city in the middle — every street, building and business where it really is.",
   cl: ["Farmland", "Countryside", "Suburbs", "City", "Downtown", "Industrial", "Woods", "Waterfront"] };
-const RMG = { hwy: null, zones: [], cellCls: new Map(), names: new Map() };
-const RM_HWY_IN = 4, RM_HWY_W = 26, RM_HWY_BAND = 46;    // pavement starts 4 m inside the border, 26 m wide; real buildings keep 46 m clear
-const RM_HWY_R = 420;                                   // corner radius (m)
+const RMG = { hwy: null, zones: [], cellCls: new Map(), names: new Map(), cellIdx: new Map() };
+// real metres: pavement starts 4 m inside the border, 26 m wide; real buildings keep 46 m clear; 420 m corner radius
+const RM_HWY0 = { IN: 4, W: 26, BAND: 46, R: 420 };
+let RM_HWY_IN = 4 / 3, RM_HWY_W = 26 / 3, RM_HWY_BAND = 46 / 3, RM_HWY_R = 140;   // world metres = real × RM.S (rmGenScale)
+function rmGenScale(S) {
+  RM_HWY_IN = RM_HWY0.IN * S; RM_HWY_W = RM_HWY0.W * S; RM_HWY_BAND = RM_HWY0.BAND * S; RM_HWY_R = RM_HWY0.R * S;
+  RMG.hwy = null; RMG.cellIdx = new Map();
+}
+// v14.3: blocks per km cell — one block covers about one REAL km whatever the scale (1:3 → 3 × 3 blocks per cell),
+// so generating a block costs what it did at true size
+function rmBlocksPerCell() { return Math.max(1, Math.min(4, Math.round(1 / RM.S))); }
 
 /* --- 1. HIGHWAY 365: a rounded square just inside the border ------------------------- */
 function rmHwyBuild() {
@@ -34,14 +42,14 @@ function rmHwyBuild() {
   const s = [0]; for (let i = 1; i < pts.length; i++) s.push(s[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
   const H = { pts, s, L: s[s.length - 1], w: RM_HWY_W, name: "Highway 365", kind: "hwy365", cls: "hwy365" };
   // work zones: the same every visit (fixed seed) — closures alternate sides, crossovers between them
-  const r = cRng(365365), zones = [];
-  let p = 900;
-  while (p < H.L - 1200) {
-    const len = cRange(r, 380, 900);
+  const r = cRng(365365), zones = [], z = RM.S;
+  let p = 900 * z;
+  while (p < H.L - 1200 * z) {
+    const len = cRange(r, 380, 900) * z;
     zones.push({ s0: p, s1: p + len, side: zones.length % 2 ? 1 : -1, crew: r() < 0.7, cop: r() < 0.55, plates: r() < 0.4, lanes: r() < 0.3 ? 2 : 1 });
-    p += len + cRange(r, 1300, 2900);
+    p += len + cRange(r, 1300, 2900) * z;
   }
-  H.cross = []; for (let k = 0; k < zones.length; k++) { const a = zones[k].s1 + 420; if (a < H.L - 300) H.cross.push(a); }
+  H.cross = []; for (let k = 0; k < zones.length; k++) { const a = zones[k].s1 + 420 * z; if (a < H.L - 300 * z) H.cross.push(a); }
   RMG.hwy = H; RMG.zones = zones;
   return H;
 }
@@ -65,10 +73,13 @@ function rmHwyProject(xm, ym) {
   const P = rmHwyAt(best);
   return { t: best, off: (xm - P.x) * P.nx + (ym - P.y) * P.ny, d: Math.sqrt(bd) };
 }
-function rmZoneAt(t) { for (const z of RMG.zones) if (t >= z.s0 - 260 && t <= z.s1 + 60) return z; return null; }
+function rmZoneAt(t) { const k = RM.S; for (const z of RMG.zones) if (t >= z.s0 - 260 * k && t <= z.s1 + 60 * k) return z; return null; }
 // distance from the square's border (positive inside)
 function rmEdgeDist(xm, ym) { return Math.min(xm - RM_LO, RM_HI - xm, ym - RM_LO, RM_HI - ym); }
-function rmInsideRing(xm, ym) { return rmHwyOff(xm, ym) > -(RM_HWY_W / 2 + 1.6); }   // inside the outer barrier
+function rmInsideRing(xm, ym) { return rmHwyOff(xm, ym) > -rmHwyWall(); }   // inside the outer barrier
+// the outer barrier: from the pavement edge + 0.4 real m, at least one tile thick
+function rmHwyOuter() { return RM_HWY_W / 2 + 0.4 * RM.S; }
+function rmHwyWall() { return rmHwyOuter() + Math.max(0.6, 1.2 * RM.S); }
 // EOF part 1 (realgen.js continues)
 
 /* --- 2. INIT: places, the class map, the highway ------------------------------------- */
@@ -83,8 +94,8 @@ function rmInit(seed) {
   rmHwyBuild();
   // places: overview cities / towns / villages + the chosen centre
   const O = RM.ovw || { places: [], land: [], water: [] }, cities = [];
-  const add = (p, kind) => { if (!rmInsideRing(p.x, p.y)) return; if (cities.some(c => c.name === p.name && (c.idx === 0 || Math.hypot(c.x - p.x, c.y - p.y) < 3000))) return; cities.push({ x: p.x, y: p.y, r: p.r || (p.cls === "city" ? ((p.rank || 9) <= 4 ? 9000 : 6000) : RM_PLACE_R[p.cls] || 1500), kind, name: p.name, cls: p.cls }); };
-  const ctr = { x: 32000, y: 32000, cls: "city", name: (RM.place && RM.place.name) || "City", r: 12000 };
+  const z = RM.S, add = (p, kind) => { if (!rmInsideRing(p.x, p.y)) return; if (cities.some(c => c.name === p.name && (c.idx === 0 || Math.hypot(c.x - p.x, c.y - p.y) < 3000 * z))) return; cities.push({ x: p.x, y: p.y, r: p.r || (p.cls === "city" ? ((p.rank || 9) <= 4 ? 9000 : 6000) : RM_PLACE_R[p.cls] || 1500) * z, kind, name: p.name, cls: p.cls }); };
+  const ctr = { x: 32000, y: 32000, cls: "city", name: (RM.place && RM.place.name) || "City", r: 12000 * z };
   add(ctr, 0); cities[0].idx = 0;
   for (const p of O.places.filter(p => p.cls === "city").sort((a, b) => a.rank - b.rank)) add(p, 0);
   for (const p of O.places.filter(p => p.cls === "town")) add(p, 1);
@@ -96,7 +107,7 @@ function rmInit(seed) {
   const lu = O.land || [], wt = O.water || [];
   for (let my = 0; my < N; my++) for (let mx = 0; mx < N; mx++) {
     const i = my * N + mx, cxm = mx * 1000 + 500, cym = my * 1000 + 500;
-    if (!rmInsideRing(cxm, cym) && rmEdgeDist(cxm, cym) < -400) { macro[i] = CL_FARM; continue; }
+    if (!rmInsideRing(cxm, cym) && rmEdgeDist(cxm, cym) < -400 * z) { macro[i] = CL_FARM; continue; }
     const votes = [0, 0, 0, 0, 0, 0, 0, 0]; let water = 0;
     for (let sy = 0; sy < 5; sy++) for (let sx = 0; sx < 5; sx++) {
       const px = mx * 1000 + 100 + sx * 200, py = my * 1000 + 100 + sy * 200;
@@ -113,7 +124,7 @@ function rmInit(seed) {
     // nearest place
     let ci = -1, bt = 9;
     for (const c of cities) { const t = Math.hypot(c.x - cxm, c.y - cym) / c.r; if (t < bt && t < 1.3) { bt = t; ci = c.idx; } }
-    if (Math.hypot(cxm - 32000, cym - 32000) < 1700 && cls !== CL_LAKE) cls = CL_DOWNTOWN;
+    if (Math.hypot(cxm - 32000, cym - 32000) < Math.max(750, 1700 * z) && cls !== CL_LAKE) cls = CL_DOWNTOWN;
     macro[i] = cls; mcity[i] = ci; mdist[i] = bt;
   }
   CITY.macro = macro; CITY.macroCity = mcity; CITY.macroT = mdist;
@@ -132,7 +143,7 @@ function rmRefineClass(mx, my, C, blds) {
   const N = CITY.MACROS, i = my * N + mx;
   if (mx < 0 || my < 0 || mx >= N || my >= N || RMG.cellCls.has(i)) return;
   let cover = 0, tall = 0, big = 0;
-  for (const b of blds) { cover += b.area; if (b.h >= 24) tall += b.area; if (b.area > 4000) big += b.area; }
+  for (const b of blds) { cover += b.area; if (b.h >= 24) tall += b.area; if (rmRealA(b.area) > 4000) big += b.area; }
   const c0 = CITY.macro[i];
   let cls = c0;
   const share = cover / 1e6;
@@ -151,7 +162,8 @@ function rmRefineClass(mx, my, C, blds) {
 const RM_RW = { motorway: 22, trunk: 18, primary: 14, secondary: 12, tertiary: 10, minor: 7.5, service: 4.6, track: 3.4, path: 2.2, raceway: 11, busway: 7, rail: 3.2, transit: 3.2, hwy365: RM_HWY_W };
 const RM_DUAL = { motorway: 11.5, trunk: 9.5, primary: 8.5, secondary: 7.5 };
 const RM_RANK = { hwy365: 9, motorway: 8, trunk: 7, primary: 6, secondary: 5, tertiary: 4, busway: 3, minor: 3, raceway: 3, service: 2, track: 1, path: 0, rail: -1, transit: -1 };
-function rmRoadWidth(R) {
+function rmRoadWidth(R) { return rmRoadWidthReal(R) * RM.S; }   // world metres
+function rmRoadWidthReal(R) {
   let c = R.cls.replace("_construction", "");
   if (c === "path") return R.sub === "pedestrian" ? 6 : R.sub === "cycleway" ? 2.6 : R.sub === "platform" ? 3 : R.sub === "steps" ? 2.2 : 2;
   if (c === "service") return R.svc === "parking_aisle" ? 6.2 : R.svc === "driveway" ? 3.4 : R.svc === "alley" ? 4.4 : R.svc === "drive-through" ? 3.4 : 5;
@@ -165,7 +177,7 @@ function rmCellRoads(mx, my, C) {
   const fam = c => (c || "").replace("_construction", "").replace(/^(motorway|trunk|primary|secondary|tertiary)$/, "major");
   const nameOf = (R) => {
     const a = R.pts, n = a.length >> 1, k = (n >> 1) << 1, mxp = a[k], myp = a[k + 1];
-    let best = null, bd = 7;
+    let best = null, bd = Math.max(2.5, 7 * RM.S);
     for (const N of C.names) {
       if (mxp < N.bb[0] - bd || mxp > N.bb[2] + bd || myp < N.bb[1] - bd || myp > N.bb[3] + bd) continue;
       if (fam(N.cls) !== fam(R.cls) && !(R.cls === "path" && N.cls === "path")) continue;
@@ -185,7 +197,7 @@ function rmCellRoads(mx, my, C) {
       const ax = a[i], ay = a[i + 1], bx = a[i + 2], by = a[i + 3];
       if (Math.max(ax, bx) < x0 || Math.min(ax, bx) > x1 || Math.max(ay, by) < y0 || Math.min(ay, by) > y1) continue;
       // stop at the border highway (real roads end on its shoulder)
-      const da = rmEdgeDist(ax, ay), db = rmEdgeDist(bx, by), lim = RM_HWY_IN + RM_HWY_W - 0.5;   // real roads meet Highway 365 at its inner shoulder
+      const da = rmEdgeDist(ax, ay), db = rmEdgeDist(bx, by), lim = RM_HWY_IN + RM_HWY_W - 0.5 * RM.S;   // real roads meet Highway 365 at its inner shoulder
       if (da < lim && db < lim) continue;
       let s = { ax, ay, bx, by, w: r.w, r };
       if (da < lim || db < lim) { const t = (lim - Math.min(da, db)) / (Math.abs(da - db) || 1); if (da < lim) { s.ax = ax + (bx - ax) * t; s.ay = ay + (by - ay) * t; } else { s.bx = bx + (ax - bx) * t; s.by = by + (ay - by) * t; } }
@@ -212,9 +224,38 @@ function rmCellRoads(mx, my, C) {
   return segs;
 }
 function rmSegD(px, py, ax, ay, bx, by) { const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1, t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)); return Math.hypot(px - ax - dx * t, py - ay - dy * t); }
+// v14.3: big road lists get a 40 m bucket grid (built once per list) and an expanding-ring search, so the
+// nearest-road question asked for every building of a 1:3 block stays cheap
+function rmSegGrid(segs) {
+  if (segs._g) return segs._g;
+  const G = 40, m = new Map(), big = [];
+  for (const s of segs) {
+    const h = s.w / 2 + 1, x0 = Math.floor((Math.min(s.ax, s.bx) - h) / G), x1 = Math.floor((Math.max(s.ax, s.bx) + h) / G);
+    const y0 = Math.floor((Math.min(s.ay, s.by) - h) / G), y1 = Math.floor((Math.max(s.ay, s.by) + h) / G);
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > 300) { big.push(s); continue; }
+    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { const k = gx * 100003 + gy; let a = m.get(k); if (!a) m.set(k, a = []); a.push(s); }
+  }
+  Object.defineProperty(segs, "_g", { value: { G, m, big }, enumerable: false });
+  return segs._g;
+}
+let RM_SQ = 0;
 function rmNearestSeg(segs, xm, ym, maxD, filter) {
   let best = null, bd = maxD || 1e9;
-  for (const s of segs) { if (filter && !filter(s)) continue; const d = rmSegD(xm, ym, s.ax, s.ay, s.bx, s.by) - s.w / 2; if (d < bd) { bd = d; best = s; } }
+  if (segs.length < 40) {
+    for (const s of segs) { if (filter && !filter(s)) continue; const d = rmSegD(xm, ym, s.ax, s.ay, s.bx, s.by) - s.w / 2; if (d < bd) { bd = d; best = s; } }
+    return best ? { s: best, d: bd } : null;
+  }
+  const Q = rmSegGrid(segs), G = Q.G, q = ++RM_SQ;
+  const test = s => { if (s._q === q) return; s._q = q; if (filter && !filter(s)) return; const d = rmSegD(xm, ym, s.ax, s.ay, s.bx, s.by) - s.w / 2; if (d < bd) { bd = d; best = s; } };
+  for (const s of Q.big) test(s);
+  const gx = Math.floor(xm / G), gy = Math.floor(ym / G), K = Math.min(60, Math.ceil(bd / G) + 1);
+  for (let k = 0; k <= K; k++) {
+    for (let dy = -k; dy <= k; dy++) {
+      const edge = dy === -k || dy === k, st = edge ? 1 : 2 * k;
+      for (let dx = -k; dx <= k; dx += st) { const a = Q.m.get((gx + dx) * 100003 + (gy + dy)); if (a) for (const s of a) test(s); }
+    }
+    if (bd <= k * G) break;   // everything further out is at least k buckets away
+  }
   return best ? { s: best, d: bd } : null;
 }
 // EOF part 3 (realgen.js continues)
@@ -254,9 +295,25 @@ function rmLandAt(C, xm, ym) {
   for (const L of C.land) { if (L.src !== "lu" || xm < L.bb[0] || xm > L.bb[2] || ym < L.bb[1] || ym > L.bb[3]) continue; if (rmPipPoly(xm, ym, L.pg)) { out = L.cls; break; } }
   return out;
 }
-function rmClassify(bd, poi, lu, cls, r) {
-  const A = bd.area, tall = bd.h >= 16;
+function rmClassify(bd, poi, lu, cls, r, fr) {
+  // v14.3: a building is what the evidence says it is. A business needs a POI inside (or a named one at its door);
+  // without one, homes stay homes — Microsoft footprints and residential land use are homes, and so is any modest
+  // building unless commercial land use, downtown or a busy-road frontage says otherwise, and even then the guess is a
+  // generic store / shop / office: never a made-up restaurant, bar or café.
+  const A = rmRealA(bd.area), tall = bd.h >= 16, ms = bd.src === "ms", front = !!fr;
   let type = "commercial", kind = "store", name = "", cat = "";
+  const home = () => {
+    if (A < 45) { type = "shed"; kind = "garage"; }
+    else if (A < 400) { type = "house"; kind = "house"; }
+    else if (A < 2500) { type = cls === CL_INDUSTRIAL ? "warehouse" : "apartment"; kind = type; }
+    else { const res = cls === CL_SUBURB || cls === CL_URBAN || cls === CL_DOWNTOWN; type = res ? "rpoly" : "warehouse"; kind = res ? "apartment" : "warehouse"; }
+  };
+  const biz = (pool) => {
+    if (A < 45) { type = "shed"; kind = "shed"; }
+    else if (tall || (A > 2600 && cls === CL_DOWNTOWN)) { type = "commercial"; kind = "office"; }
+    else if (A > 3500) { type = "rpoly"; kind = "store"; }
+    else { type = "commercial"; kind = cPick(r, pool); }
+  };
   if (poi) {
     const m = RM_POI[poi.cls] || RM_POI[poi.sub];
     if (m) { type = m[0]; kind = m[1]; }
@@ -269,24 +326,19 @@ function rmClassify(bd, poi, lu, cls, r) {
     if (poi.cls === "lodging" && (poi.sub === "motel" || A < 900)) kind = "hotel";
     if (poi.cls === "library" && poi.sub === "books") kind = "shop";
     if (poi.cls === "town_hall" && poi.sub === "community_centre") kind = "council";
+    if (!m && !poi.name) home();   // an unnamed, unknown tag says nothing
     name = poi.name || ""; cat = poi.sub || poi.cls;
   } else if (lu === "industrial" || lu === "railway" || lu === "garages" || lu === "quarry") {
     type = A < 45 ? "shed" : "warehouse"; kind = A < 45 ? "shed" : "warehouse";
   } else if (lu === "school" || lu === "college" || lu === "university" || lu === "kindergarten") {
     type = A < 120 ? "shed" : "civic"; kind = A < 120 ? "shed" : "school";
   } else if (lu === "hospital") { type = A < 120 ? "shed" : "civic"; kind = A < 120 ? "shed" : "clinic"; }
-  else if (lu === "commercial" || lu === "retail" || cls === CL_DOWNTOWN || (cls === CL_URBAN && A > 260)) {
-    if (A < 45) { type = "shed"; kind = "shed"; }
-    else if (tall || A > 2600 && cls === CL_DOWNTOWN) { type = "commercial"; kind = "office"; }
-    else if (A > 3500) { type = "rpoly"; kind = r() < 0.5 ? "store" : "grocery"; }
-    else { type = "commercial"; kind = cPick(r, lu === "retail" ? ["store", "shop", "diner", "pharmacy", "cafe", "store", "hardware", "laundromat"] : ["office", "store", "diner", "bank", "bar", "cafe", "shop", "office", "autorepair", "post"]); }
-  } else if (lu === "farmyard" || cls === CL_FARM && A > 150 && A < 900 && r() < 0.5) { type = A < 60 ? "shed" : "barn"; kind = type; }
-  else {   // homes by default (most of America)
-    if (A < 45) { type = "shed"; kind = "garage"; }
-    else if (A < 330) { type = "house"; kind = "house"; }
-    else if (A < 2500) { type = cls === CL_INDUSTRIAL ? "warehouse" : "apartment"; kind = cls === CL_INDUSTRIAL ? "warehouse" : "apartment"; }
-    else { type = cls === CL_SUBURB || cls === CL_URBAN ? "rpoly" : "warehouse"; kind = cls === CL_SUBURB ? "apartment" : "warehouse"; }
-  }
+  else if (lu === "residential") home();
+  else if (lu === "commercial" || lu === "retail") { if (ms && A < 260 && !front) home(); else biz(lu === "retail" ? ["store", "shop", "store", "shop", "pharmacy", "office"] : ["office", "store", "shop", "office"]); }
+  else if (cls === CL_DOWNTOWN) { if (tall || A > 1500) biz(["office", "office", "store", "shop"]); else if (front && A >= 120 && !ms) biz(["store", "shop", "office"]); else home(); }
+  else if (cls === CL_URBAN && front && A >= 250 && !ms) biz(["store", "shop", "office", "office"]);
+  else if (lu === "farmyard" || cls === CL_FARM && A > 150 && A < 900 && r() < 0.5) { type = A < 60 ? "shed" : "barn"; kind = type; }
+  else home();
   const mat = type === "house" ? (r() < 0.62 ? "wood" : "brick") : type === "warehouse" || kind === "autorepair" ? "metal" : type === "civic" || type === "church" ? "masonry" : (r() < 0.5 ? "brick" : "masonry");
   return { type, kind, name, cat, mat };
 }
@@ -312,7 +364,7 @@ function rmFrame(bd, segs) {
   const snap = al < 0.044 || al > Math.PI / 2 - 0.044;
   if (snap) al = 0;
   // the street side: toward the nearest real road (paths and rails don't count)
-  const [cx, cy] = bd.c, nr = rmNearestSeg(segs, cx, cy, 140, s => s.r.rank >= 1 && s.r.svc !== "parking_aisle");
+  const [cx, cy] = bd.c, nr = rmNearestSeg(segs, cx, cy, Math.max(30, 140 * RM.S), s => s.r.rank >= 1 && s.r.svc !== "parking_aisle");
   let dx = 0, dy = 1;
   if (nr) { const s = nr.s, ddx = s.bx - s.ax, ddy = s.by - s.ay, L2 = ddx * ddx + ddy * ddy || 1, t = Math.max(0, Math.min(1, ((cx - s.ax) * ddx + (cy - s.ay) * ddy) / L2)); dx = s.ax + ddx * t - cx; dy = s.ay + ddy * t - cy; const L = Math.hypot(dx, dy) || 1; dx /= L; dy /= L; }
   let bk = 0, bdot = -9;
@@ -412,20 +464,22 @@ ICT.rpoly = function (G, b, r) {
   const E1 = new Uint8Array(W * H);
   for (let y = 0; y < H; y++) { const o = y * W; for (let x = 0; x < W; x++) { const i = o + x; E1[i] = M[i] && x > 0 && x < W - 1 && M[i - 1] && M[i + 1] ? 1 : 0; } }
   let nIn = 0;
-  for (let y = 0; y < H; y++) { const o = y * W; for (let x = 0; x < W; x++) { const i = o + x; if (!M[i]) continue; nIn++; G.c[i] = (y > 0 && y < H - 1 && E1[i] && E1[i - W] && E1[i + W]) ? IC_FLOOR : IC_EXT; } }
+  const thin = IC_FS < 1;   // v14.3: scaled maps — one-cell walls (4-neighbour test); small plans can't spare a double wall
+  for (let y = 0; y < H; y++) { const o = y * W; for (let x = 0; x < W; x++) { const i = o + x; if (!M[i]) continue; nIn++; G.c[i] = (y > 0 && y < H - 1 && E1[i] && (thin ? M[i - W] && M[i + W] : E1[i - W] && E1[i + W])) ? IC_FLOOR : IC_EXT; } }
   G.parts.push({ x: 0, y: 0, w: W, h: H, poly: 1 });
-  if (nIn < 30) { G.rooms.length = 0; const rm = icRoom(G, P.front === "living" ? "storage" : P.front, 1, 1, W - 2, H - 2); rmExtDoors(G, [rm], r, 2); G.spawnRooms = [rm.id]; return; }
+  if (nIn < 30 || (P.front === "living" && nIn < 64)) { G.rooms.length = 0; const fb = rmFloorBox(G, null); const rm = icRoom(G, P.front === "living" || P.front === "lobby" && b.kind === "apartment" ? "studio" : P.front, fb[0], fb[1], fb[2], fb[3]); rmExtDoors(G, [rm], r, 2); G.spawnRooms = [rm.id]; return; }
+  const PSZ = P.sz * Math.max(RM.S, 0.4);   // v14.3: rooms sized for the map scale (a 1:3 house still gets its rooms)
   // floor counts by summed-area table (walls added while splitting are ignored: close enough to size rooms)
   const SAT = new Int32Array((W + 1) * (H + 1));
   for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += G.c[y * W + x] === IC_FLOOR ? 1 : 0; SAT[(y + 1) * (W + 1) + x + 1] = SAT[y * (W + 1) + x + 1] + row; } }
   const floorIn = (x0, y0, w, h) => { const a = Math.max(0, x0), b2 = Math.max(0, y0), c = Math.min(W, x0 + w), d = Math.min(H, y0 + h); if (c <= a || d <= b2) return 0; return SAT[d * (W + 1) + c] - SAT[b2 * (W + 1) + c] - SAT[d * (W + 1) + a] + SAT[b2 * (W + 1) + a]; };
   const lineFloor = (x0, y0, w, h) => { let n = 0; for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (icGet(G, x, y) === IC_FLOOR) n++; return n; };
   // huge plans: fewer, bigger rooms (≈ 40 at most), so planning + furnishing stay a few ms
-  const big = nIn > 4000, leaves = [], szK = Math.max(1, nIn / 42 / P.sz);
+  const big = nIn > 4000, leaves = [], szK = Math.max(1, nIn / 42 / PSZ);
   // the public front: a band along the street side (big halls get most of the depth)
   const frontD = Math.max(6, Math.round((H - 2) * (P.hall && big ? cRange(r, 0.62, 0.74) : P.rooms.length ? cRange(r, 0.42, 0.55) : 1)));
   const split = (R, depth, isFront) => {
-    const n = floorIn(R.x, R.y, R.w, R.h), target = (isFront ? (P.hall ? 1e9 : P.sz * 2.2) : P.sz) * szK;
+    const n = floorIn(R.x, R.y, R.w, R.h), target = (isFront ? (P.hall ? 1e9 : PSZ * 2.2) : PSZ) * szK;
     if (n < target * 1.6 || depth > 9 || (R.w < 9 && R.h < 9)) { if (n >= 6) leaves.push(Object.assign({ front: !!isFront }, R)); return; }
     const vert = R.w > R.h * 1.2 ? true : R.h > R.w * 1.2 ? false : r() < 0.5;
     for (let tr = 0; tr < 6; tr++) {
@@ -561,6 +615,94 @@ function rmPolyWindows(G, r, p) {
     else for (let x = 0; x < W; x++) { let run = 0; for (let y = 0; y <= H; y++) { if (y < H && isW(x, y, dx, dy)) run++; else { if (run >= 5) for (let k = y - run + 2; k + 2 < y - 1; k += 6) if (r() < p) { icSet(G, x, k, IC_WIN); icSet(G, x, k + 1, IC_WIN); } run = 0; } } }
   }
 }
+/* v14.3: interiors at map scale ---------------------------------------------------------------------------------- */
+// furniture shrinks with the map (fs = 1.5·S, between 0.5 and 1) so a 1:3 bedroom still holds a bed; doorways stay
+// hero-sized (2 cells). Vehicles parked inside (garages, fire stations) are scaled exactly like the ones outside.
+let IC_FS = 1;
+function rmFurnScale() { return Math.max(0.5, Math.min(1, 1.5 * RM.S)); }
+const RM_VEH_FURN = new Set(["car", "firetruck", "forklift", "tractor", "carlift"]);
+(function rmScaleFurniture() {
+  const q = v => Math.max(1, Math.round(v * IC_FS));
+  if (typeof icWall === "function") { const _w = icWall; window.icWall = icWall = function (G, room, r, t, w, d, s, sides, opt) { if (IC_FS >= 1) return _w(G, room, r, t, w, d, s, sides, opt); if (RM_VEH_FURN.has(t)) { const f = _w(G, room, r, t, Math.max(1, Math.ceil(w * RM.S)), Math.max(1, Math.ceil(d * RM.S)), s, sides, opt); if (f) { f.k = RM.S; f.dw = w; f.dh = d; } return f; } if (opt && opt.pad) opt = Object.assign({}, opt, { pad: q(opt.pad) }); return _w(G, room, r, t, q(w), q(d), s, sides, opt); }; }
+  if (typeof icCenter === "function") { const _c = icCenter; window.icCenter = icCenter = function (G, room, t, w, h, s, o, margin, v) { if (IC_FS >= 1) return _c(G, room, t, w, h, s, o, margin, v); if (RM_VEH_FURN.has(t)) { const f = _c(G, room, t, Math.max(1, Math.ceil(w * RM.S)), Math.max(1, Math.ceil(h * RM.S)), s, o, margin, v); if (f) { f.k = RM.S; f.dw = w; f.dh = h; } return f; } return _c(G, room, t, q(w), q(h), s, o, margin, v); }; }
+  if (typeof icRows === "function") { const _r = icRows; window.icRows = icRows = function (G, room, t, len, depth, gap, s, axis, opt) { if (IC_FS >= 1) return _r(G, room, t, len, depth, gap, s, axis, opt); opt = Object.assign({}, opt || {}); if (opt.margin !== undefined) opt.margin = q(opt.margin); if (opt.split) opt.split = q(opt.split); if (opt.minLen) opt.minLen = q(opt.minLen); return _r(G, room, t, q(len), q(depth), q(gap), s, axis, opt); }; }
+  if (typeof icTableSet === "function") { const _t = icTableSet; window.icTableSet = icTableSet = function (G, room, r, tw, th, chairs, t) { if (IC_FS >= 1) return _t(G, room, r, tw, th, chairs, t); const fs = IC_FS, a = q(tw), b = q(th); IC_FS = 1; try { return _t(G, room, r, a, b, chairs, t); } finally { IC_FS = fs; } }; }
+  if (typeof icFurnish === "function") { const _f = icFurnish; window.icFurnish = icFurnish = function (G, room, r, theme) { if (room && room.type === "studio") return rmFurnishStudio(G, room, r); return _f(G, room, r, theme); }; }
+  if (typeof CR_ROOMCAT !== "undefined") CR_ROOMCAT.studio = "living";
+  // small real homes: a studio (one room you live in) or living room + bedroom — never a "storage" room
+  if (typeof ICT !== "undefined" && ICT.rgbox) {
+    const _rgb = ICT.rgbox;
+    ICT.rgbox = function (G, b, r) {
+      if (b.rmPolyKind === undefined || b.rgGarage || (b.kind !== "house" && b.kind !== "apartment")) return _rgb(G, b, r);
+      if (IC_FS < 1) return rmSmallHome(G, b, r);
+      const W = G.w, H = G.h;
+      icRect(G, 0, 0, W, H);
+      let main;
+      if (Math.max(W, H) >= 16 && Math.min(W, H) >= 8) {
+        let bed;
+        if (W >= H) { const sx = Math.round(W * cRange(r, 0.52, 0.6)); icVWall(G, sx, 1, H - 2); main = icRoom(G, "living", 1, 1, sx - 1, H - 2); bed = icRoom(G, "bed", sx + 1, 1, W - sx - 2, H - 2); }
+        else { const sy = Math.round(H * cRange(r, 0.4, 0.48)); icHWall(G, sy, 1, W - 2); bed = icRoom(G, "bed", 1, 1, W - 2, sy - 1); main = icRoom(G, "living", 1, sy + 1, W - 2, H - sy - 2); }
+        icConnect(G, main, bed, r, 2); icWindows(G, bed, r, 2, 4, true);
+      } else main = icRoom(G, "studio", 1, 1, W - 2, H - 2);
+      icExtDoor(G, main, 2, r, 2, IC_EDOOR, Math.floor((main.w - 2) / 2));
+      icWindows(G, main, r, 2, 4);
+      G.spawnRooms = [main.id];
+    };
+  }
+})();
+// v14.3: the bounding box of a room's floor cells (or of all floor cells) — odd-shaped plans put walls inside a
+// room's split rectangle, and furniture that hugs "the wall" must hug a real one
+function rmFloorBox(G, room) {
+  let x0 = G.w, y0 = G.h, x1 = -1, y1 = -1;
+  for (let y = 0; y < G.h; y++) for (let x = 0; x < G.w; x++) {
+    const i = y * G.w + x; if (G.c[i] !== IC_FLOOR || (room && G.rm[i] !== room.id)) continue;
+    if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return x1 < 0 ? [1, 1, Math.max(1, G.w - 2), Math.max(1, G.h - 2)] : [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
+}
+function rmTightRooms(G) {
+  for (const room of G.rooms) { const fb = rmFloorBox(G, room); if (fb[2] > 0 && fb[3] > 0 && (fb[0] !== room.x || fb[1] !== room.y || fb[2] !== room.w || fb[3] !== room.h)) { room.x = fb[0]; room.y = fb[1]; room.w = fb[2]; room.h = fb[3]; } }
+}
+// small real homes at map scale: a studio, living + bed, or living + kitchen + bed — always furnishable
+function rmSmallHome(G, b, r) {
+  const W = G.w, H = G.h;
+  icRect(G, 0, 0, W, H);
+  let main;
+  const long = Math.max(W, H), short = Math.min(W, H);
+  if (long >= 22 && short >= 10) {
+    let kit, bed;
+    if (W >= H) { const a = Math.round(W * 0.42), c = Math.round(W * 0.72); icVWall(G, a, 1, H - 2); icVWall(G, c, 1, H - 2); main = icRoom(G, "living", 1, 1, a - 1, H - 2); kit = icRoom(G, "kitchen", a + 1, 1, c - a - 1, H - 2); bed = icRoom(G, "bed", c + 1, 1, W - c - 2, H - 2); }
+    else { const a = Math.round(H * 0.3), c = Math.round(H * 0.58); icHWall(G, a, 1, W - 2); icHWall(G, c, 1, W - 2); bed = icRoom(G, "bed", 1, 1, W - 2, a - 1); kit = icRoom(G, "kitchen", 1, a + 1, W - 2, c - a - 1); main = icRoom(G, "living", 1, c + 1, W - 2, H - c - 2); }
+    icConnect(G, main, kit, r, 2); icConnect(G, kit, bed, r, 2); icWindows(G, bed, r, 2, 4, true);
+  } else if (long >= 14 && short >= 7) {
+    let bed;
+    if (W >= H) { const sx = Math.round(W * cRange(r, 0.52, 0.6)); icVWall(G, sx, 1, H - 2); main = icRoom(G, "living", 1, 1, sx - 1, H - 2); bed = icRoom(G, "bed", sx + 1, 1, W - sx - 2, H - 2); }
+    else { const sy = Math.round(H * cRange(r, 0.4, 0.48)); icHWall(G, sy, 1, W - 2); bed = icRoom(G, "bed", 1, 1, W - 2, sy - 1); main = icRoom(G, "living", 1, sy + 1, W - 2, H - sy - 2); }
+    icConnect(G, main, bed, r, 2); icWindows(G, bed, r, 2, 4, true);
+  } else main = icRoom(G, "studio", 1, 1, W - 2, H - 2);
+  icExtDoor(G, main, 2, r, 2, IC_EDOOR, Math.floor((main.w - 2) / 2));
+  icWindows(G, main, r, 2, 4);
+  G.spawnRooms = [main.id];
+}
+(function rmPlanFixes() {
+  if (typeof ICT === "undefined") return;
+  // rectangular real homes (and the square-to-the-walls plans of angled ones) use the small-home program on scaled maps
+  if (ICT.house) { const _h = ICT.house; ICT.house = function (G, b, r) { if (IC_FS < 1 && b && (b.kind === "house" || b.kind === "apartment") && G.w * G.h < 1600) return rmSmallHome(G, b, r); return _h(G, b, r); }; }
+  if (ICT.apartment) { const _a = ICT.apartment; ICT.apartment = function (G, b, r) { if (IC_FS < 1 && G.w * G.h < 700) return rmSmallHome(G, b, r); return _a(G, b, r); }; }
+  if (ICT.rpoly) { const _rp = ICT.rpoly; ICT.rpoly = function (G, b, r) { const out = _rp(G, b, r); if (IC_FS < 1) rmTightRooms(G); return out; }; }
+})();
+// a one-room home: bed in a corner, a kitchenette on another wall, a sofa or armchair, a TV, a small table if it fits
+function rmFurnishStudio(G, room, r) {
+  icWall(G, room, r, "bed", 2, 4, FS_LOW, [0, 1, 3], { corner: true });
+  icWall(G, room, r, "fridge", 2, 2, FS_TALL, [0, 1, 3], { corner: true });
+  icWall(G, room, r, "counter", Math.max(2, Math.min(5, room.w - 4)), 1, FS_LOW, [0, 1, 3], { v: 1, pad: 1 });
+  icWall(G, room, r, "stove", 2, 1, FS_LOW, [0, 1, 3], { pad: 1 });
+  if (!icWall(G, room, r, "sofa", 4, 2, FS_LOW, [1, 2, 3])) icWall(G, room, r, "armchair", 2, 2, FS_LOW, [0, 1, 2, 3], { corner: true });
+  icWall(G, room, r, "tvstand", 3, 1, FS_LOW, [0, 1, 2, 3]);
+  if (room.w * room.h >= 36) icTableSet(G, room, r, 2, 2);
+  icWall(G, room, r, "lamp", 1, 1, FS_NONE, [0, 1, 2, 3], { corner: true });
+  icWall(G, room, r, "plant", 1, 1, FS_LOW, [0, 1, 2, 3], { corner: true });
+}
 // EOF part 5 (realgen.js continues)
 
 /* --- 6. ANGLED BUILDINGS: plan square to the walls, resample onto the world grid ------- */
@@ -599,7 +741,7 @@ function rmInteriorRot(b) {
   G.furn = Gl.furn.map(f => {
     const B = box(f.x, f.y, f.w, f.h), pc = [];
     for (let y = B.y; y < B.y + B.h; y++) for (let x = B.x; x < B.x + B.w; x++) { const [u, v] = X.toL(x + 0.5, y + 0.5); if (u >= f.x && u <= f.x + f.w && v >= f.y && v <= f.y + f.h) pc.push(x, y); }
-    return { t: f.t, x: B.x, y: B.y, w: B.w, h: B.h, o: f.o, s: f.s, v: f.v, lf: f, pc };
+    return { t: f.t, x: B.x, y: B.y, w: B.w, h: B.h, o: f.o, s: f.s, v: f.v, k: f.k, lf: f, pc };
   });
   G.spawnRooms = Gl.spawnRooms.slice(); G.parts = [{ x: 0, y: 0, w: W, h: H }]; G.arch = []; G.doors = []; G.occ = null; G.local = Gl;
   b.int = G; CITY.interiorCount = (CITY.interiorCount || 0) + 1;
@@ -607,12 +749,16 @@ function rmInteriorRot(b) {
 }
 if (RM_CI0) window.cityInterior = cityInterior = function (b) {
   if (b.int) return b.int;
+  const fs0 = IC_FS; if (b.rm) IC_FS = rmFurnScale();
+  try { return rmInteriorOf(b); } finally { IC_FS = fs0; }
+};
+function rmInteriorOf(b) {
   let G;
   if (b.type === "rmrot") { try { G = rmInteriorRot(b); } catch (e) { if (window.trackProgress) window.trackProgress("rmInteriorRot: " + e.message, true); b.type = "rpoly"; b.rmPoly = null; b.rot = 0; b.cw = b.w; b.ch = b.h; b.int = null; } }
   if (!G) G = RM_CI0(b);
   if (b.rm) try { rmEnsureExit(b, G); } catch (e) { if (window.trackProgress) window.trackProgress("rmEnsureExit: " + e.message, true); }
   return G;
-};
+}
 // real buildings stand shoulder to shoulder: make sure at least one doorway opens onto open ground (not a neighbour's
 // wall, not water); otherwise cut one, preferring the side that faces the street
 function rmEnsureExit(b, G) {
@@ -657,36 +803,34 @@ function rmCellOutside(mx, my) {   // the whole cell lies beyond the outer barri
 }
 function rmGenBlock(mx, my, i, j, key) {
   const S = cityCell(mx, my), zero = { r: 0, w: 0, sw: 0, hw: false, k: 0 };
-  const B = { key, mx, my, i, j, cls: S.cls, seed: cH(CITY.seed, mx * 64 + my, i * 16 + j, 4247), x0: mx * 2000, x1: (mx + 1) * 2000, y0: my * 2000, y1: (my + 1) * 2000,
+  const rx0 = S.vx[i] ? S.vx[i].x : mx * 1000, rx1 = S.vx[i + 1] ? S.vx[i + 1].x : (mx + 1) * 1000, ry0 = S.hy[j] ? S.hy[j].y : my * 1000, ry1 = S.hy[j + 1] ? S.hy[j + 1].y : (my + 1) * 1000;
+  const B = { key, mx, my, i, j, cls: S.cls, seed: cH(CITY.seed, mx * 64 + my, i * 16 + j, 4247), x0: Math.round(rx0 * 2), x1: Math.round(rx1 * 2), y0: Math.round(ry0 * 2), y1: Math.round(ry1 * 2), rx0, rx1, ry0, ry1,
     side: { N: zero, S: zero, W: zero, E: zero }, blds: [], props: [], surf: [], fences: [], spawns: [], rm: 1, segs: [] };
   if (rmCellOutside(mx, my)) { B.outer = 1; return B; }
   const C = rmCellData(mx, my);
   if (!C) { B.pending = 1; if (RM.on) rmRequest(rmCellKeys(mx, my), 8); return B; }
   B.rmd = C;
-  const r = cRng(B.seed);
+  const r = cRng(B.seed), z = RM.S;
   try {
-    B.segs = rmCellRoads(mx, my, C);
-    rmRefineClass(mx, my, C, C.blds); B.cls = cityMacroClass(mx, my);
-    // which business is in which building: POIs inside the outline, else a named POI the door is mapped next to
-    const own = new Map(), taken = new Set();
-    for (const bd of C.blds) { if (bd.area < 12) continue; const p = rmPoiFor(C.pois, bd); if (p) { own.set(bd, p); taken.add(p); } }
-    for (const p of C.pois) {
-      if (!p.name || taken.has(p) || !(RM_POI[p.cls] || RM_POI[p.sub])) continue;
-      let best = null, bd2 = 14;
-      for (const bd of C.blds) { if (own.has(bd) || bd.area < 40) continue; const dx = Math.max(bd.bb[0] - p.x, 0, p.x - bd.bb[2]), dy = Math.max(bd.bb[1] - p.y, 0, p.y - bd.bb[3]), d = Math.hypot(dx, dy); if (d < bd2) { bd2 = d; best = bd; } }
-      if (best) { own.set(best, p); taken.add(p); }
-    }
+    // the cell-wide work (roads, who owns which POI, parts inside bigger outlines) is done once per cell
+    const X = rmCellIndex(mx, my, C), m = 150;
+    B.segs = X.segs.filter(s => Math.max(s.ax, s.bx) >= rx0 - m && Math.min(s.ax, s.bx) <= rx1 + m && Math.max(s.ay, s.by) >= ry0 - m && Math.min(s.ay, s.by) <= ry1 + m);
+    B.cls = cityMacroClass(mx, my);
+    const major = B.segs.filter(s => s.r.rank >= 5 && s.r.rank <= 8 && !s.r.hwy && s.r.br !== "bridge");
     let n = 0;
-    const kept = [], order = C.blds.slice().sort((p, q) => q.area - p.area);
-    for (const bd of order) {
-      if (bd.area < 6) continue;
-      if (kept.some(k => bd.c[0] >= k.bb[0] && bd.c[0] <= k.bb[2] && bd.c[1] >= k.bb[1] && bd.c[1] <= k.bb[3] && rmPipPoly(bd.c[0], bd.c[1], k.pg))) continue;   // a part / store mapped inside a bigger outline
-      if (bd.area >= 12) kept.push(bd);
+    for (const bd of X.order) {
+      if (bd.c[0] < rx0 || bd.c[0] >= rx1 || bd.c[1] < ry0 || bd.c[1] >= ry1 || X.hidden.has(bd)) continue;
       if (bd.bb[0] < RM_LO + RM_HWY_BAND || bd.bb[1] < RM_LO + RM_HWY_BAND || bd.bb[2] > RM_HI - RM_HWY_BAND || bd.bb[3] > RM_HI - RM_HWY_BAND) continue;
       if (!rmInsideRing(bd.c[0], bd.c[1])) continue;
-      if (bd.area < 12) { const pg = bd.pg[0], tp = []; for (let k = 0; k < pg.length; k += 2) tp.push([pg[k] * 2, pg[k + 1] * 2]); addProp(B, "rmbox", bd.bb[0] * 2, bd.bb[1] * 2, (bd.bb[2] - bd.bb[0]) * 2, (bd.bb[3] - bd.bb[1]) * 2, FS_TALL, { pg: tp, es: FS_TALL, hgt: bd.h }); continue; }
-      const poi = own.get(bd) || null, lu = poi ? null : rmLandAt(C, bd.c[0], bd.c[1]);
-      const info = rmClassify(bd, poi, lu, B.cls, r), F = rmFrame(bd, B.segs);
+      const A = rmRealA(bd.area);
+      if (A < 12) { const pg = bd.pg[0], tp = []; for (let k = 0; k < pg.length; k += 2) tp.push([pg[k] * 2, pg[k + 1] * 2]); addProp(B, "rmbox", bd.bb[0] * 2, bd.bb[1] * 2, Math.max(1, (bd.bb[2] - bd.bb[0]) * 2), Math.max(1, (bd.bb[3] - bd.bb[1]) * 2), FS_TALL, { pg: tp, es: FS_TALL, hgt: bd.h }); continue; }
+      const poi = X.own.get(bd) || null, lu = poi ? null : rmLandAt(C, bd.c[0], bd.c[1]);
+      // a busy-road frontage: a primary / secondary road within ~14 real m of the walls
+      let fr = null;
+      if (!poi && major.length) { const nr = rmNearestSeg(major, bd.c[0], bd.c[1], 60 * z + Math.sqrt(bd.area)); if (nr && nr.d - Math.sqrt(bd.area) / 2 < 14 * z) fr = nr; }
+      const info = rmClassify(bd, poi, lu, B.cls, r, fr), F = rmFrame(bd, B.segs);
+      // v14.3: on a scaled map a one-car garage or a garden shed is too small to walk into — a solid outbuilding instead
+      if (z < 1 && (bd.area < 2.5 || ((info.kind === "garage" || info.kind === "shed") && bd.area < 7))) { const pg = bd.pg[0], tp = []; for (let k = 0; k < pg.length; k += 2) tp.push([pg[k] * 2, pg[k + 1] * 2]); addProp(B, "rmbox", bd.bb[0] * 2, bd.bb[1] * 2, Math.max(1, (bd.bb[2] - bd.bb[0]) * 2), Math.max(1, (bd.bb[3] - bd.bb[1]) * 2), FS_TALL, { pg: tp, es: FS_TALL, hgt: bd.h }); continue; }
       if (F.W * F.H > 1440000) { const pg = bd.pg[0], tp = []; for (let k = 0; k < pg.length; k += 2) tp.push([pg[k] * 2, pg[k + 1] * 2]); addProp(B, "rmbox", bd.bb[0] * 2, bd.bb[1] * 2, (bd.bb[2] - bd.bb[0]) * 2, (bd.bb[3] - bd.bb[1]) * 2, FS_TALL, { pg: tp, es: FS_TALL, hgt: bd.h, name: info.name }); continue; }
       const b = rmMakeBuilding(B, bd, info, F, n++);
       rmBldSpawns(B, b, r);
@@ -697,79 +841,173 @@ function rmGenBlock(mx, my, i, j, key) {
   } catch (e) { if (window.trackProgress) window.trackProgress("rmGenBlock " + key + ": " + e.message, true); else throw e; }
   return B;
 }
+// v14.3: the km cell's shared work, once — its roads, which building owns which POI, the parts mapped inside bigger
+// outlines — with spatial buckets, so a 1:3 cell (9 real km², tens of thousands of buildings) costs milliseconds
+function rmCellIndex(mx, my, C) {
+  const ck = mx * 64 + my;
+  let X = RMG.cellIdx.get(ck);
+  if (X && X.C === C) return X;
+  const t0 = performance.now(), z = RM.S, G = 48, A = bd => rmRealA(bd.area);
+  const kx = v => Math.floor(v / G) + 4096, key = (gx, gy) => gx * 8192 + gy;
+  const addBox = (M, bb, o) => { for (let gx = kx(bb[0]); gx <= kx(bb[2]); gx++) for (let gy = kx(bb[1]); gy <= kx(bb[3]); gy++) { const k = key(gx, gy); let a = M.get(k); if (!a) M.set(k, a = []); a.push(o); } };
+  const segs = rmCellRoads(mx, my, C);
+  rmRefineClass(mx, my, C, C.blds);
+  const pg = new Map(), bg = new Map();
+  for (const p of C.pois) { const k = key(kx(p.x), kx(p.y)); let a = pg.get(k); if (!a) pg.set(k, a = []); a.push(p); }
+  // POIs inside an outline (the highest priority one names the building)
+  const own = new Map(), taken = new Set();
+  for (const bd of C.blds) {
+    if (A(bd) < 12) continue;
+    addBox(bg, bd.bb, bd);
+    const b = bd.bb; let best = null, bp = -1;
+    for (let gx = kx(b[0] - 1); gx <= kx(b[2] + 1); gx++) for (let gy = kx(b[1] - 1); gy <= kx(b[3] + 1); gy++) {
+      const a = pg.get(key(gx, gy)); if (!a) continue;
+      for (const p of a) {
+        if (p.x < b[0] - 1 || p.x > b[2] + 1 || p.y < b[1] - 1 || p.y > b[3] + 1 || !rmPipPoly(p.x, p.y, bd.pg)) continue;
+        const m = RM_POI[p.cls] || RM_POI[p.sub], pr = (m ? m[2] : 1) + (p.name ? 2 : 0);
+        if (pr > bp) { bp = pr; best = p; }
+      }
+    }
+    if (best) { own.set(bd, best); taken.add(best); }
+  }
+  // a named business mapped beside its building (at the door): the nearest building within 6 real m that does not look
+  // like a home (Microsoft footprints and small outlines are homes; so is anything in residential land use)
+  const pinR = Math.max(2, 6 * z);
+  for (const p of C.pois) {
+    if (!p.name || taken.has(p) || !(RM_POI[p.cls] || RM_POI[p.sub])) continue;
+    let best = null, bd2 = pinR;
+    for (let gx = kx(p.x - pinR); gx <= kx(p.x + pinR); gx++) for (let gy = kx(p.y - pinR); gy <= kx(p.y + pinR); gy++) {
+      const a = bg.get(key(gx, gy)); if (!a) continue;
+      for (const bd of a) {
+        if (own.has(bd) || bd.src === "ms" || A(bd) < 120) continue;
+        const dx = Math.max(bd.bb[0] - p.x, 0, p.x - bd.bb[2]), dy = Math.max(bd.bb[1] - p.y, 0, p.y - bd.bb[3]), d = Math.hypot(dx, dy);
+        if (d < bd2) { bd2 = d; best = bd; }
+      }
+    }
+    if (best && rmLandAt(C, best.c[0], best.c[1]) !== "residential") { own.set(best, p); taken.add(p); }
+  }
+  // parts / stores mapped inside a bigger outline are not separate buildings (largest first)
+  const order = C.blds.filter(bd => A(bd) >= 6).sort((p, q) => q.area - p.area), hidden = new Set(), kg = new Map();
+  for (const bd of order) {
+    const a = kg.get(key(kx(bd.c[0]), kx(bd.c[1])));
+    if (a && a.some(o => bd.c[0] >= o.bb[0] && bd.c[0] <= o.bb[2] && bd.c[1] >= o.bb[1] && bd.c[1] <= o.bb[3] && rmPipPoly(bd.c[0], bd.c[1], o.pg))) { hidden.add(bd); continue; }
+    if (A(bd) >= 12) addBox(kg, bd.bb, bd);
+  }
+  X = { C, segs, own, order, hidden, ms: performance.now() - t0 };
+  RMG.cellIdx.set(ck, X);
+  if (RMG.cellIdx.size > 24) RMG.cellIdx.delete(RMG.cellIdx.keys().next().value);
+  return X;
+}
+// the roads of a cell whose data is in (null while it streams)
+function rmCellSegsAt(mx, my) { if (mx < 0 || my < 0 || mx > 63 || my > 63) return null; const C = rmCellData(mx, my); return C ? rmCellIndex(mx, my, C).segs : null; }
+// v14.3: the km cell's block grid (zero-width organic lines) — see rmBlocksPerCell
+function rmCellStreets(mx, my) {
+  const cls = cityMacroClass(mx, my), n = rmBlocksPerCell(), vx = [], hy = [];
+  for (let k = 0; k <= n; k++) {
+    const e = k === 0 || k === n;
+    vx.push({ x: mx * 1000 + 1000 * k / n, r: 0, w: 0, hw: false, sw: 0, k: 0, km: mx, org: 1, closing: e });
+    hy.push({ y: my * 1000 + 1000 * k / n, r: 0, w: 0, hw: false, sw: 0, k: 0, km: my, org: 1, closing: e });
+  }
+  return { cls, vx, hy, org: 1, rmN: n };
+}
 function rmBldSpawns(B, b, r) {
-  const t = b.planType || b.type, k = b.kind;
-  let p = 0.5, a = 1, z = 3, heavy = 0.12;
+  const t = b.planType || b.type, k = b.kind, z2 = RM.S * RM.S;
+  let p = 0.5, a = 1, z = 3, heavy = 0.12, keep = z2;
   if (t === "house" || t === "rgbox" || k === "house") { p = 0.2; a = 1; z = 2; heavy = 0.08; }
   else if (t === "shed" || k === "garage" || k === "shed") { p = 0.06; a = 1; z = 1; }
-  else if (k === "police") { p = 0.85; a = 4; z = 7; heavy = 0.4; }
-  else if (k === "fire" || k === "clinic" || k === "hospital") { p = 0.55; a = 2; z = 4; heavy = 0.15; }
+  else if (k === "police") { p = 0.85; a = 4; z = 7; heavy = 0.4; keep = 1; }
+  else if (k === "fire" || k === "clinic" || k === "hospital") { p = 0.55; a = 2; z = 4; heavy = 0.15; keep = Math.max(z2, 0.34); }
   else if (k === "warehouse" || t === "warehouse") { p = 0.4; a = 2; z = 4; heavy = 0.2; }
   else if (k === "apartment" || k === "hotel") { p = 0.45; a = 2; z = 4; }
-  else if (k === "bank") { p = 0.7; a = 2; z = 4; heavy = 0.3; }
-  if (r() < p) addSpawn(B, "room", cInt(r, a, z), { bid: b.id, bkey: b.key, heavy, rmRole: k === "police" ? "police" : "crew" });
+  else if (k === "bank") { p = 0.7; a = 2; z = 4; heavy = 0.3; keep = Math.max(z2, 0.34); }
+  // v14.3: a 1:3 map has 9× the buildings per screen — keep the crowd per screen what it was (police stations keep theirs)
+  if (r() < p * keep) addSpawn(B, "room", cInt(r, a, z), { bid: b.id, bkey: b.key, heavy, rmRole: k === "police" ? "police" : "crew" });
 }
 // a point is clear of buildings (bbox + outline test)
 function rmClearOf(B, xm, ym, pad) {
-  for (const b of B.blds) { const q = b.rm.pg[0], bb = b.rmBB || (b.rmBB = rmBBox(q)); if (xm < bb[0] - pad || xm > bb[2] + pad || ym < bb[1] - pad || ym > bb[3] + pad) continue; if (rmPipPoly(xm, ym, b.rm.pg)) return false; if (pad > 0) for (const [dx, dy] of [[pad, 0], [-pad, 0], [0, pad], [0, -pad]]) if (rmPipPoly(xm + dx, ym + dy, b.rm.pg)) return false; }
+  let G = B.bgrid;
+  if (!G) {
+    G = B.bgrid = new Map();
+    for (const b of B.blds) { const bb = b.rmBB || (b.rmBB = rmBBox(b.rm.pg[0])); for (let gx = Math.floor(bb[0] / 24); gx <= Math.floor(bb[2] / 24); gx++) for (let gy = Math.floor(bb[1] / 24); gy <= Math.floor(bb[3] / 24); gy++) { const k = gx * 8192 + gy; let a = G.get(k); if (!a) G.set(k, a = []); a.push(b); } }
+  }
+  const seen = pad > 0 ? new Set() : null;
+  for (let gx = Math.floor((xm - pad) / 24); gx <= Math.floor((xm + pad) / 24); gx++) for (let gy = Math.floor((ym - pad) / 24); gy <= Math.floor((ym + pad) / 24); gy++) {
+    const a = G.get(gx * 8192 + gy); if (!a) continue;
+    for (const b of a) {
+      if (seen) { if (seen.has(b)) continue; seen.add(b); }
+      const bb = b.rmBB; if (xm < bb[0] - pad || xm > bb[2] + pad || ym < bb[1] - pad || ym > bb[3] + pad) continue;
+      if (rmPipPoly(xm, ym, b.rm.pg)) return false;
+      if (pad > 0) for (const [dx, dy] of [[pad, 0], [-pad, 0], [0, pad], [0, -pad]]) if (rmPipPoly(xm + dx, ym + dy, b.rm.pg)) return false;
+    }
+  }
   return true;
 }
 // crLamp's arm reaches toward -CR_DIR[o]: pick o whose direction points away from the road (lamp → kerb side)
 function rmDirO(ax, ay) { let best = "N", bd = -9; for (const o of ["N", "S", "W", "E"]) { const d = CR_DIR[o], v = d[0] * ax + d[1] * ay; if (v > bd) { bd = v; best = o; } } return best; }
 // inside the band of any real road (parking aisles excluded: their stalls sit beside them)
-function rmOnRoad(B, xm, ym, pad) { for (const s of B.segs) { if (s.r.rank < 1 || s.r.svc === "parking_aisle") continue; const hw = s.w / 2 + (pad || 0); if (xm < Math.min(s.ax, s.bx) - hw || xm > Math.max(s.ax, s.bx) + hw || ym < Math.min(s.ay, s.by) - hw || ym > Math.max(s.ay, s.by) + hw) continue; if (rmSegD(xm, ym, s.ax, s.ay, s.bx, s.by) < hw) return true; } return false; }
-function rmInCell(B, xm, ym) { return xm >= B.mx * 1000 && xm < B.mx * 1000 + 1000 && ym >= B.my * 1000 && ym < B.my * 1000 + 1000; }
+function rmOnRoad(B, xm, ym, pad) {
+  pad = pad || 0;
+  const chk = s => { if (s.r.rank < 1 || s.r.svc === "parking_aisle") return false; const hw = s.w / 2 + pad; if (xm < Math.min(s.ax, s.bx) - hw || xm > Math.max(s.ax, s.bx) + hw || ym < Math.min(s.ay, s.by) - hw || ym > Math.max(s.ay, s.by) + hw) return false; return rmSegD(xm, ym, s.ax, s.ay, s.bx, s.by) < hw; };
+  const L = B.segs;
+  if (L.length < 40) { for (const s of L) if (chk(s)) return true; return false; }
+  const Q = rmSegGrid(L), G = Q.G;   // v14.3: bucketed (the grid already pads each road by its half-width)
+  for (const s of Q.big) if (chk(s)) return true;
+  for (let gy = Math.floor((ym - pad) / G); gy <= Math.floor((ym + pad) / G); gy++) for (let gx = Math.floor((xm - pad) / G); gx <= Math.floor((xm + pad) / G); gx++) { const a = Q.m.get(gx * 100003 + gy); if (a) for (const s of a) if (chk(s)) return true; }
+  return false;
+}
+function rmInCell(B, xm, ym) { return B.rx0 != null ? (xm >= B.rx0 && xm < B.rx1 && ym >= B.ry0 && ym < B.ry1) : (xm >= B.mx * 1000 && xm < B.mx * 1000 + 1000 && ym >= B.my * 1000 && ym < B.my * 1000 + 1000); }
 function rmStreetProps(B, r) {
   const cls = B.cls, urban = cls === CL_DOWNTOWN || cls === CL_URBAN, sub = cls === CL_SUBURB || cls === CL_INDUSTRIAL;
+  // v14.3: spacings and offsets are real metres × the map scale; nothing smaller than one tile, nothing on the road
+  const z = RM.S, Z = v => v * z, kerb = v => Math.max(0.45, v * z);
   const vtx = new Map();   // junctions: vertex → the roads meeting there
-  let acc = 0, last = null;
   for (const s of B.segs) {
     const R = s.r;
-    if (R !== last) { acc = cF(cH(CITY.seed, Math.round(s.ax), Math.round(s.ay), 3)) * 30; last = R; }
     const L = Math.hypot(s.bx - s.ax, s.by - s.ay) || 1, ux = (s.bx - s.ax) / L, uy = (s.by - s.ay) / L, nx = -uy, ny = ux;
     if (R.rank >= 3 && R.rank <= 8 && R.svc !== "parking_aisle" && !R.hwy) {
       for (const [x, y] of [[s.ax, s.ay], [s.bx, s.by]]) { const k = Math.round(x * 2) + "," + Math.round(y * 2); let e = vtx.get(k); if (!e) vtx.set(k, e = { x, y, roads: new Set(), maxW: 0, rank: 0 }); e.roads.add(R); e.maxW = Math.max(e.maxW, s.w); e.rank = Math.max(e.rank, R.rank); }
-      const step = R.rank >= 5 ? 30 : urban ? 34 : sub ? 46 : 0;
+      const step = Z(R.rank >= 5 ? 30 : urban ? 34 : sub ? 46 : 0);
       if (step && R.br !== "bridge") {
-        let d = acc;
-        while (d < L) {
-          const side = (Math.floor((d + acc) / step) & 1) ? 1 : -1, off = s.w / 2 + 1.1, x = s.ax + ux * d + nx * off * side, y = s.ay + uy * d + ny * off * side;
-          if (rmInCell(B, x, y) && rmClearOf(B, x, y, 0.6) && !rmOnRoad(B, x, y, 0.3)) { const ax = nx * side, ay = ny * side; addProp(B, "streetlight", x * 2 - 0.5, y * 2 - 0.5, 1, 1, FS_COVER, { o: rmDirO(ax, ay) }); }
-          d += step;
+        // lamps at fixed spots along each road (phase from the road's own position) so neighbouring blocks agree
+        const ph = cF(cH(CITY.seed, Math.round(R.w * 10), (R.name || "").length, 3)) * step;
+        const t0 = Math.ceil(((s.ax * ux + s.ay * uy) - ph) / step) * step + ph - (s.ax * ux + s.ay * uy);
+        for (let d = t0; d < L; d += step) {
+          const side = (Math.floor((s.ax * ux + s.ay * uy + d) / step) & 1) ? 1 : -1, off = s.w / 2 + kerb(1.1), x = s.ax + ux * d + nx * off * side, y = s.ay + uy * d + ny * off * side;
+          if (rmInCell(B, x, y) && rmClearOf(B, x, y, kerb(0.6)) && !rmOnRoad(B, x, y, Z(0.3))) { const ax = nx * side, ay = ny * side; addProp(B, "streetlight", x * 2 - 0.5, y * 2 - 0.5, 1, 1, FS_COVER, { o: rmDirO(ax, ay) }); }
         }
-        acc = d - L;
       }
-      if (cls === CL_SUBURB && R.rank === 3 && r() < 0.18 && L > 20) { const x = s.ax + ux * L * 0.5 + nx * (s.w / 2 + 0.8), y = s.ay + uy * L * 0.5 + ny * (s.w / 2 + 0.8); if (rmInCell(B, x, y) && rmClearOf(B, x, y, 0.5) && !rmOnRoad(B, x, y, 0.2)) addProp(B, "hydrant", x * 2 - 0.5, y * 2 - 0.5, 1, 1, FS_LOW); }
-      if (urban && R.rank >= 5 && r() < 0.06 && L > 30) { const x = s.ax + ux * L * 0.5 - nx * (s.w / 2 + 1.6), y = s.ay + uy * L * 0.5 - ny * (s.w / 2 + 1.6); if (rmInCell(B, x, y) && rmClearOf(B, x, y, 1.2) && !rmOnRoad(B, x, y, 0.2)) addProp(B, "busstop", x * 2 - 3, y * 2 - 1, 6, 2, FS_LOW); }
+      if (cls === CL_SUBURB && R.rank === 3 && r() < 0.18 && L > Z(20)) { const x = s.ax + ux * L * 0.5 + nx * (s.w / 2 + kerb(0.8)), y = s.ay + uy * L * 0.5 + ny * (s.w / 2 + kerb(0.8)); if (rmInCell(B, x, y) && rmClearOf(B, x, y, kerb(0.5)) && !rmOnRoad(B, x, y, Z(0.2))) addProp(B, "hydrant", x * 2 - 0.5, y * 2 - 0.5, 1, 1, FS_LOW); }
+      if (urban && R.rank >= 5 && r() < 0.06 && L > Z(30)) { const bw = Math.max(2, Math.round(6 * z)), bh = Math.max(1, Math.round(2 * z)), x = s.ax + ux * L * 0.5 - nx * (s.w / 2 + Math.max(0.6, Z(1.6))), y = s.ay + uy * L * 0.5 - ny * (s.w / 2 + Math.max(0.6, Z(1.6))); if (rmInCell(B, x, y) && rmClearOf(B, x, y, kerb(1.2)) && !rmOnRoad(B, x, y, Z(0.2))) addProp(B, "busstop", x * 2 - bw / 2, y * 2 - bh / 2, bw, bh, FS_LOW); }
     }
-    // parking lots: stalls both sides of every aisle, parked cars in a share of them
-    if (R.svc === "parking_aisle" && L > 4) {
+    // parking lots: stalls both sides of every aisle (2.75 real m apart), parked cars in a share of them
+    if (R.svc === "parking_aisle" && L > Z(4)) {
       const fill = cls === CL_DOWNTOWN ? 0.6 : urban ? 0.5 : 0.38, ang = Math.atan2(uy, ux);
-      for (let d = 1.6; d < L - 1.2; d += 2.75) for (const side of [-1, 1]) {
+      for (let d = Z(1.6); d < L - Z(1.2); d += Z(2.75)) for (const side of [-1, 1]) {
         if (r() > fill) continue;
-        const off = s.w / 2 + 2.6, x = s.ax + ux * d + nx * off * side, y = s.ay + uy * d + ny * off * side;
-        if (!rmInCell(B, x, y) || !rmClearOf(B, x, y, 1.6) || rmOnRoad(B, x, y, 1.6)) continue;
-        // a car in a stall points across the aisle; the prop rect is the car's footprint turned square to the world
-        // the car points across the aisle: nearest quarter turn as o, the rest as ang (prop rect = the car itself)
-        const a = ang + Math.PI / 2 * side - Math.PI / 2, o = ((Math.round(a / (Math.PI / 2)) % 4) + 4) % 4, res = a - Math.round(a / (Math.PI / 2)) * Math.PI / 2, pw = o & 1 ? 9 : 4, ph = o & 1 ? 4 : 9;
-        addProp(B, "car", x * 2 - pw / 2, y * 2 - ph / 2, pw, ph, FS_COVER, { v: cInt(r, 0, 7), ang: res, o, rmPark: 1 });
+        const off = s.w / 2 + Z(2.6), x = s.ax + ux * d + nx * off * side, y = s.ay + uy * d + ny * off * side;
+        if (!rmInCell(B, x, y) || !rmClearOf(B, x, y, Z(1.6)) || rmOnRoad(B, x, y, Z(1.6))) continue;
+        // the car points across the aisle: nearest quarter turn as o, the rest as ang (prop rect = the car itself, k = scale)
+        const a = ang + Math.PI / 2 * side - Math.PI / 2, o = ((Math.round(a / (Math.PI / 2)) % 4) + 4) % 4, res = a - Math.round(a / (Math.PI / 2)) * Math.PI / 2, pw = (o & 1 ? 9 : 4) * z, ph = (o & 1 ? 4 : 9) * z;
+        addProp(B, "car", x * 2 - pw / 2, y * 2 - ph / 2, pw, ph, FS_COVER, { v: cInt(r, 0, 7), ang: res, o, rmPark: 1, k: z });
       }
     }
   }
-  // traffic lights where big roads cross, stop signs at quiet corners
+  // traffic lights where big roads cross, stop signs at quiet corners (js/traffic.js runs the signals)
   for (const e of vtx.values()) {
     if (e.roads.size < 2 || !rmInCell(B, e.x, e.y)) continue;
-    const off = e.maxW / 2 + 1.4;
+    const off = e.maxW / 2 + kerb(1.4);
     if ([...e.roads].some(R => R.br === "bridge" || R.br === "tunnel" || (R.lay || 0) !== 0)) continue;   // overpasses don't meet the road below
-    if (e.rank >= 5) { for (const [sx, sy] of [[1, 1], [-1, -1]]) { const x = e.x + sx * off, y = e.y + sy * off; if (rmClearOf(B, x, y, 0.5) && !rmOnRoad(B, x, y, 0.3)) addProp(B, "trafficlight", x * 2 - 0.5, y * 2 - 0.5, 1, 1, FS_COVER); } }
-    else if (e.rank >= 3 && r() < 0.45) { const x = e.x + off, y = e.y + off; if (rmClearOf(B, x, y, 0.5) && !rmOnRoad(B, x, y, 0.3)) addProp(B, "stopsign", x * 2 - 0.5, y * 2 - 0.5, 1, 1, FS_LOW); }
+    if (e.rank >= 5) { for (const [sx, sy] of [[1, 1], [-1, -1]]) { const x = e.x + sx * off, y = e.y + sy * off; if (rmClearOf(B, x, y, kerb(0.5)) && !rmOnRoad(B, x, y, Z(0.3))) addProp(B, "trafficlight", x * 2 - 0.5, y * 2 - 0.5, 1, 1, FS_COVER, { jx: e.x, jy: e.y }); } }
+    else if (e.rank >= 3 && r() < 0.45) { const x = e.x + off, y = e.y + off; if (rmClearOf(B, x, y, kerb(0.5)) && !rmOnRoad(B, x, y, Z(0.3))) addProp(B, "stopsign", x * 2 - 0.5, y * 2 - 0.5, 1, 1, FS_LOW, { jx: e.x, jy: e.y }); }
   }
 }
 function rmStreetSpawns(B, r) {
-  const big = B.segs.filter(s => s.r.rank >= 3 && s.r.rank <= 7 && !s.r.hwy && Math.hypot(s.bx - s.ax, s.by - s.ay) > 25);
-  const n = B.cls === CL_DOWNTOWN || B.cls === CL_URBAN ? 2 : B.cls === CL_SUBURB || B.cls === CL_INDUSTRIAL ? 1 : (r() < 0.4 ? 1 : 0);
+  const big = B.segs.filter(s => s.r.rank >= 3 && s.r.rank <= 7 && !s.r.hwy && Math.hypot(s.bx - s.ax, s.by - s.ay) > 25 * RM.S);
+  // v14.3: per real km (one block) scaled to keep the patrols per screen what they were
+  const want = (B.cls === CL_DOWNTOWN || B.cls === CL_URBAN ? 2 : B.cls === CL_SUBURB || B.cls === CL_INDUSTRIAL ? 1 : 0.4) * RM.S * RM.S;
+  const n = Math.floor(want) + (r() < want - Math.floor(want) ? 1 : 0);
   for (let k = 0; k < n && big.length; k++) {
-    const s = big[Math.floor(r() * big.length)], L = Math.hypot(s.bx - s.ax, s.by - s.ay), ux = (s.bx - s.ax) / L, uy = (s.by - s.ay) / L, off = s.w / 2 + 1.5;
+    const s = big[Math.floor(r() * big.length)], L = Math.hypot(s.bx - s.ax, s.by - s.ay), ux = (s.bx - s.ax) / L, uy = (s.by - s.ay) / L, off = s.w / 2 + Math.max(0.5, 1.5 * RM.S);
     const pts = [0.1, 0.9].flatMap(t => [[s.ax + (s.bx - s.ax) * t - uy * off, s.ay + (s.by - s.ay) * t + ux * off], [s.ax + (s.bx - s.ax) * t + uy * off, s.ay + (s.by - s.ay) * t - ux * off]]);
     if (!rmInCell(B, pts[0][0], pts[0][1])) continue;
     addSpawn(B, "patrol", cInt(r, 2, 3), { pts: pts.map(q => [Math.round(q[0] * 2), Math.round(q[1] * 2)]), street: 1, heavy: 0.15, rmRole: "police" });
@@ -780,51 +1018,54 @@ function rmStreetSpawns(B, r) {
 /* --- 8. HIGHWAY 365 work zones ----------------------------------------------------------- */
 // cross-section (metres from the centre line, + inward): median ±0.6 · lanes 0.6–4.2 & 4.2–7.8 · shoulder 7.8–11 · edge 13
 function rmHwyProps(B, r) {
+  // v14.3: the cross-section and every length are real metres × the map scale (Z); props never smaller than a tile (P);
+  // the crews and the traffic cop are people — actor size whatever the scale
+  const z = RM.S, Z = v => v * z, P = v => Math.max(0.5, v * z);
   const H = RMG.hwy, put = (t, tt, off, w, h, s, extra) => {
-    const P = rmHwyAt(tt), x = P.x + P.nx * off, y = P.y + P.ny * off;
+    const Pq = rmHwyAt(tt), x = Pq.x + Pq.nx * off, y = Pq.y + Pq.ny * off;
     if (!rmInCell(B, x, y)) return null;
-    const a = Math.atan2(P.ty, P.tx), c = Math.abs(Math.cos(a)), sn = Math.abs(Math.sin(a)), ww = w * c + h * sn, hh = w * sn + h * c;
+    const a = Math.atan2(Pq.ty, Pq.tx), c = Math.abs(Math.cos(a)), sn = Math.abs(Math.sin(a)), ww = w * c + h * sn, hh = w * sn + h * c;
     return addProp(B, t, x * 2 - ww, y * 2 - hh, ww * 2, hh * 2, s, Object.assign({ ang: a, rw: w * 2, rh: h * 2, hwy: 1 }, extra || {}));
   };
-  // quick reject: the cell must touch the ring
-  const cx = B.mx * 1000 + 500, cy = B.my * 1000 + 500;
-  if (Math.abs(rmHwyOff(cx, cy)) > 760) return;
-  for (const z of RMG.zones) {
-    const zr = cH(365, Math.round(z.s0), 7, 1), zr2 = cRng(zr);
-    for (const sd of z.lanes === 2 ? [1, -1] : [z.side]) {
+  // quick reject: the block must touch the ring
+  const cx = (B.rx0 + B.rx1) / 2, cy = (B.ry0 + B.ry1) / 2, half = Math.hypot(B.rx1 - B.rx0, B.ry1 - B.ry0) / 2;
+  if (Math.abs(rmHwyOff(cx, cy)) > half + RM_HWY_W + Z(40)) return;
+  const carAt = (P0, off, flip, t, extra) => { const x = P0.x + P0.nx * off, y = P0.y + P0.ny * off; if (!rmInCell(B, x, y)) return; const a = Math.atan2(P0.ty, P0.tx) - Math.PI / 2 + (flip ? Math.PI : 0), o = ((Math.round(a / (Math.PI / 2)) % 4) + 4) % 4, res = a - Math.round(a / (Math.PI / 2)) * Math.PI / 2, pw = (o & 1 ? 9 : 4) * z, ph = (o & 1 ? 4 : 9) * z; addProp(B, t, x * 2 - pw / 2, y * 2 - ph / 2, pw, ph, FS_COVER, Object.assign({ o, ang: res, k: z, hwy: 1 }, extra)); };
+  for (const zn of RMG.zones) {
+    const zr = cH(365, Math.round(zn.s0 / z), 7, 1), zr2 = cRng(zr);
+    for (const sd of zn.lanes === 2 ? [1, -1] : [zn.side]) {
       // signs on the shoulder, well before the closure
-      put("rmsign", z.s0 - 320 * 1, sd * 11.6, 1.6, 0.4, FS_LOW, { v: 0 }); put("rmsign", z.s0 - 210, sd * 11.6, 1.6, 0.4, FS_LOW, { v: 1 }); put("rmsign", z.s0 - 110, sd * 11.6, 1.6, 0.4, FS_LOW, { v: 2 });
-      put("rmarrow", z.s0 - 132, sd * 9.4, 1.8, 2.6, FS_COVER, { v: sd > 0 ? 1 : -1 });
+      put("rmsign", zn.s0 - Z(320), sd * Z(11.6), P(1.6), P(0.4), FS_LOW, { v: 0 }); put("rmsign", zn.s0 - Z(210), sd * Z(11.6), P(1.6), P(0.4), FS_LOW, { v: 1 }); put("rmsign", zn.s0 - Z(110), sd * Z(11.6), P(1.6), P(0.4), FS_LOW, { v: 2 });
+      put("rmarrow", zn.s0 - Z(132), sd * Z(9.4), P(1.8), P(2.6), FS_COVER, { v: sd > 0 ? 1 : -1 });
       // taper: drums sweep the lane shut, then a line of cones (or concrete barriers where the crew works)
-      for (let k = 0; k <= 10; k++) { const t = z.s0 - 120 + k * 12, off = sd * (7.8 - 3.4 * k / 10); put(k % 2 ? "rmcone" : "rmdrum", t, off, k % 2 ? 0.5 : 0.8, k % 2 ? 0.5 : 0.8, FS_LOW); }
-      const b0 = z.s0 + 50, b1 = z.s1 - 50;
-      for (let t = z.s0 + 8; t < z.s1; t += 9) { if (z.crew && t > b0 && t < b1) continue; put("rmcone", t, sd * 4.4, 0.5, 0.5, FS_LOW); }
-      if (z.crew) for (let t = b0; t < b1; t += 6.2) put("rmjersey", t + 3, sd * 4.6, 6, 0.8, FS_COVER);
-      put("rmdrum", z.s1 + 6, sd * 4.6, 0.8, 0.8, FS_LOW);
+      for (let k = 0; k <= 10; k++) { const t = zn.s0 - Z(120) + k * Z(12), off = sd * Z(7.8 - 3.4 * k / 10); put(k % 2 ? "rmcone" : "rmdrum", t, off, P(k % 2 ? 0.5 : 0.8), P(k % 2 ? 0.5 : 0.8), FS_LOW); }
+      const b0 = zn.s0 + Z(50), b1 = zn.s1 - Z(50);
+      for (let t = zn.s0 + Z(8); t < zn.s1; t += Math.max(Z(9), 1.2)) { if (zn.crew && t > b0 && t < b1) continue; put("rmcone", t, sd * Z(4.4), P(0.5), P(0.5), FS_LOW); }
+      if (zn.crew) for (let t = b0; t < b1; t += Z(6.2)) put("rmjersey", t + Z(3), sd * Z(4.6), P(6), P(0.8), FS_COVER);
+      put("rmdrum", zn.s1 + Z(6), sd * Z(4.6), P(0.8), P(0.8), FS_LOW);
       // the crew: machines in the closed lane, gravel and a toilet on the shoulder, people in hi-vis
-      if (z.crew) {
+      if (zn.crew) {
         const n = 1 + Math.floor(zr2() * 3);
         for (let k = 0; k < n; k++) {
-          const t = b0 + 30 + zr2() * Math.max(10, b1 - b0 - 60), kind = ["rmexcav", "rmroller", "rmdump"][Math.floor(zr2() * 3)], dims = kind === "rmexcav" ? [3.4, 7.5] : kind === "rmroller" ? [2.2, 4.6] : [2.6, 7.6];
-          put(kind, t, sd * 6.1, dims[1], dims[0], FS_COVER, { v: k });
-          for (let q = 0; q < 2; q++) put("rmworker", t + (zr2() - 0.5) * 14, sd * (5.2 + zr2() * 2), 0.6, 0.6, FS_LOW, { v: Math.floor(zr2() * 4) });
+          const t = b0 + Z(30) + zr2() * Math.max(Z(10), b1 - b0 - Z(60)), kind = ["rmexcav", "rmroller", "rmdump"][Math.floor(zr2() * 3)], dims = kind === "rmexcav" ? [3.4, 7.5] : kind === "rmroller" ? [2.2, 4.6] : [2.6, 7.6];
+          put(kind, t, sd * Z(6.1), P(dims[1]), P(dims[0]), FS_COVER, { v: k });
+          for (let q = 0; q < 2; q++) put("rmworker", t + (zr2() - 0.5) * Z(14), sd * Z(5.2 + zr2() * 2), 0.6, 0.6, FS_LOW, { v: Math.floor(zr2() * 4) });
         }
-        put("rmgravel", b0 + 20, sd * 10.2, 5, 3.2, FS_LOW); put("rmjohn", b1 - 10, sd * 10.4, 1.3, 1.3, FS_TALL);
-        if (z.plates) for (let t = b0 + 15; t < b1; t += 80) put("rmplate", t, sd * 2.4, 2.4, 2, FS_NONE);
+        put("rmgravel", b0 + Z(20), sd * Z(10.2), P(5), P(3.2), FS_LOW); put("rmjohn", b1 - Z(10), sd * Z(10.4), P(1.3), P(1.3), FS_TALL);
+        if (zn.plates) for (let t = b0 + Z(15); t < b1; t += Z(80)) put("rmplate", t, sd * Z(2.4), P(2.4), P(2), FS_NONE);
       }
       // a traffic cop waving people through, cruiser on the shoulder with the lights going
-      if (z.cop) {
-        put("rmcop", z.s0 - 70, sd * 8.6, 0.6, 0.6, FS_LOW, { v: sd });
-        const P = rmHwyAt(z.s0 - 96), x = P.x + P.nx * sd * 9.6, y = P.y + P.ny * sd * 9.6;
-        if (rmInCell(B, x, y)) { const a = Math.atan2(P.ty, P.tx) - Math.PI / 2, o = ((Math.round(a / (Math.PI / 2)) % 4) + 4) % 4, res = a - Math.round(a / (Math.PI / 2)) * Math.PI / 2, pw = o & 1 ? 9 : 4, ph = o & 1 ? 4 : 9; addProp(B, "rmpolice", x * 2 - pw / 2, y * 2 - ph / 2, pw, ph, FS_COVER, { o, ang: res, v: 0, lights: 1, hwy: 1 }); }
+      if (zn.cop) {
+        put("rmcop", zn.s0 - Z(70), sd * Z(8.6), 0.6, 0.6, FS_LOW, { v: sd });
+        carAt(rmHwyAt(zn.s0 - Z(96)), sd * Z(9.6), false, "rmpolice", { v: 0, lights: 1 });
       }
       // the queue: a few stalled cars in the open lane before the taper
-      if (zr2() < 0.55) { const nq = 2 + Math.floor(zr2() * 4); for (let k = 0; k < nq; k++) { const P = rmHwyAt(z.s0 - 150 - k * 8.5), x = P.x + P.nx * sd * 2.4, y = P.y + P.ny * sd * 2.4; if (!rmInCell(B, x, y)) continue; const a = Math.atan2(P.ty, P.tx) - Math.PI / 2 + (sd > 0 ? Math.PI : 0), o = ((Math.round(a / (Math.PI / 2)) % 4) + 4) % 4, res = a - Math.round(a / (Math.PI / 2)) * Math.PI / 2, pw = o & 1 ? 9 : 4, ph = o & 1 ? 4 : 9; addProp(B, "car", x * 2 - pw / 2, y * 2 - ph / 2, pw, ph, FS_COVER, { v: Math.floor(zr2() * 8), o, ang: res }); } }
+      if (zr2() < 0.55) { const nq = 2 + Math.floor(zr2() * 4); for (let k = 0; k < nq; k++) carAt(rmHwyAt(zn.s0 - Z(150) - k * Z(8.5)), sd * Z(2.4), sd > 0, "car", { v: Math.floor(zr2() * 8), hwyq: 1 }); }
     }
   }
   // a few lone cones and barrels between zones (it is under construction everywhere)
-  const tA = rmHwyProject(B.mx * 1000 + 500, B.my * 1000 + 500).t;
-  for (let k = 0; k < 6; k++) { const t = tA + (r() - 0.5) * 900; if (rmZoneAt(t)) continue; put(r() < 0.5 ? "rmcone" : "rmdrum", t, (r() < 0.5 ? 1 : -1) * (8.4 + r() * 2), 0.6, 0.6, FS_LOW); }
+  const tA = rmHwyProject(cx, cy).t;
+  for (let k = 0; k < 6; k++) { const t = tA + (r() - 0.5) * Z(900); if (rmZoneAt(t)) continue; put(r() < 0.5 ? "rmcone" : "rmdrum", t, (r() < 0.5 ? 1 : -1) * Z(8.4 + r() * 2), P(0.6), P(0.6), FS_LOW); }
 }
 // signed offset from the highway centre line (+ inward), analytic (rounded square)
 function rmHwyOff(xm, ym) {
@@ -840,8 +1081,18 @@ function rmChunkPost(C) {
   const blocks = cityBlocksInRect(m0x, m0y, m1x, m1y);
   const set = (i, fl, kd) => { C.flags[i] |= fl; C.kind[i] = kd; };
   // 1. road bands keep their cells dry (bridges, causeways, culverts)
-  const road = new Uint8Array(128 * 128);
-  for (const B of blocks) for (const s of (B.segs || [])) {
+  const road = new Uint8Array(128 * 128), q = ++RM_SQ, near = [];
+  // v14.3: neighbouring blocks share most of their roads — each segment once, fetched from the bucket grid
+  for (const B of blocks) {
+    const L = B.segs || [];
+    if (L.length < 40) { for (const s of L) if (s._q !== q) { s._q = q; near.push(s); } continue; }
+    const Q = rmSegGrid(L), G = Q.G;
+    for (const s of Q.big) if (s._q !== q) { s._q = q; near.push(s); }
+    for (let gy = Math.floor(m0y / G); gy <= Math.floor(m1y / G); gy++) for (let gx = Math.floor(m0x / G); gx <= Math.floor(m1x / G); gx++) {
+      const a = Q.m.get(gx * 100003 + gy); if (a) for (const s of a) if (s._q !== q) { s._q = q; near.push(s); }
+    }
+  }
+  for (const s of near) {
     const hw = s.w / 2 + 0.3;
     if (Math.max(s.ax, s.bx) + hw < m0x || Math.min(s.ax, s.bx) - hw > m1x || Math.max(s.ay, s.by) + hw < m0y || Math.min(s.ay, s.by) - hw > m1y) continue;
     const xa = Math.max(0, Math.floor((Math.min(s.ax, s.bx) - hw) * 2) - x0), xb = Math.min(127, Math.ceil((Math.max(s.ax, s.bx) + hw) * 2) - x0), ya = Math.max(0, Math.floor((Math.min(s.ay, s.by) - hw) * 2) - y0), yb = Math.min(127, Math.ceil((Math.max(s.ay, s.by) + hw) * 2) - y0);
@@ -867,7 +1118,7 @@ function rmChunkPost(C) {
   // 4. the border: Highway 365's median barrier (open at the crossovers), the outer barrier + fence, nothing beyond
   const ed = Math.min(rmEdgeDist(m0x, m0y), rmEdgeDist(m1x, m1y), rmEdgeDist(m0x, m1y), rmEdgeDist(m1x, m0y));
   if (ed < 120) {
-    const outer = RM_HWY_W / 2 + 0.4, wall = RM_HWY_W / 2 + 1.6;
+    const outer = rmHwyOuter(), wall = rmHwyWall();
     for (let yy = 0; yy < 128; yy++) for (let xx = 0; xx < 128; xx++) {
       const xm = (x0 + xx + 0.5) / 2, ym = (y0 + yy + 0.5) / 2, off = rmHwyOff(xm, ym), i = (yy << 7) | xx;
       if (off < -wall) { C.flags[i] = F_MOVE; C.kind[i] = K_NONE; continue; }
@@ -908,10 +1159,10 @@ function rmChunkPost(C) {
     window.regionSetProfile = regionSetProfile = function (key) { const P = _sp(key); RG.real = RG.key === "real"; RM.on = RG.real; return P; };
   }
   if (typeof cityGenInit === "function") { const _gi = cityGenInit; window.cityGenInit = cityGenInit = function (seed) { return RG.real ? rmInit(seed) : _gi(seed); }; }
-  if (typeof cityCellStreets === "function") { const _cs = cityCellStreets; window.cityCellStreets = cityCellStreets = function (mx, my) { return RG.real ? rgOrgCell(mx, my) : _cs(mx, my); }; }
+  if (typeof cityCellStreets === "function") { const _cs = cityCellStreets; window.cityCellStreets = cityCellStreets = function (mx, my) { return RG.real ? rmCellStreets(mx, my) : _cs(mx, my); }; }
   if (typeof cityGenBlock === "function") { const _gb = cityGenBlock; window.cityGenBlock = cityGenBlock = function (mx, my, i, j, key) { return RG.real ? rmGenBlock(mx, my, i, j, key) : _gb(mx, my, i, j, key); }; }
   // one block per km cell; big buildings reach into the next cell, so look a little wider
-  if (typeof cityBlocksInRect === "function") { const _br = cityBlocksInRect; window.cityBlocksInRect = cityBlocksInRect = function (x0, y0, x1, y1) { return RG.real ? _br(x0 - 220, y0 - 220, x1 + 220, y1 + 220) : _br(x0, y0, x1, y1); }; }
+  if (typeof cityBlocksInRect === "function") { const _br = cityBlocksInRect; window.cityBlocksInRect = cityBlocksInRect = function (x0, y0, x1, y1) { if (!RG.real) return _br(x0, y0, x1, y1); const m = Math.max(40, 220 * RM.S); return _br(x0 - m, y0 - m, x1 + m, y1 + m); }; }
   if (typeof cityBuildChunk === "function") { const _bc = cityBuildChunk; window.cityBuildChunk = cityBuildChunk = function (cx, cy) { const C = _bc(cx, cy); if (RG.real) { try { rmChunkPost(C); } catch (e) { if (window.trackProgress) window.trackProgress("rmChunkPost: " + e.message, true); } } return C; }; }
   if (typeof cityPickDrop === "function") {
     const _pd = cityPickDrop;
@@ -930,15 +1181,17 @@ function rmChunkPost(C) {
   if (typeof cityBuildingLabel === "function") { const _bl = cityBuildingLabel; window.cityBuildingLabel = cityBuildingLabel = function (b) { if (b && (b.rmName || b.rm)) return b.rmName || ""; return _bl(b); }; }
   if (typeof V10 !== "undefined" && V10.onStep) V10.onStep.push(dt => { if (CITY.on && RG.real && player) rmStep(dt); });
 })();
-function rmPlaceKey() { const p = RM.place; return p ? (p.lat.toFixed(3) + "," + p.lon.toFixed(3)) : "0,0"; }
+// per-world key (drops, caches): the place, plus the map scale unless it is true size (v14.2 saves stay valid at 1:1)
+function rmPlaceKey() { const p = RM.place; return (p ? (p.lat.toFixed(3) + "," + p.lon.toFixed(3)) : "0,0") + (Math.abs(RM.S - 1) < 1e-6 ? "" : "|" + rmScaleLabel(RM.S)); }
 // a pavement spot near (xm, ym): the edge of the nearest ordinary street, clear of walls and water
 function rmPickDrop(xm, ym) {
-  for (let R = 60; R <= 1600; R *= 1.6) {
+  const z = RM.S;
+  for (let R = Math.max(40, 60 * z); R <= Math.max(900, 1600 * z); R *= 1.6) {
     const cands = [];
     for (let my = Math.floor((ym - R) / 1000); my <= Math.floor((ym + R) / 1000); my++) for (let mx = Math.floor((xm - R) / 1000); mx <= Math.floor((xm + R) / 1000); mx++) {
-      const B = cityBlock(mx, my, 0, 0);
-      if (!B || B.pending || !B.segs) continue;
-      for (const s of B.segs) {
+      const segs = rmCellSegsAt(mx, my);
+      if (!segs) continue;
+      for (const s of segs) {
         if (s.r.rank < 3 || s.r.rank > 6 || s.r.br === "bridge" || s.r.hwy) continue;
         const d = rmSegD(xm, ym, s.ax, s.ay, s.bx, s.by); if (d > R) continue;
         cands.push([d, s]);
@@ -946,9 +1199,9 @@ function rmPickDrop(xm, ym) {
     }
     cands.sort((a, b) => a[0] - b[0]);
     for (const [, s] of cands.slice(0, 12)) {
-      const L = Math.hypot(s.bx - s.ax, s.by - s.ay) || 1, ux = (s.bx - s.ax) / L, uy = (s.by - s.ay) / L;
+      const L = Math.hypot(s.bx - s.ax, s.by - s.ay) || 1, ux = (s.bx - s.ax) / L, uy = (s.by - s.ay) / L, off = s.w / 2 + Math.max(0.6, 1.2 * z);
       for (const t of [0.5, 0.3, 0.7]) for (const side of [1, -1]) {
-        const x = s.ax + (s.bx - s.ax) * t - uy * (s.w / 2 + 1.2) * side, y = s.ay + (s.by - s.ay) * t + ux * (s.w / 2 + 1.2) * side;
+        const x = s.ax + (s.bx - s.ax) * t - uy * off * side, y = s.ay + (s.by - s.ay) * t + ux * off * side;
         const f = cityFlagsT(Math.floor(x * 2), Math.floor(y * 2));
         if (!(f & (F_MOVE | F_IN | F_WATER))) return [x * 32, y * 32];
       }
@@ -957,9 +1210,9 @@ function rmPickDrop(xm, ym) {
   return [xm * 32, ym * 32];
 }
 function rmNearestNamed(xm, ym, maxD) {
-  const B = cityBlock(Math.floor(xm / 1000), Math.floor(ym / 1000), 0, 0);
-  if (!B || !B.segs) return null;
-  const nr = rmNearestSeg(B.segs, xm, ym, maxD || 60, s => !!s.r.name && s.r.rank >= 1);
+  const segs = rmCellSegsAt(Math.floor(xm / 1000), Math.floor(ym / 1000));
+  if (!segs) return null;
+  const nr = rmNearestSeg(segs, xm, ym, maxD || 60, s => !!s.r.name && s.r.rank >= 1);
   return nr ? { name: nr.s.r.name + (nr.s.r.ref && nr.s.r.rank >= 6 && nr.s.r.name.indexOf(nr.s.r.ref) < 0 ? " (" + nr.s.r.ref + ")" : ""), s: nr.s, d: nr.d } : null;
 }
 // "Fountain Square · Indianapolis" — the nearest neighbourhood / suburb, else the town
@@ -968,7 +1221,7 @@ function rmPlaceName(xm, ym) {
   let hood = null, hd = 1e9;
   for (let y = my - 1; y <= my + 1; y++) for (let x = mx - 1; x <= mx + 1; x++) {
     const C = RM.cells.get(x * 64 + y); if (!C) continue;
-    for (const p of C.places) { if (p.cls === "water") continue; const d = Math.hypot(p.x - xm, p.y - ym) / (RM_PLACE_R[p.cls] || 900); if (d < hd && d < 1.6) { hd = d; hood = p; } }
+    for (const p of C.places) { if (p.cls === "water") continue; const d = Math.hypot(p.x - xm, p.y - ym) / ((RM_PLACE_R[p.cls] || 900) * RM.S); if (d < hd && d < 1.6) { hd = d; hood = p; } }
   }
   let town = null, td = 1e9;
   for (const c of CITY.cities) { const d = Math.hypot(c.x - xm, c.y - ym) / c.r; if (d < td) { td = d; town = c; } }
@@ -1028,11 +1281,16 @@ function rmLawfulHunters(dt) {
 function rmOnTile(T) {
   if (!RG.real || !CITY.blockCache || T.z !== 14) return;
   const b = rmTileBox(14, T.x, T.y), mx0 = Math.max(0, Math.floor((b[0] - RM_PAD) / 1000)), mx1 = Math.min(63, Math.floor((b[2] + RM_PAD) / 1000)), my0 = Math.max(0, Math.floor((b[1] - RM_PAD) / 1000)), my1 = Math.min(63, Math.floor((b[3] + RM_PAD) / 1000));
+  const n = rmBlocksPerCell();
   for (let my = my0; my <= my1; my++) for (let mx = mx0; mx <= mx1; mx++) {
-    const key = mx + "," + my + ",0,0", B = CITY.blockCache.get(key);
-    if (!B || !B.pending || !rmCellReady(mx, my)) continue;
-    CITY.blockCache.delete(key);
-    rmCellRebuilt(mx, my);
+    let hit = false;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const key = mx + "," + my + "," + i + "," + j, B = CITY.blockCache.get(key);
+      if (!B || !B.pending) continue;
+      if (!hit && !rmCellReady(mx, my)) break;
+      hit = true; CITY.blockCache.delete(key);
+    }
+    if (hit) rmCellRebuilt(mx, my);
   }
 }
 function rmCellRebuilt(mx, my) {

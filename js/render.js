@@ -1043,7 +1043,7 @@ function renderBiomeAndWorld() {
       ctx.beginPath(); ctx.arc(tgt.x, tgt.y, pulse, 0, Math.PI * 2); ctx.stroke();
       // v14.1: the full label is the HUD button (#btnInteract) — the world shows only a keycap, never the same text twice
       if (window.__coarsePtr === undefined) window.__coarsePtr = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
-      const cap = window.__coarsePtr ? "TAP" : "F", cw = window.__coarsePtr ? 22 : 12, cy = tgt.y - pulse - 15;
+      const cap = window.__coarsePtr ? (typeof actIconFor === "function" ? actIconFor(tgt) : "TAP") : "F", cw = window.__coarsePtr ? 22 : 12, cy = tgt.y - pulse - 15;
       ctx.fillStyle = "rgba(10,12,18,0.85)"; ctx.beginPath(); ctx.moveTo(tgt.x - cw / 2 + 3, cy); ctx.arcTo(tgt.x + cw / 2, cy, tgt.x + cw / 2, cy + 11, 3); ctx.arcTo(tgt.x + cw / 2, cy + 11, tgt.x - cw / 2, cy + 11, 3); ctx.arcTo(tgt.x - cw / 2, cy + 11, tgt.x - cw / 2, cy, 3); ctx.arcTo(tgt.x - cw / 2, cy, tgt.x + cw / 2, cy, 3); ctx.closePath(); ctx.fill();
       ctx.lineWidth = 1; ctx.stroke();
       ctx.fillStyle = "#ffd166"; ctx.font = "bold 8px monospace"; ctx.textAlign = "center";

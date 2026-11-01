@@ -381,7 +381,7 @@ function tfCollateral(dt) {
     // a car you drive
     if (player.inVehicle === 3 && typeof VEH !== "undefined" && VEH.ride) {
       const v = VEH.ride, sp = Math.hypot(v.vx, v.vy);
-      if (sp > 110 && Math.hypot(v.x - W.x, v.y - W.y) < Math.max(v.L, v.D) * 0.55) {
+      if (sp > 110 * (v.sv || 1) && Math.hypot(v.x - W.x, v.y - W.y) < Math.max(v.L, v.D) * 0.55) {
         if (Math.random() < 0.35 && sp < 260) { const a = Math.atan2(W.y - v.y, W.x - v.x); W.x += Math.cos(a) * 30; W.y += Math.sin(a) * 30; tfSay(p, "Watch it!!", 1.6); W.flee = 3; W.fleeX = v.x; W.fleeY = v.y; }
         else tfHurt(p, sp / 6, "car", "player");
       }

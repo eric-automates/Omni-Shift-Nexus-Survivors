@@ -83,7 +83,7 @@ function checkLoadedScripts() {
     ["sheathe.js", typeof sheatheDraw === "function"], ["heroreg.js", typeof heroRegister === "function"], ["saga.js", typeof sagaLitStep === "function"], ["weaponart.js", typeof waWand === "function"],
     ["regiongen.js", typeof regionGenerate === "function"], ["regionsites.js", typeof rgTownBays === "function"], ["regionart.js", typeof rgBake === "function"], ["regionworlds.js", typeof rgWater === "function"], ["location.js", typeof locOpen === "function"], ["locals.js", typeof enemySpecJ === "function"],
     ["realdata.js", typeof rmMvt === "function"], ["realgen.js", typeof rmGenBlock === "function"], ["realart.js", typeof rmBake === "function"], ["realui.js", typeof rmPreload === "function"],
-    ["agefilter.js", typeof ageInfoHTML === "function"], ["items.js", typeof itSearch === "function"], ["scenario.js", typeof scnRunStart === "function"], ["townsfolk.js", typeof tfStep === "function"], ["economy.js", typeof ecoHourTick === "function"], ["apoc.js", typeof apocTag === "function"], ["flight.js", typeof flyStep === "function"], ["kisurge.js", typeof kiITOpen === "function"], ["rivalchase.js", typeof rvcStep === "function"]
+    ["agefilter.js", typeof ageInfoHTML === "function"], ["items.js", typeof itSearch === "function"], ["scenario.js", typeof scnRunStart === "function"], ["traffic.js", typeof trfStep === "function"], ["police.js", typeof pdStep === "function"], ["gunart.js", typeof gaDraw === "function"], ["gunaudio.js", typeof gauShot === "function"], ["dualaim.js", typeof dualAimTarget === "function"], ["actionui.js", typeof actFire === "function"], ["townsfolk.js", typeof tfStep === "function"], ["economy.js", typeof ecoHourTick === "function"], ["apoc.js", typeof apocTag === "function"], ["flight.js", typeof flyStep === "function"], ["kisurge.js", typeof kiITOpen === "function"], ["rivalchase.js", typeof rvcStep === "function"]
   ];
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
   if (failed.length > 0) {
@@ -581,7 +581,7 @@ function updateHUD() {
     document.getElementById("hpTxt").textContent = `${Math.ceil(player.hp)}/${Math.ceil(player.maxHp)}${player.inVehicle ? " [VEH]" : ""}`;
     document.getElementById("xpBar").style.width = Math.min(100, (player.xp / player.nextXp) * 100) + "%";
     const bRing = getDistBiome(player.x, player.y);
-    document.getElementById("hudStage").textContent = `${(typeof CITY !== "undefined" && CITY.on && typeof cityShortName === "function") ? cityShortName() : player.fac.worlds[player.stg.tier] + "-" + player.stg.id} • W${waveNum} • ${bRing.name.split(" ")[0]}`;
+    document.getElementById("hudStage").textContent = `${(typeof CITY !== "undefined" && CITY.on && typeof cityShortName === "function") ? cityShortName() : player.fac.worlds[player.stg.tier] + "-" + player.stg.id} • W${waveNum} • ${String((bRing && bRing.name) || "").split(" ")[0]}`;
     document.getElementById("hudDM").textContent = `DM: ${availDM()}`;
     updateTimeLabel();   // v9.01 step ladder label (shows REWIND / BUFFER START states)
 
@@ -987,7 +987,9 @@ function renderOpts() {
     ["HUD Handedness Layout", opts.hudFlip ? "LEFT-HANDED" : "STANDARD", () => { opts.hudFlip = !opts.hudFlip; if (typeof HUDL !== "undefined") HUDL.dirty = true; }],
     ["🧩 HUD Layout, Priority & Sizes", (opts.hud && opts.hud.auto === false ? "AUTO-FIT OFF" : "AUTO-FIT ON") + " · " + Math.round(((opts.hud && opts.hud.scale) || 1) * 100) + "%", () => { if (typeof hudOptsOpen === "function") setTimeout(hudOptsOpen, 0); }],
     ["Vehicle Steering", opts.vehSteer === "classic" ? "CLASSIC (W/S THROTTLE · A/D STEER)" : "POINT-TO-STEER (PUSH WHERE YOU WANT TO GO)", () => { opts.vehSteer = opts.vehSteer === "classic" ? "point" : "classic"; }],
-    ["Vehicle Speed Units", opts.vehUnits === "kmh" ? "KM/H" : "MPH", () => { opts.vehUnits = opts.vehUnits === "kmh" ? "mph" : "kmh"; }]
+    ["Vehicle Speed Units", opts.vehUnits === "kmh" ? "KM/H" : "MPH", () => { opts.vehUnits = opts.vehUnits === "kmh" ? "mph" : "kmh"; }],
+    ["🚗 City Traffic", opts.traffic !== false ? "ON (CARS, SIGNALS, STOP SIGNS)" : "OFF", () => { opts.traffic = opts.traffic === false; }],
+    ["🚔 Traffic Police", opts.police !== false ? "ON (SPEEDING & RED LIGHTS GET TICKETS)" : "OFF", () => { opts.police = opts.police === false; }]
   ];
   rows.forEach(r => {
     const btn = document.createElement("button"); btn.className = "btn"; btn.textContent = `${r[0]}: ${r[1]}`;

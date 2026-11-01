@@ -14,7 +14,7 @@
 "use strict";
 
 /* === 1. SPECS ====================================================================================================== */
-const VPX = 32, VGRAV = 9.81 * 32;                 // px per metre, g in px/s²
+const VPX = 32, VGRAV = 9.81 * 32, VGRAV_D = VGRAV;   // px per metre, g in px/s²
 // seat: [u (−0.5 left … +0.5 right), w (−0.5 rear … +0.5 front), type, side]
 //   d driver · w window seat (leans out / fires on its side) · m middle (enclosed) · r roof hatch / sunroof (360°)
 //   b open bed / bench (fires outward) · t tail step (fires rearward)
@@ -118,8 +118,15 @@ function vehPerimeter(L, D) {
   for (let k = 0; k < 6; k++) add(x0, -y0 - D * (k + 0.5) / 6, 1, 0, k < 2 ? 2 : k > 3 ? 0 : 3);
   return P;   // zone: 0 front · 1 right · 2 rear · 3 left
 }
+// v14.3 SCALE: L, D are the DESIGN size (px at the classic 1:1 size); o.k scales the body (real maps at 1:3 → k = ⅓).
+// v.L / v.D are the world size (design × k): physics, collisions and people all use those; parts are laid out at design
+// size and shrunk (vehBuildParts) and the art is drawn at design size and shrunk (crVehicle.k), so a small car still
+// looks like the same car. v.sv scales speeds (a ⅓ car at full real speed would cross the map 3× too fast).
+function vehWorldK() { return typeof RG !== "undefined" && RG.real && typeof RM !== "undefined" ? RM.S : 1; }
+function vehSpeedK(k) { return k < 1 ? Math.min(1, 2.24 * k) : 1; }
 function vehNew(kind, x, y, ang, L, D, o) {
   o = o || {};
+  const vk = o.k > 0 ? o.k : 1; L *= vk; D *= vk;
   const S = Object.assign({}, VK_DEF, VK[kind] || VK.sedan), key = o.key || ("v" + VEH.uid), h = o.h != null ? o.h : vehHash(key);
   const v = {
     id: VEH.uid++, kind, S, key, x, y, ang, vx: 0, vy: 0, w: 0, L, D, m: S.m, I: S.m * (L * L + D * D) / 12,
@@ -130,7 +137,7 @@ function vehNew(kind, x, y, ang, L, D, o) {
     ctl: { thr: 0, st: 0, hb: 0 }, steerA: 0, rpm: 0, gear: 1,
     sleep: 0, awake: true, dead: false, fire: 0, burnt: false, smokeT: 0, disabledT: 0,
     sprDirty: true, spr: null, samples: null, sampDirty: true, drv: null, ai: null, lastHit: 0, scrapeT: 0, skidT: 0, hitCD: 0,
-    sunroof: false, brakeLit: 0, exhaust: 0, horseFled: 0, lastDv: 0, seen: 0, convoy: null, hold: 0
+    sunroof: false, brakeLit: 0, exhaust: 0, horseFled: 0, lastDv: 0, seen: 0, convoy: null, hold: 0, k: vk, sv: o.sv > 0 ? o.sv : vehSpeedK(vk)
   };
   v.sunroof = S.roof >= 1 || (S.roof > 0 && (h % 997) / 997 < S.roof);
   if (v.seats.some(s => s.type === "r") && !v.sunroof && !S.hatch && S.roof < 1 && kind !== "armytruck") v.seats.forEach(s => { if (s.type === "r") s.type = "m"; });
@@ -149,9 +156,9 @@ function vehPromoteProp(p, why) {
   if (!p || !VEH_PROP_T.has(p.t)) return null;
   const key = p.key || ("dyn" + p.x + "," + p.y);
   if (VEH.byKey.has(key)) return VEH.byKey.get(key);
-  const P = vehPropPose(p), h = cH(CITY.seed, p.x | 0, p.y | 0, 5);
+  const P = vehPropPose(p), h = cH(CITY.seed, p.x | 0, p.y | 0, 5), pk = p.k > 0 ? p.k : 1;
   const kind = vehKindOf(p.t, p.v | 0, p.t === "car", h);
-  const v = vehNew(kind, P.x, P.y, P.ang, P.L, P.D, { key, h, v: p.v | 0, themed: p.t === "car", art: p.t, wreck: !!p.wreck, fuel: p.fuel });
+  const v = vehNew(kind, P.x, P.y, P.ang, P.L / pk, P.D / pk, { key, h, v: p.v | 0, themed: p.t === "car", art: p.t, wreck: !!p.wreck, fuel: p.fuel, k: pk });
   if (p.dyn) { const i = cityRT.dyn.indexOf(p); if (i >= 0) cityRT.dyn.splice(i, 1); } else cityRT.used.add(key);
   vehQueueRebuild(p.x + p.w / 2, p.y + p.h / 2, P.x, P.y, Math.max(P.L, P.D));
   v.why = why || "";
@@ -163,13 +170,16 @@ function vehPromoteFurn(b, fi, why) {
   if (!f || !VEH_FURN_T.has(f.t)) return null;
   const key = b.uid + ":f" + fi;
   if (VEH.byKey.has(key)) return VEH.byKey.get(key);
-  const o = (f.o | 0) & 3, W = f.w * 16, H = f.h * 16, L = (o & 1) ? H : W, D = (o & 1) ? W : H;
+  // scaled interiors keep the design size (dw × dh before scaling; either may lie along x)
+  const fk = f.k > 0 ? f.k : 1, o = (f.o | 0) & 3, sc = n => Math.max(1, Math.ceil(n * fk));
+  const dsz = c => fk === 1 ? c : (f.dw && sc(f.dw) === c ? f.dw : f.dh && sc(f.dh) === c ? f.dh : c / fk);
+  const W = dsz(f.w) * 16, H = dsz(f.h) * 16, L = (o & 1) ? H : W, D = (o & 1) ? W : H;
   const x = (b.x + f.x + f.w / 2) * 16 - CITY.orx, y = (b.y + f.y + f.h / 2) * 16 - CITY.ory, h = cH(b.seed, f.x, f.y, 11);
   const kind = vehKindOf(f.t, f.v | 0, f.t === "car", h);
-  const v = vehNew(kind, x, y, o * Math.PI / 2 - Math.PI / 2, Math.min(L, D), Math.max(L, D), { key, h, v: f.v | 0, themed: f.t === "car", art: f.t, from: "furn", fuel: 0.55 + (h % 100) / 230 });
+  const v = vehNew(kind, x, y, o * Math.PI / 2 - Math.PI / 2, Math.min(L, D), Math.max(L, D), { key, h, v: f.v | 0, themed: f.t === "car", art: f.t, from: "furn", fuel: 0.55 + (h % 100) / 230, k: fk });
   v.bid = b.uid;
   cityRT.used.add(key);
-  vehQueueRebuild(b.x + f.x + f.w / 2, b.y + f.y + f.h / 2, x, y, Math.max(L, D));
+  vehQueueRebuild(b.x + f.x + f.w / 2, b.y + f.y + f.h / 2, x, y, Math.max(L, D) * fk + 16);
   return v;
 }
 // flags are rebuilt at once (physics needs them this frame); the tile art is re-baked stale-while-revalidate
@@ -233,7 +243,7 @@ function vehMakeLive(q, why) { return q.v || (q.p ? vehPromoteProp(q.p, why) : v
 /* === 4. PARTS (attachment points) ================================================================================== */
 // rects in drawing coords (x right, y toward the rear, front edge at −D/2). hp = attachment strength.
 function vehBuildParts(v) {
-  const L = v.L, D = v.D, x0 = -L / 2, y0 = -D / 2, S = v.S, k = v.kind, P = v.parts = [];
+  const vk = v.k || 1, L = v.L / vk, D = v.D / vk, x0 = -L / 2, y0 = -D / 2, S = v.S, k = v.kind, P = v.parts = [];
   let idx = 0;
   const add = (id, kind, x, y, w, h, hp, extra) => { const p = Object.assign({ id, kind, x, y, w, h, hp, max: hp, on: true, idx: idx++, side: 0 }, extra || {}); P.push(p); return p; };
   const wheels = (n, hp, ys) => { for (const yy of ys) { add("wheelL" + yy.toFixed(2), S.hover ? "pod" : "wheel", x0 - 1, y0 + D * yy, 3.5, Math.min(14, D * 0.11), hp, { side: -1 }); add("wheelR" + yy.toFixed(2), S.hover ? "pod" : "wheel", x0 + L - 2.5, y0 + D * yy, 3.5, Math.min(14, D * 0.11), hp, { side: 1 }); } };
@@ -289,6 +299,7 @@ function vehBuildParts(v) {
   } else if (k === "forklift") {
     add("forks", "forks", x0 + 1, y0 - 1, L - 2, D * 0.32, 50, { front: 1 }); wheels(4, 50, [0.4, 0.8]);
   } else { add("bumperF", "bumper", x0 + 3, y0 - 1, L - 6, 4.5, 20); add("bumperR", "bumper", x0 + 3, y0 + D - 3.5, L - 6, 4.5, 20, { rear: 1 }); wheels(4, 45, [0.14, 0.76]); }
+  if (vk !== 1) for (const p of P) { p.x *= vk; p.y *= vk; p.w *= vk; p.h *= vk; if (p.hx != null) { p.hx *= vk; p.hy *= vk; } }
   v.partsOn = P.length;
 }
 function vehPart(v, id) { for (const p of v.parts) if (p.id === id) return p; return null; }
@@ -303,7 +314,7 @@ function vehGlassGone(v, side) { for (const p of v.parts) if (p.kind === "glass"
 /* === 5. ART: base sprite (same art as the baked props) + damage sprite =============================================== */
 const VPAD = 14;
 function vehBaseSprite(v) {
-  const key = (v.art || v.kind) + "|" + v.kind + "|" + v.pv + "|" + (v.h & 0xffff) + "|" + v.L + "x" + v.D + "|" + CITY.themeKey + (v.wreck ? "|w" : "");
+  const key = (v.art || v.kind) + "|" + v.kind + "|" + v.pv + "|" + (v.h & 0xffff) + "|" + v.L + "x" + v.D + "|" + CITY.themeKey + (v.wreck ? "|w" : "") + (v.k !== 1 ? "|k" + v.k.toFixed(3) : "");
   let c = VEH.baseSpr.get(key);
   if (c) return c;
   const glider = v.kind === "glider" || v.kind === "thopter";
@@ -312,9 +323,9 @@ function vehBaseSprite(v) {
   c.padX = padX;
   const g = c.getContext("2d"); g.translate(c.width / 2, c.height / 2);
   // same call (and the same shadow) as the baked props, so a car that wakes up looks exactly like it did parked
-  crVehicle.noShadow = !!v.S.hover;
+  crVehicle.noShadow = !!v.S.hover; crVehicle.k = v.k || 1;
   try { if ((v.art || v.kind) === "car") crVehicle(g, "car", v.L, v.D, v.pv, v.h, true, v.wreck); else crVehicle(g, v.art || v.kind, v.L, v.D, v.pv, v.h, false, v.wreck); }
-  finally { crVehicle.noShadow = false; }
+  finally { crVehicle.noShadow = false; crVehicle.k = 0; }
   VEH.baseSpr.set(key, c);
   if (VEH.baseSpr.size > 160) VEH.baseSpr.delete(VEH.baseSpr.keys().next().value);
   return c;
@@ -328,7 +339,8 @@ function vehVisDamaged(v) {
 // deformed outline (drawing coords): the body is 2.5 px "fatter" than the art so mirrors survive until real dents start
 function vehOutline(v, grow) {
   const out = [];
-  for (let i = 0; i < 24; i++) { const P = v.per[i], g = (grow == null ? 2.5 : grow) - v.def[i]; out.push([P.x - P.nx * g, P.y - P.ny * g]); }
+  const vk = v.k || 1;
+  for (let i = 0; i < 24; i++) { const P = v.per[i], g = ((grow == null ? 2.5 : grow) - v.def[i]) * vk; out.push([P.x - P.nx * g, P.y - P.ny * g]); }
   return out;
 }
 function vehSprite(v) {
@@ -469,15 +481,15 @@ function vehNearestOcc(v, lx, ly, r) {
 }
 // one hit on the vehicle. type: crash | person | bullet | blast | melee | scrape. Returns the share that reaches an occupant.
 function vehDamage(v, lx, ly, dv, type, nx, ny, src) {
-  const S = v.S, arm = S.arm;
-  let hp = 0, dent = 0, partHit = 0, R = Math.max(18, Math.min(v.L * 0.62, 36)), glass = 0, pass = 0;
+  const S = v.S, arm = S.arm, vk = v.k || 1;
+  let hp = 0, dent = 0, partHit = 0, R = Math.max(18 * vk, Math.min(v.L * 0.62, 36 * vk)), glass = 0, pass = 0;
   switch (type) {
     case "crash": hp = Math.max(0, dv - 96) * 0.075 * arm; dent = Math.max(0, dv - 96) * 0.075 * Math.sqrt(arm); partHit = hp * 1.3; glass = dv > 420 ? 2 : dv > 260 ? 1 : 0; break;
-    case "person": { const mr = (src && src.mass || 80) / 80; hp = Math.max(0, dv - 150) * 0.01 * mr * arm; dent = Math.max(0, dv - 100) * 0.004 * mr; partHit = hp * 2; glass = dv > 400 ? 1 : 0; R = 16; break; }
-    case "bullet": hp = Math.max(0.4, Math.min(6, dv * 0.04)) * arm; partHit = hp * 3; R = 7; glass = 1; break;
+    case "person": { const mr = (src && src.mass || 80) / 80; hp = Math.max(0, dv - 150) * 0.01 * mr * arm; dent = Math.max(0, dv - 100) * 0.004 * mr; partHit = hp * 2; glass = dv > 400 ? 1 : 0; R = 16 * vk; break; }
+    case "bullet": hp = Math.max(0.4, Math.min(6, dv * 0.04)) * arm; partHit = hp * 3; R = 7 * vk; glass = 1; break;
     case "blast": hp = dv * arm; dent = Math.min(14, dv * 0.22); partHit = hp * 1.6; R = 70; glass = 2; break;
-    case "melee": hp = Math.max(0.5, Math.min(8, dv * 0.05)) * arm; dent = 0.8; partHit = hp * 2.5; R = 14; glass = 1; break;
-    case "scrape": hp = dv * 0.012 * arm; dent = 0.12; partHit = hp * 2; R = 12; break;
+    case "melee": hp = Math.max(0.5, Math.min(8, dv * 0.05)) * arm; dent = 0.8; partHit = hp * 2.5; R = 14 * vk; glass = 1; break;
+    case "scrape": hp = dv * 0.012 * arm; dent = 0.12; partHit = hp * 2; R = 12 * vk; break;
     default: break;
   }
   if (src === "player" || (src && src.player)) v.lastHitByPlayer = runTime;
@@ -486,7 +498,7 @@ function vehDamage(v, lx, ly, dv, type, nx, ny, src) {
     for (let i = 0; i < 24; i++) {
       const P = v.per[i], d = Math.hypot(P.x - lx, P.y - ly);
       if (d >= R) continue;
-      const f = 1 - d / R, cap = (P.zone === 0 || P.zone === 2) ? v.D * 0.2 : v.L * 0.2;
+      const f = 1 - d / R, cap = ((P.zone === 0 || P.zone === 2) ? v.D * 0.2 : v.L * 0.2) / vk;
       const bump = (P.zone === 0 && vehPart(v, "bumperF") && vehPart(v, "bumperF").on) || (P.zone === 2 && vehPart(v, "bumperR") && vehPart(v, "bumperR").on) ? 0.8 : 1;
       v.def[i] = Math.min(cap, v.def[i] + dent * f * f * bump);
     }
@@ -496,7 +508,7 @@ function vehDamage(v, lx, ly, dv, type, nx, ny, src) {
   // 2.5D: seen from the front / side / back, part of the profile is glass (windshield above the hood, side windows
   // above the doors) - a share of the hits on that face goes through the glass and on toward whoever sits there
   if (type === "bullet") {
-    const face = ly < -v.D / 2 + 7 ? "F" : ly > v.D / 2 - 7 ? "B" : Math.abs(lx) > v.L / 2 - 6 ? (lx < 0 ? "L" : "R") : null;
+    const face = ly < -v.D / 2 + 7 * vk ? "F" : ly > v.D / 2 - 7 * vk ? "B" : Math.abs(lx) > v.L / 2 - 6 * vk ? (lx < 0 ? "L" : "R") : null;
     const gp = face && v.parts.find(p => p.kind === "glass" && p.on !== undefined && (face === "F" ? p.front : face === "B" ? p.rear : face === "L" ? p.side < 0 && !p.front && !p.rear : p.side > 0 && !p.front && !p.rear));
     if (gp && Math.random() < (face === "F" ? 0.45 : 0.4)) {
       if (gp.on) { gp.hp -= 1; v.sprDirty = true; if (gp.hp <= 0) vehDetach(v, gp, nx, ny); }
@@ -534,6 +546,20 @@ function vehDamage(v, lx, ly, dv, type, nx, ny, src) {
   return pass;
 }
 function vehNearPlayer(v, r) { return player && Math.abs(v.x - player.x) < r && Math.abs(v.y - player.y) < r; }
+// real-equivalent speed in m/s (a 1:3 map shows what the car would be doing at true size)
+function vehRealMs(v) { return Math.hypot(v.vx, v.vy) / VPX / (v.k || 1); }
+// v14.3: scaled vehicles (props, live bodies, interior cars) draw at their design size and are shrunk, so the art keeps
+// its proportions: callers set crVehicle.k for the call (L, D passed are the world size)
+if (typeof crVehicle === "function") {
+  const _crv = crVehicle, ns0 = crVehicle.noShadow;
+  window.crVehicle = crVehicle = function (g, kind, L, D, v, h, themed, wreck) {
+    const k = crVehicle.k;
+    if (!k || k === 1 || crVehicle.inK) return _crv(g, kind, L, D, v, h, themed, wreck);
+    crVehicle.inK = true; g.save(); g.scale(k, k);
+    try { return _crv(g, kind, L / k, D / k, v, h, themed, wreck); } finally { g.restore(); crVehicle.inK = false; }
+  };
+  crVehicle.noShadow = ns0 || false; crVehicle.col = null; crVehicle.k = 0;
+}
 function vehDetach(v, p, nx, ny) {
   if (!p.on) return;
   p.on = false; p.hp = 0; v.sprDirty = true; v.sampDirty = true; VEH.stats.parts++;
@@ -608,23 +634,25 @@ function vehPower(v) {
   return 0.35 + 0.65 * v.eng;
 }
 function vehHandle(v, dt) {
-  const S = v.S, c = Math.cos(v.ang), s = Math.sin(v.ang);
+  // v14.3: speeds × sv (same seconds to top speed / to stop), cornering grip × sv²/k so the scaled car takes the scaled
+  // streets like the full-size one takes real streets
+  const S = v.S, c = Math.cos(v.ang), s = Math.sin(v.ang), sv = v.sv || 1, vk = v.k || 1, VPX = 32 * sv, VGRAV = VGRAV_D * sv * sv / vk, VGL = VGRAV_D * sv;
   let vf = v.vx * c + v.vy * s, vr = -v.vx * s + v.vy * c;
   const driven = !!v.drv, thr = driven ? v.ctl.thr : 0, st = driven ? v.ctl.st : 0, hb = driven ? v.ctl.hb : 1;
   const wl = vehWheelsLost(v), power = vehPower(v);
   const top = S.top * VPX * (1 - 0.22 * Math.min(2, wl)) * (!S.horse && v.eng < 0.25 ? 0.6 : 1), acc = S.acc * VPX * power, brk = S.brk * VPX, revTop = top * S.rev;
   v.brakeLit = 0;
   if (thr > 0.02) {
-    if (vf < -8) { vf = Math.min(0, vf + brk * thr * dt); v.brakeLit = 1; }
+    if (vf < -8 * sv) { vf = Math.min(0, vf + brk * thr * dt); v.brakeLit = 1; }
     else { const fv = Math.max(0, vf) / top; vf += acc * thr * Math.max(0, 1 - fv * fv) * dt; }
   } else if (thr < -0.02) {
-    if (vf > 8) { vf = Math.max(0, vf + brk * thr * dt); v.brakeLit = 1; }
+    if (vf > 8 * sv) { vf = Math.max(0, vf + brk * thr * dt); v.brakeLit = 1; }
     else { const rv = Math.max(0, -vf) / revTop; vf -= acc * 0.6 * -thr * Math.max(0, 1 - rv * rv) * dt; }
   }
   // rolling resistance, aero drag, engine braking; parked / locked wheels slide with full friction
   const mu = S.mu * (S.hover ? 1 : 1 - 0.12 * wl);
   if (!driven) {
-    const dec = (S.hover ? 0.35 : mu) * VGRAV * dt, sp = Math.hypot(vf, vr);
+    const dec = (S.hover ? 0.35 : mu) * VGL * dt, sp = Math.hypot(vf, vr);
     if (sp <= dec) { vf = 0; vr = 0; } else { vf -= vf / sp * dec; vr -= vr / sp * dec; }
   } else {
     const coast = (S.hover ? 0.25 : 0.6) * VPX + (Math.abs(thr) < 0.02 ? (S.hover ? 0.5 : 1.4) * VPX : 0) + 0.004 * vf * vf / VPX;
@@ -634,15 +662,15 @@ function vehHandle(v, dt) {
   // steering → yaw rate (speed-sensitive lock, lateral grip limit, pull from a missing wheel)
   const spd = Math.abs(vf), maxSt = S.st / (1 + spd / (14 * VPX));
   let pull = 0; if (wl) for (const p of v.parts) if ((p.kind === "wheel" || p.kind === "track") && !p.on) pull += p.side * (p.kind === "track" ? 0.5 : 0.18);
-  v.steerA += ((st + pull * Math.min(1, spd / 120)) * maxSt - v.steerA) * Math.min(1, dt * 8);
-  const wb = Math.max(30, v.D * 0.62), latMax = mu * VGRAV;
-  let wT = driven || spd > 4 ? vf * Math.tan(v.steerA) / wb : 0;
-  if (spd > 30) wT = Math.max(-latMax / spd, Math.min(latMax / spd, wT));
+  v.steerA += ((st + pull * Math.min(1, spd / (120 * sv))) * maxSt - v.steerA) * Math.min(1, dt * 8);
+  const wb = Math.max(30 * vk, v.D * 0.62), latMax = mu * VGRAV;
+  let wT = driven || spd > 4 * sv ? vf * Math.tan(v.steerA) / wb : 0;
+  if (spd > 30 * sv) wT = Math.max(-latMax / spd, Math.min(latMax / spd, wT));
   const grip = (S.hover ? 3.2 : hb && driven ? 2.2 : 9) * (v.spinT > 0 ? 0.25 : 1);
   if (v.spinT > 0) v.spinT -= dt;
   v.w += (wT - v.w) * Math.min(1, dt * grip);
   const dvr = latMax * dt * (hb && driven ? 0.3 : 1) * (v.spinT > 0 ? 0.4 : 1);
-  v.skid = Math.abs(vr) > 70 && !S.hover && spd + Math.abs(vr) > 120 ? Math.min(1, Math.abs(vr) / 260) : (hb && driven && spd > 90 && !S.hover ? 0.6 : 0);
+  v.skid = Math.abs(vr) > 70 * sv && !S.hover && spd + Math.abs(vr) > 120 * sv ? Math.min(1, Math.abs(vr) / (260 * sv)) : (hb && driven && spd > 90 * sv && !S.hover ? 0.6 : 0);
   if (Math.abs(vr) <= dvr) vr = 0; else vr -= Math.sign(vr) * dvr;
   v.vx = vf * c - vr * s; v.vy = vf * s + vr * c;
   v.vf = vf;
@@ -670,7 +698,7 @@ const VEH_BREAK = { barricade: 2.5, bench: 4, busstop: 6, evacsign: 2.5, grill: 
   streetlight: 8, pole: 8, flagpole: 8, pricesign: 9, airpump: 5, booth: 8, bleachers: 8, stall: 2, grave: 99, sandbags: -1.2, pump: 7 };
 const VEH_FENCE_BREAK = { 15: 4, 16: 6, 17: 3, 22: 7, 21: -6 };   // K_FENCE_WOOD, K_FENCE_CHAIN, K_FENCE_PICKET, K_HEDGE, K_STONE (heavy only)
 function vehTryBreak(v, C, speed) {
-  const ms = speed / VPX, k = C.k;
+  const ms = speed / VPX / (v.sv || 1), k = C.k;
   if (VEH_FENCE_BREAK[k] !== undefined) {
     const need = VEH_FENCE_BREAK[k];
     if ((need > 0 && ms >= need) || (need < 0 && v.m >= 5000 && ms >= -need)) { vehBreakFence(C.tx, C.ty, v, k); return true; }
@@ -705,7 +733,7 @@ function vehBreakFence(tx, ty, v, k) {
   const C = cityChunk(tx >> 7, ty >> 7);
   let f = null;
   for (const q of C.fences) { const w = Math.max(1, q.x1 - q.x0), h = Math.max(1, q.y1 - q.y0); if (tx >= q.x0 && tx < q.x0 + w && ty >= q.y0 && ty < q.y0 + h) { f = q; break; } }
-  const horiz = f ? (f.x1 - f.x0) >= (f.y1 - f.y0) : true, span = Math.ceil(Math.min(v.L, v.D) / 32) + 2;
+  const horiz = f ? (f.x1 - f.x0) >= (f.y1 - f.y0) : true, span = Math.ceil(Math.min(v.L, v.D) / 32) + (v.k < 1 ? 1 : 2);
   for (let d = -span; d <= span; d++) cityRT.fenceBroken.add(cityKeyT(horiz ? tx + d : tx, horiz ? ty : ty + d));
   const lx = tx * 16 + 8 - CITY.orx, ly = ty * 16 + 8 - CITY.ory;
   vehQueueRebuild(tx, ty, lx, ly, span * 32 + 32);
@@ -732,7 +760,7 @@ function vehWorldCollide(v, ox, oy, oa) {
       if (vehPromoteAtTile(tx, ty, "hit")) continue;
       if (!vehStaticAtTile(tx, ty)) { const key = (tx >> 7) * 4096 + (ty >> 7); if (!VEH.healed || !VEH.healed.has(key)) { (VEH.healed || (VEH.healed = new Set())).add(key); VEH.rebuild.set(key, 1); vehFlushRebuild(); } continue; }   // orphan stamp: self-heal
     }
-    if (k === K_GDOOR && v.drv && Math.hypot(v.vx, v.vy) > 4 * VPX && typeof cityAccessGarageBreak === "function") { cityAccessGarageBreak(tx, ty, v); continue; }
+    if (k === K_GDOOR && v.drv && Math.hypot(v.vx, v.vy) > 4 * VPX * (v.sv || 1) && typeof cityAccessGarageBreak === "function") { cityAccessGarageBreak(tx, ty, v); continue; }
     const px0 = ox - s0 * lx - c0 * ly + OX, py0 = oy + c0 * lx - s0 * ly + OY, wxa = wx + OX, wya = wy + OY;
     let nx = 0, ny = 0, depth = 0;
     const ptx = Math.floor(px0 / 16), pty = Math.floor(py0 / 16);
@@ -774,7 +802,7 @@ function vehWorldCollide(v, ox, oy, oa) {
     const tx = -K.ny, ty = K.nx, vt = (v.vx - v.w * ry) * tx + (v.vy + v.w * rx) * ty, rt = rx * ty - ry * tx;
     let jt = -vt / (1 / v.m + rt * rt / v.I); jt = Math.max(-0.3 * jn, Math.min(0.3 * jn, jt));
     v.vx += tx * jt / v.m; v.vy += ty * jt / v.m; v.w += rt * jt / v.I;
-    if (Math.abs(vt) > 90) v.scrapeT = 0.15;
+    if (Math.abs(vt) > 90 * (v.sv || 1)) v.scrapeT = 0.15;
   }
   // push out (per side) and undo rotation that drove the body into a wall
   let pxp = 0, pxn = 0, pyp = 0, pyn = 0;
@@ -782,16 +810,17 @@ function vehWorldCollide(v, ox, oy, oa) {
   v.x += (pxp - pxn) * (pxp && pxn ? 0 : 1) + (pxp ? 0.2 : pxn ? -0.2 : 0); v.y += (pyp - pyn) * (pyp && pyn ? 0 : 1) + (pyp ? 0.2 : pyn ? -0.2 : 0);
   if (maxDepth > 5 || (pxp && pxn) || (pyp && pyn)) { v.ang = oa; v.w *= -0.2; if ((pxp && pxn) || (pyp && pyn)) { v.x = ox; v.y = oy; } }
   // impact damage (once per sub-step, at the hardest contact)
-  if (hit && !hit.broke && maxVn > 96 && v.hitCD <= 0) {
-    const dv = maxVn * 1.12, [lx, ly] = vehToLocal(v, hit.C.wx, hit.C.wy);
+  const svn = v.sv || 1;   // v14.3: a scaled car's impacts count at its apparent speed
+  if (hit && !hit.broke && maxVn / svn > 96 && v.hitCD <= 0) {
+    const dv = maxVn * 1.12 / svn, [lx, ly] = vehToLocal(v, hit.C.wx, hit.C.wy);
     vehDamage(v, lx, ly, dv, "crash", hit.nx, hit.ny, v.drv === "P" ? "player" : null);
     vehImpactFx(v, hit.C.wx, hit.C.wy, dv, hit.C.k);
     if (dv > 300) v.spinT = 0.35;
     v.hitCD = 0.12;
     if (v.drv === "P") vehOccupantJolt(v, dv);
-  } else if (hit && maxVn > 30 && v.scrapeT > 0 && hit.C) {
+  } else if (hit && maxVn / svn > 30 && v.scrapeT > 0 && hit.C) {
     if (Math.random() < 0.5) spawnPt(hit.C.wx, hit.C.wy, (Math.random() - 0.5) * 120, (Math.random() - 0.5) * 120, 0.25, 1.4, 1, 3);
-    const [lx, ly] = vehToLocal(v, hit.C.wx, hit.C.wy); vehDamage(v, lx, ly, maxVn, "scrape", hit.nx, hit.ny, null);
+    const [lx, ly] = vehToLocal(v, hit.C.wx, hit.C.wy); vehDamage(v, lx, ly, maxVn / svn, "scrape", hit.nx, hit.ny, null);
   }
   return maxVn;
 }
@@ -818,7 +847,7 @@ function vehOccupantJolt(v, dv) {
 function vehBox(v, B) {
   let fF = 0, fR = 0, sL = 0, sR = 0;
   for (let i = 0; i < 24; i++) { const z = v.per[i].zone, d = v.def[i]; if (z === 0) fF = Math.max(fF, d); else if (z === 2) fR = Math.max(fR, d); else if (z === 1) sR = Math.max(sR, d); else sL = Math.max(sL, d); }
-  const ef = v.D / 2 - fF * 0.8, er = v.D / 2 - fR * 0.8, el = v.L / 2 - sL * 0.6, eg = v.L / 2 - sR * 0.6;
+  const vk = v.k || 1, ef = v.D / 2 - fF * 0.8 * vk, er = v.D / 2 - fR * 0.8 * vk, el = v.L / 2 - sL * 0.6 * vk, eg = v.L / 2 - sR * 0.6 * vk;
   const c = Math.cos(v.ang), s = Math.sin(v.ang), of = (ef - er) / 2, orr = (eg - el) / 2;
   B.c = c; B.s = s; B.hf = (ef + er) / 2; B.hw = (el + eg) / 2; B.cx = v.x + c * of - s * orr; B.cy = v.y + s * of + c * orr;
   return B;
@@ -884,7 +913,7 @@ function vehResolvePair(A, B, h) {
   let jt = -vt / (1 / A.m + 1 / B.m + iat * iat / A.I + ibt * ibt / B.I); jt = Math.max(-0.35 * j, Math.min(0.35 * j, jt));
   A.vx -= tx * jt / A.m; A.vy -= ty * jt / A.m; A.w -= iat * jt / A.I; B.vx += tx * jt / B.m; B.vy += ty * jt / B.m; B.w += ibt * jt / B.I;
   // each body feels its own Δv: the light car crumples, the bus barely notices
-  const dA = j / A.m * 1.0, dB = j / B.m * 1.0;
+  const dA = j / A.m / (A.sv || 1), dB = j / B.m / (B.sv || 1);
   if (A.hitCD <= 0 && dA > 96) { const [lx, ly] = vehToLocal(A, h.px, h.py); vehDamage(A, lx, ly, dA, "crash", nx, ny, B.drv === "P" ? "player" : null); if (dA > 300) A.spinT = 0.35; A.hitCD = 0.12; if (A.drv === "P") vehOccupantJolt(A, dA); }
   if (B.hitCD <= 0 && dB > 96) { const [lx, ly] = vehToLocal(B, h.px, h.py); vehDamage(B, lx, ly, dB, "crash", -nx, -ny, A.drv === "P" ? "player" : null); if (dB > 300) B.spinT = 0.35; B.hitCD = 0.12; if (B.drv === "P") vehOccupantJolt(B, dB); }
   if (Math.max(dA, dB) > 96) vehImpactFx(Math.max(dA, dB) === dA ? A : B, h.px, h.py, Math.max(dA, dB), K_CAR);
@@ -907,7 +936,7 @@ function vehPeopleStep(v, dt) {
     if (ox <= 0 || oy <= 0) continue;
     let nx, ny, push;   // outward normal (world) from the body to the person
     if (ox < oy) { const sg = rt >= 0 ? 1 : -1; nx = -s * sg; ny = c * sg; push = ox; } else { const sg = fw >= 0 ? 1 : -1; nx = c * sg; ny = s * sg; push = oy; }
-    const vpx = v.vx - v.w * dy, vpy = v.vy + v.w * dx, vn = vpx * nx + vpy * ny;
+    const vpx = v.vx - v.w * dy, vpy = v.vy + v.w * dx, vnW = vpx * nx + vpy * ny, vn = vnW / (v.sv || 1);
     const ally = typeof allyIs === "function" && allyCount > 0 && allyIs(j);
     const mass = eType[j] === 99 ? 1500 : eType[j] === 98 ? 320 : 85;
     const shareP = v.m / (v.m + mass);
@@ -916,7 +945,7 @@ function vehPeopleStep(v, dt) {
     if (vn < 40 || ally || (typeof sdIgnore === "function" && sdIgnore(j)) || v.hitE === eUid[j] + ":" + Math.floor(runTime * 4)) continue;
     v.hitE = eUid[j] + ":" + Math.floor(runTime * 4);
     // the person takes the hit; the vehicle loses the momentum it gave away
-    const dvV = vn * mass / (v.m + mass);
+    const dvV = vnW * mass / (v.m + mass);
     v.vx -= nx * dvV; v.vy -= ny * dvV;
     const might = v.drv === "P" ? (player.might || 1) : 0.8;
     const dmg = Math.max(0, vn - 60) * 0.9 * Math.pow(v.m / 1400, 0.35) * might;
@@ -975,8 +1004,8 @@ function vehStepAll(dt) {
         v.x += v.vx * h; v.y += v.vy * h; v.ang += v.w * h;
         vehWorldCollide(v, ox, oy, oa);
       }
-      if (sp > 30) vehPeopleStep(v, dt);
-      if (!v.drv && sp < 4 && Math.abs(v.w) < 0.03) { v.sleep += dt; if (v.sleep > 1.2) { v.awake = false; v.vx = v.vy = v.w = 0; } } else v.sleep = 0;
+      if (sp > 30 * (v.sv || 1)) vehPeopleStep(v, dt);
+      if (!v.drv && sp < 4 * (v.sv || 1) && Math.abs(v.w) < 0.03) { v.sleep += dt; if (v.sleep > 1.2) { v.awake = false; v.vx = v.vy = v.w = 0; } } else v.sleep = 0;
       vehTrailFx(v, dt, sp);
     }
     vehLifeFx(v, dt);
@@ -1002,7 +1031,7 @@ function vehTrailFx(v, dt, sp) {
     v.skidT -= dt;
     if (v.skidT <= 0) {
       v.skidT = 0.03;
-      for (const s of [-1, 1]) { const [wx, wy] = vehToWorld(v, s * (v.L / 2 - 4), v.D * 0.32); VEH.skids.push([wx, wy, v.ang, runTime, v.skid]); }
+      for (const s of [-1, 1]) { const [wx, wy] = vehToWorld(v, s * (v.L / 2 - 4 * (v.k || 1)), v.D * 0.32); VEH.skids.push([wx, wy, v.ang, runTime, v.skid, v.k || 1]); }
       if (VEH.skids.length > 600) VEH.skids.splice(0, VEH.skids.length - 600);
       if (vehNearPlayer(v, 600) && Math.random() < 0.3 && typeof playNoise === "function") playNoise(0.08, "bandpass", 1800, 1500, 6, 0.05 * v.skid);
     }
@@ -1147,15 +1176,16 @@ function vehDriveInput(dt, mx, my, mag) {
   // point-to-steer: push where you want to go; pull back to brake / reverse
   if (mag < 0.15) { c.thr = 0; c.st *= 0.6; return true; }
   const want = Math.atan2(my, mx), diff = vehAngDiff(want, v.ang), sp = Math.abs(vf);
-  if (Math.abs(diff) > 2.35 && (vf < 40 || v.revMode)) {          // behind you: back up toward it
+  const svd = v.sv || 1;
+  if (Math.abs(diff) > 2.35 && (vf < 40 * svd || v.revMode)) {          // behind you: back up toward it
     v.revMode = true;
     const e = vehAngDiff(want + Math.PI, v.ang);
     c.thr = -Math.min(1, mag); c.st = Math.max(-1, Math.min(1, -e * 2.4));
-  } else if (Math.abs(diff) > 2.0 && vf > 40) {                  // hard U-turn at speed: brake first
+  } else if (Math.abs(diff) > 2.0 && vf > 40 * svd) {                  // hard U-turn at speed: brake first
     v.revMode = false; c.thr = -1; c.st = Math.sign(diff);
   } else {
     v.revMode = false;
-    c.thr = Math.min(1, mag) * (Math.abs(diff) > 1.2 && sp > 200 ? 0.35 : 1);
+    c.thr = Math.min(1, mag) * (Math.abs(diff) > 1.2 && sp > 200 * svd ? 0.35 : 1);
     c.st = Math.max(-1, Math.min(1, diff * 2.2));
   }
   return true;
@@ -1233,8 +1263,9 @@ function vehDraw(g, v, t) {
   g.drawImage(spr, -spr.width / 2, -spr.height / 2);
   const x0 = -v.L / 2, y0 = -v.D / 2;
   // live lights: brake lamps, police bar, headlights after dark
-  if (v.brakeLit && !v.dead) { g.fillStyle = "rgba(255,40,40,0.85)"; for (const p of v.parts) if (p.kind === "light" && p.rear && p.on) { g.fillRect(p.x, p.y, p.w, p.h); crGlow(g, p.x + p.w / 2, p.y + p.h / 2, 9, "#ff1744", 0.35); } }
-  if (v.S.bar && v.drv && !v.dead) { const lb = vehPart(v, "lightbar"); if (lb && lb.on) { const ph = Math.floor(t * 6) & 1; crGlow(g, lb.x + lb.w * 0.25, lb.y + 2, 16, ph ? "#ff1744" : "#2979ff", 0.6); crGlow(g, lb.x + lb.w * 0.75, lb.y + 2, 16, ph ? "#2979ff" : "#ff1744", 0.6); } }
+  const gk = Math.max(0.45, v.k || 1);
+  if (v.brakeLit && !v.dead) { g.fillStyle = "rgba(255,40,40,0.85)"; for (const p of v.parts) if (p.kind === "light" && p.rear && p.on) { g.fillRect(p.x, p.y, p.w, p.h); crGlow(g, p.x + p.w / 2, p.y + p.h / 2, 9 * gk, "#ff1744", 0.35); } }
+  if (v.S.bar && (v.drv || v.siren) && !v.dead) { const lb = vehPart(v, "lightbar"); if (lb && lb.on) { const ph = Math.floor(t * 6) & 1; crGlow(g, lb.x + lb.w * 0.25, lb.y + 2 * gk, 16 * gk, ph ? "#ff1744" : "#2979ff", 0.6); crGlow(g, lb.x + lb.w * 0.75, lb.y + 2 * gk, 16 * gk, ph ? "#2979ff" : "#ff1744", 0.6); } }
   if (v.drv && !v.dead && (CITY.theme.dark || 0) > 0.25 && !v.S.horse) {
     g.save(); g.globalCompositeOperation = "lighter";
     for (const p of v.parts) if (p.kind === "light" && !p.rear && p.on) { const gr = g.createLinearGradient(0, y0, 0, y0 - 120); gr.addColorStop(0, "rgba(255,250,220,0.22)"); gr.addColorStop(1, "rgba(255,250,220,0)"); g.fillStyle = gr; g.beginPath(); g.moveTo(p.x + p.w / 2 - 3, y0); g.lineTo(p.x + p.w / 2 - 26, y0 - 120); g.lineTo(p.x + p.w / 2 + 26, y0 - 120); g.lineTo(p.x + p.w / 2 + 3, y0); g.fill(); }
@@ -1265,7 +1296,7 @@ function vehRenderLayer(g, left, top, vw, vh) {
       if (s[0] < left - 20 || s[0] > x1 + 20 || s[1] < top - 20 || s[1] > y1 + 20) continue;
       const age = t - s[3]; if (age > 45 || age < 0) continue;
       g.globalAlpha = Math.min(0.5, s[4] * 0.55) * (1 - age / 45);
-      g.setTransform(T0); g.translate(s[0], s[1]); g.rotate(s[2]); g.fillRect(-4, -1.6, 8, 3.2);
+      g.setTransform(T0); g.translate(s[0], s[1]); g.rotate(s[2]); const sk = s[5] || 1; g.fillRect(-4 * sk, -1.6 * sk, 8 * sk, 3.2 * sk);
     }
     g.setTransform(T0);
     g.restore();
@@ -1308,7 +1339,7 @@ function vehHudFrame() {
   const now = performance.now();
   if (now - (VEH.hudT || 0) < 90) return;
   VEH.hudT = now;
-  const units = (opts && opts.vehUnits) || VEH.units, ms = Math.hypot(v.vx, v.vy) / VPX, spd = units === "kmh" ? ms * 3.6 : ms * 2.237;
+  const units = (opts && opts.vehUnits) || VEH.units, ms = vehRealMs(v), spd = units === "kmh" ? ms * 3.6 : ms * 2.237;
   const q = s => el.querySelector(s);
   const nv = typeof CONVOY !== "undefined" ? CONVOY.vehicles.length : 0;
   q(".vh-name").textContent = vehName(v) + (nv ? "  ·  CONVOY LEAD (" + (nv + 1) + ")" : "");
@@ -1323,7 +1354,7 @@ function vehHudFrame() {
   q(".vh-st").innerHTML = '<span style="color:' + (eng === "OK" ? "#69f0ae" : eng === "DAMAGED" ? "#ffd166" : "#ff5252") + '">' + (horse ? (eng === "OK" ? "HEALTHY" : eng) : eng) + "</span> · " + Math.round(hpF * 100) + "% · 👥 " + occ + "/" + seats;
   let nav = "";
   if (v.refuel) nav = "⛽ " + (horse ? "FEEDING THE HORSES" : "REFUELING") + "…";
-  else if (val < 0.3 && VSTA.nearest) { const S = VSTA.nearest, a = Math.atan2(S.y * 16 - CITY.ory - v.y, S.x * 16 - CITY.orx - v.x), dirs = ["E", "SE", "S", "SW", "W", "NW", "N", "NE"]; nav = "⛽ " + S.name + " " + (S.dist > 1000 ? (S.dist / 1000).toFixed(1) + " km" : Math.round(S.dist) + " m") + " " + dirs[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8]; }
+  else if (val < 0.3 && VSTA.nearest) { const S = VSTA.nearest, a = Math.atan2(S.y * 16 - CITY.ory - v.y, S.x * 16 - CITY.orx - v.x), dirs = ["E", "SE", "S", "SW", "W", "NW", "N", "NE"]; nav = "⛽ " + S.name + " " + (typeof mapDistTxt === "function" ? mapDistTxt(S.dist) : S.dist > 1000 ? (S.dist / 1000).toFixed(1) + " km" : Math.round(S.dist) + " m") + " " + dirs[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8]; }
   else if (val < 0.3) nav = "⛽ LOW — SEARCHING FOR A STATION…";
   q(".vh-nav").textContent = nav; q(".vh-nav").style.display = nav ? "block" : "none";
   el.classList.toggle("warn", val < 0.15 || hpF < 0.25 || v.fire > 0);
@@ -1369,7 +1400,7 @@ function vehCameraFrame(rawDt) {
   const v = VEH.me, k = Math.min(1, rawDt * 2.5);
   let tz = 1, tx = 0, ty = 0;
   if (v && CITY.on && !VEH.noCam) {
-    const sp = Math.hypot(v.vx, v.vy), f = Math.min(1, sp / (22 * VPX));
+    const sp = Math.hypot(v.vx, v.vy), f = Math.min(1, sp / (22 * VPX * (v.sv || 1)));
     tz = 1 - 0.16 * f; tx = Math.max(-150, Math.min(150, v.vx * 0.22)); ty = Math.max(-110, Math.min(110, v.vy * 0.22));
   }
   VEH.camZoom += (tz - VEH.camZoom) * k; VEH.camFx = (VEH.camFx || 0) + (tx - (VEH.camFx || 0)) * k; VEH.camFy = (VEH.camFy || 0) + (ty - (VEH.camFy || 0)) * k;

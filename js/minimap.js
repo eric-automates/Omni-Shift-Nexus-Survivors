@@ -22,6 +22,9 @@ const MAP_STYLE = {
   scifi: { bg: "#06121e", land: ["#0b1e2c", "#0b1f2a", "#0d2232", "#0f2638", "#122c42", "#10283a", "#0a2226", "#08243a"], road: "#1e5a7a", road2: "#174a66", edge: "#0a2a3c", hw: "#4fc3ff", hwEdge: "#0a6a9a", bld: "#1a3a52", bldEdge: "#2a6a8a", civic: "#2a5a7a", park: "#0e3a34", water: "#08304a", woods: "#0c3030", lot: "#10283a", txt: "#80deea", halo: "rgba(0,10,20,0.85)", grid: "rgba(79,195,255,0.06)" },
   rustic: { bg: "#e8d8b0", land: ["#e6d6a8", "#e2d2a4", "#ddcc9c", "#d8c696", "#d2bf8e", "#d6c494", "#c8c890", "#c8d4c0"], road: "#b8956a", road2: "#c4a478", edge: "#8a6a44", hw: "#9a6a3a", hwEdge: "#5a3a1e", bld: "#a07a52", bldEdge: "#6a4a2a", civic: "#8a5a3a", park: "#b8c084", water: "#9ab8c0", woods: "#a8b078", lot: "#d0bc90", txt: "#3e2723", halo: "rgba(240,226,190,0.85)", grid: "rgba(90,60,30,0.06)" }
 };
+// v14.3: game metres → real-equivalent metres (a 1:3 real map covers 3 real metres per game metre)
+function mapRealK() { return typeof RG !== "undefined" && RG.real && typeof RM !== "undefined" && RM.S > 0 ? 1 / RM.S : 1; }
+function mapDistTxt(m) { const r = m * mapRealK(); return r >= 1000 ? (r / 1000).toFixed(r >= 10000 ? 0 : 1) + " km" : Math.round(r) + " m"; }
 function mapStyle() { return MAP_STYLE[typeof crFam === "function" && CITY.theme ? crFam() : "earth"] || MAP_STYLE.earth; }
 
 /* --- map tiles: 256 px each, metres-per-pixel levels -------------------------------- */
@@ -170,7 +173,8 @@ function minimapRender(g) {
   g.restore();
   g.save(); g.font = "800 10px 'Segoe UI', sans-serif"; g.textAlign = "center"; g.fillStyle = St.txt; g.strokeStyle = St.halo; g.lineWidth = 3;
   g.strokeText("N", x0 + S / 2, y0 + 12); g.fillText("N", x0 + S / 2, y0 + 12);
-  const sc = mpp * 40 >= 1000 ? (mpp * 40 / 1000).toFixed(1) + " km" : Math.round(mpp * 40) + " m";
+  // v14.3: real-equivalent distances on a scaled real map (a 1:3 map shows real metres, not game metres)
+  const sc = mapDistTxt(mpp * 40);
   g.textAlign = "left"; g.font = "700 9px 'Segoe UI', sans-serif"; g.fillRect(x0 + 8, y0 + S - 9, 40, 2); g.strokeText(sc, x0 + 8, y0 + S - 12); g.fillText(sc, x0 + 8, y0 + S - 12);
   g.restore();
   g.strokeStyle = "rgba(128,222,234,0.55)"; g.lineWidth = 1.5; crRR(g, x0, y0, S, S, 9); g.stroke();
@@ -202,7 +206,7 @@ function mapBeaconsWorld(g) {
     g.strokeStyle = col; g.lineWidth = 2 / z; g.beginPath(); g.arc(x, y, (10 + pulse * 6) / z, 0, 7); g.stroke();
     mapDrawSymbol(g, x, y - 150 / z, m, 1.2 / z);
     g.font = "800 " + (11 / z) + "px 'Segoe UI', sans-serif"; g.textAlign = "center"; g.fillStyle = "#fff"; g.strokeStyle = "rgba(0,0,0,0.8)"; g.lineWidth = 3 / z;
-    const lab = Math.round(dm) + " m" + (m.n ? " · " + m.n.slice(0, 26) : "");
+    const lab = mapDistTxt(dm) + (m.n ? " · " + m.n.slice(0, 26) : "");
     g.strokeText(lab, x, y - 168 / z); g.fillText(lab, x, y - 168 / z);
     g.restore();
   }
@@ -221,7 +225,7 @@ function mapBeaconsScreen(g) {
     g.save(); g.rotate(a); g.fillStyle = col; g.beginPath(); g.moveTo(16, 0); g.lineTo(6, -6); g.lineTo(6, 6); g.closePath(); g.fill(); g.restore();
     mapDrawSymbol(g, 0, 0, m, 0.95);
     g.font = "800 10px 'Segoe UI', sans-serif"; g.textAlign = "center"; g.fillStyle = "#fff"; g.strokeStyle = "rgba(0,0,0,0.8)"; g.lineWidth = 3;
-    g.strokeText(Math.round(dm) + " m", 0, 20); g.fillText(Math.round(dm) + " m", 0, 20);
+    const dl = mapDistTxt(dm); g.strokeText(dl, 0, 20); g.fillText(dl, 0, 20);
     g.restore();
   }
 }
@@ -401,8 +405,9 @@ function mapFrame() {
     g.font = "900 11px 'Segoe UI', sans-serif"; g.fillStyle = "#fff"; g.strokeStyle = "#0d47a1"; g.lineWidth = 3; g.strokeText("YOU", sx, sy - 16); g.fillText("YOU", sx, sy - 16);
   }
   // scale bar
-  const nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000], target = mpp * 120; let sbm = nice[0]; for (const v of nice) if (v <= target) sbm = v;
-  g.fillStyle = St.halo; g.fillRect(16, h - 34, sbm / mpp + 12, 22); g.fillStyle = St.txt; g.fillRect(22, h - 18, sbm / mpp, 3);
+  const rk = mapRealK(), nice = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000], target = mpp * 120 * rk; let sbm = nice[0]; for (const v of nice) if (v <= target) sbm = v;
+  const sbw = sbm / rk / mpp;
+  g.fillStyle = St.halo; g.fillRect(16, h - 34, sbw + 12, 22); g.fillStyle = St.txt; g.fillRect(22, h - 18, sbw, 3);
   g.font = "700 11px 'Segoe UI', sans-serif"; g.textAlign = "left"; g.fillText(sbm >= 1000 ? sbm / 1000 + " km" : sbm + " m", 22, h - 26);
   g.restore();
   // cursor readout
@@ -410,7 +415,7 @@ function mapFrame() {
   if (info && MAPV.hover) {
     const [xm, ym] = mapScreenToM(MAPV.hover[0], MAPV.hover[1]);
     const mx = Math.floor(xm / 1000), my = Math.floor(ym / 1000);
-    if (mx >= 0 && my >= 0 && mx < 64 && my < 64) { const ci = cityMacroCityIdx(mx, my); info.textContent = (xm / 1000).toFixed(2) + " km E · " + (ym / 1000).toFixed(2) + " km S · " + (ci >= 0 ? cityName(CITY.cities[ci]) + " · " : "") + CL_NAMES[cityMacroClass(mx, my)]; }
+    if (mx >= 0 && my >= 0 && mx < 64 && my < 64) { const ci = cityMacroCityIdx(mx, my); info.textContent = (xm * mapRealK() / 1000).toFixed(2) + " km E · " + (ym * mapRealK() / 1000).toFixed(2) + " km S · " + (ci >= 0 ? cityName(CITY.cities[ci]) + " · " : "") + CL_NAMES[cityMacroClass(mx, my)]; }
   }
   requestAnimationFrame(mapFrame);
 }

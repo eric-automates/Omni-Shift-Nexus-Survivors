@@ -252,7 +252,7 @@ function itThrowCapsule(i) {
   if (!spot) { itToast("💊 No room to open it here — step outside", "#ffab40"); return false; }
   const kind = (typeof VK !== "undefined" && VK[q]) ? q : "hover";
   const dims = (typeof FLY_DIMS !== "undefined" && FLY_DIMS[kind]) || [76, 150];
-  const v = vehNew(kind, spot[0], spot[1], a, dims[0], dims[1], { key: "cap" + Date.now() + "_" + i, from: "capsule", fuel: 1 });
+  const v = vehNew(kind, spot[0], spot[1], a, dims[0], dims[1], { key: "cap" + Date.now() + "_" + i, from: "capsule", fuel: 1, k: typeof vehWorldK === "function" ? vehWorldK() : 1 });
   v.capsule = q; v.mine = true; VEH.lastMine = v;
   if (typeof vehQueueRebuild === "function") vehQueueRebuild((spot[0] + CITY.orx) / 16, (spot[1] + CITY.ory) / 16, spot[0], spot[1], 200);
   B.caps.splice(i, 1);

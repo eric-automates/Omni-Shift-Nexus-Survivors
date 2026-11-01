@@ -416,7 +416,7 @@ function convoyMinionStep(m, dt) {
     const [dx, dy] = cvDoorWorld(v, B.s, mX[m], mY[m]), d = Math.hypot(dx - mX[m], dy - mY[m]);
     if (d < 22 || (B.t > 1.2 && Math.hypot(mX[m] - v.x, mY[m] - v.y) < Math.max(v.L, v.D) * 0.6 + 16)) { cvSeatNow(m, v, B.s); return true; }
     // the car left without them: find room in the column or hold
-    if (B.t > 14 || (v === VEH.me && Math.hypot(v.vx, v.vy) > 160 && d > 700)) {
+    if (B.t > 14 || (v === VEH.me && Math.hypot(v.vx, v.vy) > 160 * (v.sv || 1) && d > 700)) {
       B.s.occ = null; mBoard[m] = null;
       for (const u of CONVOY.vehicles) { cvFill(u, [m]); if (mBoard[m]) break; }
       if (!mBoard[m]) cvHold([m]);
@@ -526,7 +526,7 @@ function convoyDrawOccupants(g, v, t) {
       case "b": case "t": cvDrawFigure(g, m, s.type === "t" ? sx : s.side * (v.L / 2 - 6), sy, aiming ? aimL : (s.type === "t" ? Math.PI / 2 : s.side > 0 ? 0 : Math.PI), aiming ? "stand" : "seated", th); break;
       case "w":
         if (doorGone) cvDrawFigure(g, m, s.side * (v.L / 2 - 4), sy, aiming ? aimL : (s.side > 0 ? 0 : Math.PI), "seated", th);           // whole rider in the open door frame
-        else if (aiming || (mKind[m] === 1 && Math.hypot(v.vx, v.vy) > 60)) cvDrawFigure(g, m, s.side * (v.L / 2 + 2.5), sy, aimL, "lean", th);   // leaning out of the window
+        else if (aiming || (mKind[m] === 1 && Math.hypot(v.vx, v.vy) > 60 * (v.sv || 1))) cvDrawFigure(g, m, s.side * (v.L / 2 + 2.5), sy, aimL, "lean", th);   // leaning out of the window
         else if (glassGone) { g.fillStyle = "#e0ac69"; g.beginPath(); g.arc(s.side * (v.L / 2 - 7), sy, 2.6, 0, 7); g.fill(); }
         break;
       default:
@@ -597,4 +597,14 @@ function convoyReset() {
 V10.onRunStart.push(convoyReset);
 V10.onRunReset.push(convoyReset);
 V10.onStep.push(() => { CONVOY.frame = (CONVOY.frame | 0) + 1; for (let m = 0; m < mSeat.length; m++) { if ((mSeat[m] || mBoard[m]) && (!mAct[m] || mHP[m] <= 0)) cvUnseat(m, false); if (mHold[m] && !mAct[m]) cvReleaseHold(m); } });
+// v14.3: a scaled body (1:3 real map) seats its riders at the body's scale
+if (typeof convoyDrawOccupants === "function") {
+  const _cvdo = convoyDrawOccupants;
+  window.convoyDrawOccupants = convoyDrawOccupants = function (g, v, t) {
+    const k = v && v.k; if (!k || k === 1) return _cvdo(g, v, t);
+    const L = v.L, D = v.D; g.save(); g.scale(k, k); v.L = L / k; v.D = D / k;
+    try { return _cvdo(g, v, t); } finally { v.L = L; v.D = D; g.restore(); }
+  };
+}
+
 // EOF:js/convoy.js

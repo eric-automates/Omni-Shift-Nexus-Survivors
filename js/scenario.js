@@ -147,7 +147,8 @@ function scnLights(push) {   // push(worldX, worldY, radiusPx, strength, kind)
     if (!v.drv && !(player.inVehicle === 3 && VEH.ride === v) || v.dead) continue;
     if (Math.abs(v.x - player.x) > 1600 || Math.abs(v.y - player.y) > 1200) continue;
     const fx = Math.cos(v.ang), fy = Math.sin(v.ang);
-    for (let k = 1; k <= 3; k++) push(v.x + fx * (v.D * 0.5 + 70 * k), v.y + fy * (v.D * 0.5 + 70 * k), 70 + 40 * k, 0.8, "car");
+    const hk = Math.max(0.5, v.k || 1);   // v14.3: a 1:3 car throws a shorter beam
+    for (let k = 1; k <= 3; k++) push(v.x + fx * (v.D * 0.5 + 70 * k * hk), v.y + fy * (v.D * 0.5 + 70 * k * hk), (70 + 40 * k) * hk, 0.8, "car");
   }
   // the building you're in has its lights on
   if (typeof cityBuildingAt === "function") { const b = cityBuildingAt(player.x, player.y); if (b) push(player.x, player.y, 520, 0.85, "room"); }

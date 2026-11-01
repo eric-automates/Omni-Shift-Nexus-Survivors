@@ -1065,6 +1065,8 @@ function fireWeapon(w) {
   }
   // v13: the second of a twin pair (two six-shooters...) takes the second-nearest target
   if (((w.twinIdx || 0) % 2 === 1) && best2 < 1e9) { tx = tx2; ty = ty2; }
+  // v14.3: a gun in each hand — each hand fires at its own target (js/dualaim.js)
+  if (typeof dualAimTarget === "function") { const dj = dualAimTarget(w); if (dj >= 0) { tx = eX[dj]; ty = eY[dj]; } }
   const eyeJitter = ((100 - player.limbs[0]) / 100) * 0.42;
   const aimAng = Math.atan2(ty - player.y, tx - player.x) + (Math.random() - 0.5) * eyeJitter;
 
