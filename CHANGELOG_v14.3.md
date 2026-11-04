@@ -20,6 +20,9 @@ GitHub Pages site — same folders, no installs. Six new modules: `js/traffic.js
   With no target, the guns go back to the normal aim and low ready.
 - The hands turn at slightly different speeds, so you can see them split apart and come back together. There is no
   front-arc limit; a hand can cover your back. Swords and sabers still follow the saber Form engine.
+- **Neo's "Dual Micro-Uzis" are now really two Uzis.** Before, he held one Uzi and it fired only a telekinetic push,
+  with an Uzi sound. Now there's an Uzi in each hand and each fires short bursts at its own target. The telekinetic
+  push is kept: every third cycle it shoves away anyone who gets in his face. With silencers on, both Uzis get a can.
 
 ## A. Map loading
 - **"Couldn't find the Indiana maps":** the built-in packs (`data/realmap/`, 28 files) were never uploaded to GitHub,
@@ -141,5 +144,5 @@ GitHub Pages site — same folders, no installs. Six new modules: `js/traffic.js
   pace. Before, it could sit in the middle of the junction for good and lock every other car out.
 - Police: a cruiser that can't line up neatly behind you (a tight spot or a curve) stops where it is after a few
   seconds, and the officer walks up from there. If the cruiser was lost in a crash, the officer walks up on foot.
-- New QA pack `qa/packs/v143.py` (21 tests, including two for dual wield). The regression suite, static checks and the
+- New QA pack `qa/packs/v143.py` (22 tests, including three for dual wield). The regression suite, static checks and the
   phone-size perf probe all pass. See `V14_3_SUMMARY.md`.

@@ -1,0 +1,153 @@
+{
+  "title": "CHRONO-LATTICE RATCHET LEDGER \u2014 explicitly deferred baseline scope",
+  "profile": "v15.0-omega",
+  "status": "deferred, not implemented or passed; this is not a release",
+  "feature_switch": {
+    "id": "T22.MULTI_VEHICLE_CONVOY",
+    "required": false
+  },
+  "test_deferrals": [
+    {
+      "pack": "vehicles",
+      "id": "A09",
+      "reason": "AI overflow convoy and herringbone halt is disabled/shelved, not a baseline pass",
+      "target": "15.1+"
+    },
+    {
+      "pack": "vehicles",
+      "id": "A10",
+      "reason": "AI overflow convoy recovery and parking is disabled/shelved, not a baseline pass",
+      "target": "15.1+"
+    },
+    {
+      "pack": "v15",
+      "id": "F04",
+      "reason": "AI convoy rejoin is disabled/shelved, not a baseline pass",
+      "target": "15.1+"
+    },
+    {
+      "pack": "vehicles",
+      "id": "A11",
+      "reason": "convoy-only herringbone halt guard is disabled/shelved, not a baseline pass",
+      "target": "15.1+"
+    },
+    {
+      "pack": "vehicles",
+      "id": "A12",
+      "reason": "convoy-only herringbone braking guard is disabled/shelved, not a baseline pass",
+      "target": "15.1+"
+    },
+    {
+      "pack": "vehicles",
+      "id": "D01",
+      "reason": "three-vehicle convoy performance workload is disabled/shelved, not a baseline pass",
+      "target": "15.1+"
+    }
+  ],
+  "career_deferrals": [
+    {
+      "id": "J01",
+      "label": "Patrol officer",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J02",
+      "label": "Detective",
+      "scope": "full career is incomplete; partial independently enabled calls remain in baseline",
+      "target": "15.1+"
+    },
+    {
+      "id": "J03",
+      "label": "Tactical response",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J04",
+      "label": "Firefighter",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J05",
+      "label": "Paramedic",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J06",
+      "label": "Search and rescue",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J07",
+      "label": "Rescue pilot",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J08",
+      "label": "Mechanic and tow",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J09",
+      "label": "Courier",
+      "scope": "full career is incomplete; partial independently enabled calls remain in baseline",
+      "target": "15.1+"
+    },
+    {
+      "id": "J10",
+      "label": "Lawful bounty hunter",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J11",
+      "label": "Security",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J12",
+      "label": "Criminal crew",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J13",
+      "label": "Smuggler",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J14",
+      "label": "Mercenary",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    },
+    {
+      "id": "J15",
+      "label": "Universe-specific career profiles",
+      "scope": "full career is incomplete and not enabled",
+      "target": "15.1+"
+    }
+  ],
+  "partial_enabled_features": [
+    "J02.WITNESS",
+    "J09.SUPPLY",
+    "J09.PRIORITY",
+    "J09.MEDICAL",
+    "J09.MEDICAL_CONTACT",
+    "J09.SHIFT"
+  ],
+  "notes": [
+    "A11, A12 and D01 are also convoy-specific; D01 historically returned a pass with zero convoy vehicles, which must not be treated as three-vehicle evidence.",
+    "Partial witness/courier calls remain enabled and their tests remain required; parent career deferral does not waive those tests.",
+    "Local asset exceptions are separate from deferred feature tests and never count as passed.",
+    "Actual target subsections may be later than 15.1; consult CHRONO_LATTICE_RATCHET_LEDGER_v15.md."
+  ]
+}

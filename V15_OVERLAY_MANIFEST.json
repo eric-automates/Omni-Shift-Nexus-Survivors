@@ -1,0 +1,585 @@
+{
+  "commit": "dbcc16d612bb6fc69dd80081ef3cd9d39efa13d3",
+  "files": {
+    "CHANGELOG_v10.md": {
+      "sha256": "a7272aafda375cc9bc274afba8bce4358b14385234cb917723fbfef2b51b35d2",
+      "size": 19032
+    },
+    "CHANGELOG_v11.md": {
+      "sha256": "38a511e9943413f52132446d3f6cc2d476767d7fa6d4faeefdc892365658eca1",
+      "size": 15289
+    },
+    "CHANGELOG_v12.md": {
+      "sha256": "708e463c76c67d690762d01d9d32f33c6bc324ef128ec03cdc98735fd9f53ee4",
+      "size": 11699
+    },
+    "CHANGELOG_v13.md": {
+      "sha256": "80a245d986b972592f2b8f1cfd860e03b9d99fa30be513f1271303b9fde8f0c6",
+      "size": 16644
+    },
+    "CHANGELOG_v14.1.md": {
+      "sha256": "f85723800ee5cb867b78603fc8f602864e6ed26ec57c834cf14f06ea75f21f7d",
+      "size": 15012
+    },
+    "CHANGELOG_v14.2.md": {
+      "sha256": "e81aeb4925ee85e1e5fe6db94565a660385f45623199c00dfaf1ae399f1559a4",
+      "size": 14338
+    },
+    "CHANGELOG_v14.3.md": {
+      "sha256": "7ad3d0707b12e36bf96351ec2dcc854ff134976eef5fc600f4b7362e037e4fa9",
+      "size": 11372
+    },
+    "CHANGELOG_v14.md": {
+      "sha256": "a54fe37c5c164a2f8144793bea748626e929eae1af765f1cac80c614a358f18e",
+      "size": 14380
+    },
+    "CHANGELOG_v15.md": {
+      "sha256": "4de1c4246cb510437402e307258b9e886815aee309fdae54df4905477fb8f75f",
+      "size": 49197
+    },
+    "CHRONO_LATTICE_RATCHET_LEDGER_v15.md": {
+      "sha256": "858852cad53422bd98e9e1cf874982858c6612af2f0c6e6fab014a466ebb857b",
+      "size": 21603
+    },
+    "CREDITS.md": {
+      "sha256": "3c2bf212568c8b2b74435089fe5ce3ac39b8aa0767543cee01751efc9fdcfee4",
+      "size": 8494
+    },
+    "DEFERRED_FEATURES_v15.md": {
+      "sha256": "fa749293ba85da394906b4542d243a9af4db054e540cfb973754c539930098d1",
+      "size": 4824
+    },
+    "DEFERRED_TO_V15_1_LEDGER.json": {
+      "sha256": "3b296bc454af59cb9943c14220c057cf363cd381da8a0efbf8ec838ab6a5ea24",
+      "size": 4372
+    },
+    "RELEASE_SCOPE_v15.md": {
+      "sha256": "194172a246abbb61e492426a76db72dc2adbebeb54c0537298473a704967b5b6",
+      "size": 12242
+    },
+    "css/PlaceholderName": {
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "size": 1
+    },
+    "css/style.css": {
+      "sha256": "fe35f1aeeface3abdb46bb39750c7808be7324e4ba5e1df8eec97caeee58a48d",
+      "size": 28480
+    },
+    "data/realmap/LICENSE.md": {
+      "sha256": "67facc28a97f4b37ffca22b66d94a1ac9f598a872ff28ce925a82df1dbabea33",
+      "size": 1995
+    },
+    "data/realmap/c00.bin": {
+      "sha256": "6c239fc45be6e6839fc79ee9334efc1931d8c91ba7add7ad37bcbefaad877b00",
+      "size": 1607822
+    },
+    "data/realmap/c01.bin": {
+      "sha256": "60e82ecccca4894e74a52b89fac238d1fd19177b4ec77ca8c885b3e3b51d6738",
+      "size": 1299092
+    },
+    "data/realmap/c02.bin": {
+      "sha256": "94409b618f4c77a7a177d5ea3e3aed1bea4ef1778b85dfd7277098fb89546648",
+      "size": 889302
+    },
+    "data/realmap/c03.bin": {
+      "sha256": "099efbf960e4a199ac0e88e0ba35d8e1c0539c6558e02e023a420f3c549e19cd",
+      "size": 542815
+    },
+    "data/realmap/c05.bin": {
+      "sha256": "a1d9efc9357b7ebdee194b04383544be572857380475523aca9684e5335d1a49",
+      "size": 938349
+    },
+    "data/realmap/c07.bin": {
+      "sha256": "065bb01d8d1da301c2542549591666a3dadcd865e55ceaf2a0d0c63c15ba1919",
+      "size": 557401
+    },
+    "data/realmap/c08.bin": {
+      "sha256": "516ff877063f817989db6fee897caba4ada48020a634372705647af62db530af",
+      "size": 210333
+    },
+    "data/realmap/c09.bin": {
+      "sha256": "1ff028be0d217b9a06018dcd60647419dc26eaf718a43698d01c9d42f09f8c96",
+      "size": 881573
+    },
+    "data/realmap/c11.bin": {
+      "sha256": "520c26e8335e8c6ebccfb3c5502cab55d7cbd202a007cc1f53c638b3ee40477a",
+      "size": 80795
+    },
+    "data/realmap/index.json": {
+      "sha256": "ac904d0be346797f88392b123ab12876ef9508e18db80626f49190564d851297",
+      "size": 12013
+    },
+    "data/realmap/overview.bin": {
+      "sha256": "a4bd8d51d66019468f696558e8d40098ed05cd60464061996a6afe3f33bf5ba9",
+      "size": 757170
+    },
+    "data/realmap/p05.bin": {
+      "sha256": "b5f8b2a8372747f84470dff59889ff717105f7d3524592e570f870b2ec76045d",
+      "size": 3804105
+    },
+    "data/realmap/p06.bin": {
+      "sha256": "e7684395b0872b4f8369d2d8a8b1611119d8f82cd5d42a05cee4a81c8e1501ac",
+      "size": 3796325
+    },
+    "data/realmap/p07.bin": {
+      "sha256": "232169426d6b8c2e116ab1f02d702196d93ce5c7350dde2eb2f88ddf0e0ecf21",
+      "size": 2866109
+    },
+    "data/realmap/p09.bin": {
+      "sha256": "73ae21983493c7172b28c7d4f6a1d48edb8a8a0cf9f5b4d13608cc9dc2e41306",
+      "size": 2116754
+    },
+    "data/realmap/p10.bin": {
+      "sha256": "045ccf2cf5fe089a0c953ddad8f8e2d00bfed86140c2a9010b49135bd7ba515b",
+      "size": 3832649
+    },
+    "flowchart.md": {
+      "sha256": "149639a05954715ccfe2a028c9d37cde46c750ef88a8d233783767c0efaea3f5",
+      "size": 28830
+    },
+    "index.html": {
+      "sha256": "3a1e02c6b6f0f3e577da18fc66f24f0cdb6abb2a0d6eaef2e15d56ccc25ac1d1",
+      "size": 49199
+    },
+    "info.md": {
+      "sha256": "3fba75a9d9b21fe1d743528cad3e5f5b8808525b277c5a010474e281cad6fc0a",
+      "size": 66344
+    },
+    "js/actionui.js": {
+      "sha256": "d0f3d57f421a25a6cc3f314d3d91f2fae92fc2f8a980041cbc0c9dce7a5c091c",
+      "size": 24383
+    },
+    "js/agefilter.js": {
+      "sha256": "19389b3e50e2d78347c1bf83bf41c05c3bf8cb48f93cc827866097f976fae21c",
+      "size": 10294
+    },
+    "js/apoc.js": {
+      "sha256": "eb4689a7e1b41c70da68d61c90560783071789c3c9753d845a2bc137631e8455",
+      "size": 15287
+    },
+    "js/arsenal.js": {
+      "sha256": "987e6496231ee1eb941cc4ccca46f66c56e08f68500d6d9e66e97e9b071ba6aa",
+      "size": 5428
+    },
+    "js/biomes.js": {
+      "sha256": "89852a7d7784e5bf1ed79e483672e92cb7724b733a555d22888cde4900982bf5",
+      "size": 37898
+    },
+    "js/campaign.js": {
+      "sha256": "20f2874710287ce437e18fd07e0b63024b9795b07f027b3e9aa593fb9f9dc5de",
+      "size": 22597
+    },
+    "js/chaos.js": {
+      "sha256": "1193724dba7ee38054cde739175a4bfa52897c9cd7d816846c49e87066290386",
+      "size": 51243
+    },
+    "js/cityaccess.js": {
+      "sha256": "78859a89d59e6fefb93da86a5590f996e2862e5c8b2e4188001f5cea2f24c8aa",
+      "size": 51963
+    },
+    "js/citygen.js": {
+      "sha256": "a2866c6bc0e3430117bbf498459be16470501cb007ef9d8eb0c52f9cf7f0c6c6",
+      "size": 116397
+    },
+    "js/cityplay.js": {
+      "sha256": "b1f6032136b36ef711ff435e78934e9c9d537f778740c46b6943e0d785a0f669",
+      "size": 18115
+    },
+    "js/cityrender.js": {
+      "sha256": "eca54cc99ac71f8fd11152c58c6b259f42262e4be4c6f77d43c32026c7400944",
+      "size": 146377
+    },
+    "js/citythemes.js": {
+      "sha256": "ab8c5ea37d3c1f058f20dc96f5e202f5dfcf44919c24977c4e7d6d3a2268d76b",
+      "size": 36925
+    },
+    "js/cityworld.js": {
+      "sha256": "3f102e55bc65e89f21ac11826ea6d38940fdd22f83be4c5b92fabda7bd22ace1",
+      "size": 27145
+    },
+    "js/combat.js": {
+      "sha256": "39f1527826ece1345d1bc0f7db90bfcf651fb8afecf34d12f3626a3516fa82b9",
+      "size": 83820
+    },
+    "js/convoy.js": {
+      "sha256": "cff894d4ac0bd04a4638c02f4b010ac4d5ec7736bb31ac85db22d398be4d51c6",
+      "size": 50408
+    },
+    "js/creator.js": {
+      "sha256": "37c3c4146caa402e318c4e84ea15ae53388055f830d73b7aaf8a657c9fcb3fe7",
+      "size": 78910
+    },
+    "js/data-factions.js": {
+      "sha256": "85b378fb1cec656f86812eb66c53d29a7b6e4163c1589e1de8eb1c7899cc7fb3",
+      "size": 8459
+    },
+    "js/data-heroes.js": {
+      "sha256": "1ebac7fffc6900f424734ab6c456b094a1fd5a6f5aebf0534221eb0a1d27172e",
+      "size": 84299
+    },
+    "js/data-relics.js": {
+      "sha256": "84d5a08f0aa31f299bde639540962cf98ed01c585f9660fc8f5db121461e887a",
+      "size": 27583
+    },
+    "js/dualaim.js": {
+      "sha256": "0be7741e78f798935bcdbf99ba83fae0718313603d9af4fcb741eb92f04ee2aa",
+      "size": 6014
+    },
+    "js/economy.js": {
+      "sha256": "e98304d851f49ddc1673daf9cb99181d619a7b0c949a7608a7f04601bd7dc18d",
+      "size": 35678
+    },
+    "js/enemylook.js": {
+      "sha256": "c27d86747bfa94511a4353aeb4151447e815db284db2205cf4e1f4ea5796cbeb",
+      "size": 77433
+    },
+    "js/flight.js": {
+      "sha256": "ceb1f128798fbcdf2195dcb263d070cdca75d77dfbf2011d54c25b08a20b404c",
+      "size": 65069
+    },
+    "js/force.js": {
+      "sha256": "56feee273152831afa36e9729c76445b6e417fc64c82ab078f4b94697c419d76",
+      "size": 22937
+    },
+    "js/fx.js": {
+      "sha256": "a5ba43e5df983e9431a8621edf161e75c1f862d379b7a1f63c932bacf6dcad7c",
+      "size": 12793
+    },
+    "js/glory.js": {
+      "sha256": "3db86e61d661da23508da619ff188c4cccdcfc932ea6e1df279a5f509afdd73b",
+      "size": 15431
+    },
+    "js/gunart.js": {
+      "sha256": "8b5225f76aae889779b0bb8a42cf48a3187e3a326d5dfd1cc38354b666471554",
+      "size": 17167
+    },
+    "js/gunaudio.js": {
+      "sha256": "a32f650cde81bc6284fefaabc0632662de609fda44fc6cd205cb744eae0eff45",
+      "size": 6706
+    },
+    "js/heroreg.js": {
+      "sha256": "de0ab3dae9135fac518caf5ccf0ac0f0d3f2a1b07977705e4153c3ae53bd5bbc",
+      "size": 17384
+    },
+    "js/hudlayout.js": {
+      "sha256": "7ada17014c6a62c8c89cb81c874f5208ccf8cba0a9969d7f387de3af5bf3a173",
+      "size": 20654
+    },
+    "js/items.js": {
+      "sha256": "04f0b35b9812c2c015d31431c23cf05f720e8553fdd853a90d31685976b4c858",
+      "size": 28294
+    },
+    "js/jobcareer.js": {
+      "sha256": "a273e06939c66fe23efbafa584272e8b5b54f80c07879c76c68be5ede5e493e0",
+      "size": 24201
+    },
+    "js/jobcore.js": {
+      "sha256": "5ea8c24d64f0da190a5347f632e97c60820bbfc4f8de8860f80c1f767cf10b29",
+      "size": 10365
+    },
+    "js/jobdispatch.js": {
+      "sha256": "daf4a3f4c15b71dbc9a71d4ebc450b24cabef53b0d140a5bf5d4068bd8077584",
+      "size": 80760
+    },
+    "js/jobroute.js": {
+      "sha256": "a273607aab795c1d8adb0d67b5ebdae2901d0aad60ae116abaf26dc0650cfb5f",
+      "size": 2301
+    },
+    "js/jobvehicle.js": {
+      "sha256": "45510dab13c797a6352c596c8f32b6b8bf5ebf941eceebd010587f996facca4b",
+      "size": 10853
+    },
+    "js/kisurge.js": {
+      "sha256": "b0354df0221ac4fad657dcd304ab46654b4619422baed2fca5c64012bbe9a040",
+      "size": 56911
+    },
+    "js/locals.js": {
+      "sha256": "9f289329bcd3edbdb58d7d3609faad7e3f68a51320a4360a531f311cbca85f12",
+      "size": 13811
+    },
+    "js/location.js": {
+      "sha256": "399df70dac0e1bdd46639585f63f43d56fcacb074b831402e278161e393b4b6b",
+      "size": 23057
+    },
+    "js/minimap.js": {
+      "sha256": "801fa7e0a51f7d64ae395013abe3cbae3052da4e77d5c8d4ae2337ce04dd1ae0",
+      "size": 45280
+    },
+    "js/police.js": {
+      "sha256": "a541dbd0498c232ee07f1fd589234ecf1966b0364bf81e1a55463066292b7e51",
+      "size": 51808
+    },
+    "js/proving.js": {
+      "sha256": "b589fe4a426ce2867184c7abd0fa888ff3987c2cd075fb040fb744af7b218ce3",
+      "size": 22204
+    },
+    "js/realart.js": {
+      "sha256": "616abb2d8e520846039fcdca441132994ddc556e9400b3c5a9628bc06c4b0e92",
+      "size": 40097
+    },
+    "js/realdata.js": {
+      "sha256": "fffd07fe1df546df2ce90f94b6cbf5e38043eed7f0fb9917293a3a02a2cf791d",
+      "size": 36733
+    },
+    "js/realgen.js": {
+      "sha256": "5b8efa477bce81cd8d6c4b58b914ef71ab5d4733c67a970e1743e98cb6c1aec9",
+      "size": 105036
+    },
+    "js/realui.js": {
+      "sha256": "ea42c04671c594ab4fa82e9bf227a52d5a35e1d941c1e1c64ef489d80011881d",
+      "size": 38120
+    },
+    "js/regionart.js": {
+      "sha256": "07ca68bc8f5f64a7460c453f96b0b5dcbfdfeda6189b0210c164d1076a6db6bf",
+      "size": 60825
+    },
+    "js/regiongen.js": {
+      "sha256": "a6d6295f785861be0bdf3448622213131a362a986476e9ebb74822a38636240e",
+      "size": 76326
+    },
+    "js/regionsites.js": {
+      "sha256": "32944374b7189357c4c97729dc30c7cbb6f454ed45d49761075158c8e0a672fa",
+      "size": 19422
+    },
+    "js/regionworlds.js": {
+      "sha256": "bf883d401827db65104c5f9d8a2d25ee180e7ca5da42ff20dfc885231a6b2094",
+      "size": 66545
+    },
+    "js/releaseprofile.js": {
+      "sha256": "8f120f9186f77ad427145607af0d9e71f2dec5523a2cca8938ecb12bc59d08ea",
+      "size": 2689
+    },
+    "js/render.js": {
+      "sha256": "442cf224f2edaecbfd5023a836cdb97fadc765b232cc4c9ccb712e30eef54394",
+      "size": 84464
+    },
+    "js/rewind.js": {
+      "sha256": "6c2faf922b471d3d077b0f2fee15b8883e10870267f5a7ca104c77ad7d8ab0c1",
+      "size": 12572
+    },
+    "js/rivalchase.js": {
+      "sha256": "3c8d61ec40a223a331877b6196854202305c0ad2ea5a9d70b9893ce9c9ebf41b",
+      "size": 8808
+    },
+    "js/saberforms.js": {
+      "sha256": "ed8c667ce36487a1d584fc5f89ebf0661eeb38cb568845f47a3c444e60a40ba8",
+      "size": 64911
+    },
+    "js/saga.js": {
+      "sha256": "7eff64b3ee76e8f74b45fcf3767be6e858d271a8ad969e302dfc06360c185039",
+      "size": 29693
+    },
+    "js/savebackup.js": {
+      "sha256": "7ddba5bd8f88b79f38d16e88329ea0ec5c9610f74c8e1f2dea01488e9247e9fe",
+      "size": 6588
+    },
+    "js/scenario.js": {
+      "sha256": "1536c1e9ed47d5984dba6c913c8d86780217da75fe5386196c154195e59067e8",
+      "size": 13007
+    },
+    "js/sense.js": {
+      "sha256": "9db5df67dd521111f9b58cae20445c7e0dbb0aa4a505e5269bb13c407b51c522",
+      "size": 20502
+    },
+    "js/sheathe.js": {
+      "sha256": "c95374646c973b71631e7e00205cbe51e79746d9690f8aed35e836ec4d3431f3",
+      "size": 7382
+    },
+    "js/showdown.js": {
+      "sha256": "8b12f6c71cebc33fcd71836998ec9bc38d81b4912195740d7ff2d89b4f91769c",
+      "size": 20639
+    },
+    "js/sim.js": {
+      "sha256": "49bf2e25e6b4900edd7e600d48c226af90d7abf979c1f86869e458161a29ce5b",
+      "size": 75299
+    },
+    "js/squad.js": {
+      "sha256": "06e10626a7d235a1219897e36d9f0e7cdeafec4e964c171cdf931b4bb2ef2beb",
+      "size": 34593
+    },
+    "js/state.js": {
+      "sha256": "b04d104801170105d9fef190a242225e22c3bdbb030e79b05e1b7e722e331290",
+      "size": 41372
+    },
+    "js/stealth.js": {
+      "sha256": "bc4bf571bf35191ae2676e398762dbcb765f1bd47cfb23ae95ea8ed82a99911e",
+      "size": 42338
+    },
+    "js/townsfolk.js": {
+      "sha256": "d3857599cd21ca985bafe7c9f8570c1ed8759e4b9bb7a6116923e480dbffc254",
+      "size": 55162
+    },
+    "js/traffic.js": {
+      "sha256": "188246f53d19aa5a0fa719521426db7f9f9acdc22961b54813acaf792f9b459a",
+      "size": 39809
+    },
+    "js/ui.js": {
+      "sha256": "46e59c431c1b4c9645b7178fb7a2867189b58520aa757b3a8db17e6f3c594ed3",
+      "size": 70490
+    },
+    "js/vehicles.js": {
+      "sha256": "90616bffc28b9da7b15303c1d36c5b28ae74621a246f1dbbdc6163377ae6b648",
+      "size": 130638
+    },
+    "js/vision.js": {
+      "sha256": "badc9f9425480c4f12a74b054a52cc24a1f3c218abe3248778b5ab94cf3e57b6",
+      "size": 18851
+    },
+    "js/weaponart.js": {
+      "sha256": "0107cc0edaffacd3c4a902a4f6c17efe9866e16d77e643edbc8b7921575eb0a5",
+      "size": 9855
+    },
+    "js/world.js": {
+      "sha256": "5660cbe40d9a031a082a57841d21461e76f6acfb0948711ef4539d0533ff1da6",
+      "size": 12718
+    },
+    "music/LICENSE_SOURCES.json": {
+      "sha256": "e581544340f397dd0315b459883bd7cba304d78632d5467b9c96bf45ece539e2",
+      "size": 5915
+    },
+    "music/MUSIC_CREDITS.md": {
+      "sha256": "dd44dbd000b4dafda02e5f2e58cfff22baa69ed7faee7dc33ad6a0e4f6dc748f",
+      "size": 6151
+    },
+    "music/Placeholder.txt": {
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "size": 1
+    },
+    "music/track_1_Electronic_Star_Birth.mp3": {
+      "sha256": "e49b25869deed344c2495f369abcf2498e881f98d6f929f4d688c13dd65a068c",
+      "size": 5389645
+    },
+    "music/track_9_Orchestral_Battle_Theme_A.mp3": {
+      "sha256": "923d24cfe9e10da6a25931f13003503f57e62f4009a46c8332cb448a4ec3e0ad",
+      "size": 1535054
+    },
+    "tools/realmap-build.js": {
+      "sha256": "c5b375f9519320bde7bc8496b15ef02f0503b038424d486943a80ae47cb21a09",
+      "size": 29786
+    }
+  },
+  "omitted_asset_prerequisites_from_original_snapshot": {
+    "data/realmap/c04.bin": {
+      "sha256": "1f150c426aaab304268f0121476611b2a28767d38e0130ef09c5db0b3d772795",
+      "size": 1036641
+    },
+    "data/realmap/c06.bin": {
+      "sha256": "c8ad58b91f774d80fba872ddf5ec659406911cb6fd46509f5ecd9035ddf475ea",
+      "size": 640713
+    },
+    "data/realmap/c10.bin": {
+      "sha256": "b2f54b5bdff9e0f992b7a9a3da6adcc483a3e3003f933c6845deeccdc93336cd",
+      "size": 198161
+    },
+    "data/realmap/c12.bin": {
+      "sha256": "528cdd941db9fceec54f544782b90b0c284909403949e815a7cc643473a6e364",
+      "size": 59875
+    },
+    "data/realmap/c13.bin": {
+      "sha256": "5bc607c3dce6945630f7f15c8be112f1ebab09283825b086a2ce2bdd6523b310",
+      "size": 44590
+    },
+    "data/realmap/p00.bin": {
+      "sha256": "17191fa025f4e7b796299d518a0869d8c64559430aa9ad3ce4b7287b5106514b",
+      "size": 3034361
+    },
+    "data/realmap/p01.bin": {
+      "sha256": "68244147af78ef319592aefe27db2482537ecbca5cde0c7f127516d7a68bee2a",
+      "size": 3064159
+    },
+    "data/realmap/p02.bin": {
+      "sha256": "1dcbf008e386ff80a42162a5518439e1bd147fed9e90b4405d57e2f2262421dd",
+      "size": 3631890
+    },
+    "data/realmap/p03.bin": {
+      "sha256": "726ba19945eec2877a6920c703bddfde3a688d78d66355de6bf2133fe044850a",
+      "size": 457227
+    },
+    "data/realmap/p04.bin": {
+      "sha256": "f6b3a76280f147e4f9205936d20426e924915744357efab9368ef0e1d8f14ddf",
+      "size": 901077
+    },
+    "data/realmap/p08.bin": {
+      "sha256": "bd508881ff5dc86ba4c8d4970a43074a1bbba36ec902679768b196847e8890e6",
+      "size": 2211417
+    },
+    "music/roguelike_active_run_music.mp3": {
+      "sha256": "24193cf36aea955c02f512b846c2e5e2c2e83d6ec5bf9809e9d1b082570f9d26",
+      "size": 17658839
+    },
+    "music/track_10_Dubstep_The_9th_Circle.mp3": {
+      "sha256": "1376c5e1556456059bdc35c4365cf5c847e3d3d8f302fa0dfca078d3221d00a4",
+      "size": 2732917
+    },
+    "music/track_11_Darksynth_Mist_City.mp3": {
+      "sha256": "9f5c148dee1c55a1cdb0d25e94a765f1ce48c22b0c1e0d24a173bcfafa88ceba",
+      "size": 2808117
+    },
+    "music/track_12_Techno_Tower_Defense_Theme.mp3": {
+      "sha256": "d36a2cf42b6d60a5bfc024c2d436c451759402e3b5db49f6cce4efef7ac0b890",
+      "size": 3191844
+    },
+    "music/track_13_Electronic_Cyberpunk_Moonlight_Sonata.mp3": {
+      "sha256": "39cf30a0ad1f884441a747f00a7336eab953c3a13f24addd3cf7f490b3189f2c",
+      "size": 1869022
+    },
+    "music/track_14_Beats_Space_Bass.mp3": {
+      "sha256": "bf54295e2ddbe1f28b8981d363fa118c82aa5b891db8e824984c3a2e6962df69",
+      "size": 1730641
+    },
+    "music/track_15_Cinematic_Epic_Boss_Battle.mp3": {
+      "sha256": "5c337d90a35500ca6752f10a4516e57b5c70cb644c84b72759e0d9100c5c8708",
+      "size": 1976444
+    },
+    "music/track_16_Synthwave_Space_City.mp3": {
+      "sha256": "b56d019c680fe98e483e2973c1c121428b936f9f65faaadc1fc7264a45cda516",
+      "size": 1871083
+    },
+    "music/track_17_Breakbeat_Lucid_Trigger.mp3": {
+      "sha256": "54fdb380c7efabf0704127659c52b6cf4a599c03fb808cebe1de9e7b072b96b5",
+      "size": 2164519
+    },
+    "music/track_18_Metal_Megasong.mp3": {
+      "sha256": "842e89e6fb544b5799c59cda8f316fb6e473aec7ca0debee76dc910294551200",
+      "size": 3589304
+    },
+    "music/track_19_Jungle_Final_Hour.mp3": {
+      "sha256": "7eddbf156a28a7b0849b3d218ce79393b7314dd7a1d0edad5d7f5ebd747df556",
+      "size": 2192491
+    },
+    "music/track_20_Electronic_The_Rush.mp3": {
+      "sha256": "d35860ccc2062dc7278accb0cad71e0e7e38164a4fd27ed1110b4b35164e3c44",
+      "size": 2236377
+    },
+    "music/track_2_Synthwave_Hello_World.mp3": {
+      "sha256": "750951deaf4928c5348b8729c3c6ea69bea9426c93d564b65fc5d419b69c7f7f",
+      "size": 7093057
+    },
+    "music/track_3_Beats_Darkstar.mp3": {
+      "sha256": "fcb9374c0cbf380f138a528c88a779b08e2768202084f9f88406153a8c30886d",
+      "size": 5608798
+    },
+    "music/track_4_Synthwave_Midnight_Drive.mp3": {
+      "sha256": "20b7599eafeacf354d41639c7c87b44ccd0ff8f49bbeee214a14842185b421e5",
+      "size": 3258300
+    },
+    "music/track_5_Electro_Orbital_Colossus.mp3": {
+      "sha256": "ae5713583174f708b0890e97f148371b716d842b51db4673a3d47708f40a2d92",
+      "size": 2424036
+    },
+    "music/track_6_DnB_Black_Diamond.mp3": {
+      "sha256": "9f12c40dfd64f761dedad620b018ae7bb7f45e41dbc90a88b4296fdeeda4ff59",
+      "size": 3224430
+    },
+    "music/track_7_Retrowave_Brave_Space_Explorers.mp3": {
+      "sha256": "78a1398dc91f7fd187eef035ca820c0218c38b52d4c3298f8226f11b97d6f03b",
+      "size": 3458076
+    },
+    "music/track_8_Cyberpunk_System_Overload.mp3": {
+      "sha256": "e1c7d93fb159778999f774f330e68bfe08ae9c638482008f9c9dbdd6fd10970d",
+      "size": 3242865
+    }
+  },
+  "remote_assumption": "The existing GitHub repository must already contain the omitted unchanged assets at their original paths. Their remote presence and hashes have NOT been verified. Uploading this overlay must not delete them.",
+  "status": "v15.0 Omega baseline overlay; existing omitted assets required"
+}

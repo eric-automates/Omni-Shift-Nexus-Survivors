@@ -558,6 +558,7 @@ flowchart TD
   A[Every 0.12 s] --> B{Two or more ranged weapons in hand?}
   B -- no --> Z[Classic aim: every weapon follows player.aim]
   B -- yes --> C[Sort on-screen enemies by distance]
+  P[Neo's Uzis: one weapon, two hands] --> B
   C --> D{Any enemy?}
   D -- no --> Y[Hands drift back to player.aim / low ready]
   D -- yes --> E[Hand 1 → nearest]

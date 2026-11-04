@@ -385,6 +385,7 @@ Titans and second rivals wait until the duel is over. Showdowns are rewind-safe 
 - Only when two or more **ranged** weapons are in hand (the sim's slot order: `armCap`, `handSlotOffset`). Every 0.12 s `dualAssign()` sorts the on-screen, non-staggered, non-ignored enemies by distance: hand 1 → nearest; each later hand → the nearest target not yet covered, except that all hands stay on the nearest when it is inside `DUAL.close` (110 px ≈ 3.4 m) and is the only one that close (or the only target).
 - `V10.onStep` (after the sim's weapon loop) turns each hand's `w.dualAng` toward its target at 11 + 2.5·hand rad/s and writes `w.armAng` / `w.ang`, which `render.js` already draws per slot. No target → back to `player.aim` (+0.18 rad for even hands).
 - `fireWeapon(w)` in `combat.js` asks `dualAimTarget(w)` (valid only while that enemy is active and on screen), so the shots go where the hand points. One gun, or blades only → nothing changes.
+- **Matched pair held as one weapon** (`DUAL.pair`, currently Neo's #39 Micro-Uzis): while it is the slot-0 weapon and the other hand is free (nothing else held, or a telekinetic hero whose extras float), it counts as two hands (`w._dh[0]`, `w._dh[1]`). Hand 2 writes `w.armAng2`; `render.js` draws the twin Uzi in the free hand; `fireWeapon` fires one burst per hand via `dualPairAngles(w)` (2 + lvl/4 + projCnt rounds per hand, 0.38× base damage each), and every third cycle a telekinetic push when an enemy is within 95 px.
 
 ---
 
@@ -518,3 +519,7 @@ The goal is to make the player *feel like the character* while the game stays a 
 - **Testing:**
   - The in-game **Debug All · Proving Ground** covers 14 live actions (v14.1: the squad-regroup and time-rewind checks poll instead of taking a single sample, so they no longer fail on a slow frame).
   - The offline QA suites used for each release (not part of the repo) cover the Form Engine, showdowns, the creator (v12 + v13), Threat Sense, allies and Yoda, all 81 heroes plus the 8 creator presets, and 3-minute soak runs.
+
+### v15 — development note
+
+The real-map baseline is the earlier half-size projection. The Location menu calls this DEFAULT and shows percentage alternatives. Stored map scales keep their previous world keys. A new optional road-vehicle CRUISE maintains speed only; it does not steer or prevent collisions. Police-stop handling is being revised to defer routine ticket conversations during nearby active combat and recognize fleeing on foot. This is development work, not a completed release.
