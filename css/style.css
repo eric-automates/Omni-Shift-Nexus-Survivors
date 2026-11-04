@@ -235,6 +235,8 @@ h2 {
   touch-action: manipulation;
 }
 .btn:active { transform: scale(0.97); }
+/* Options must remain finger-sized, including newly added safety controls. */
+@media (pointer: coarse) { #optList .btn { min-height: 44px; white-space: normal; } }
 .btn.gold { background: #33260a; color: #ffd166; border-color: #ffd166; }
 .btn.warn { background: #361018; color: #ff8a80; border-color: #ff5252; }
 .btn.sel  { background: #0d3326; color: #00e676; border-color: #00e676; }
@@ -499,6 +501,16 @@ h2 {
 /* v14 city map & minimap controls */
 #mmCtl { position: fixed; z-index: 41; display: none; gap: 4px; pointer-events: auto; }
 #mmCtl .btn { padding: 3px 8px; font-size: 0.8rem; min-width: 30px; }
+/* The layout manager scales this whole strip on small screens; provide larger
+   unscaled hit boxes so the touch buttons remain usable after scaling. */
+@media (pointer: coarse) {
+  #mmCtl .btn { min-width: 56px; min-height: 56px; }
+  /* Explicit intrinsic width prevents fixed-position shrink-to-fit feeding
+     smaller widths back into the layout solver on successive frames. */
+  #mmCtl.mmTouchWrap { flex-wrap: wrap; width: max-content; max-width: calc(100vw - 16px); }
+  #mmCtl.mmTouchLarge .btn { min-width: 62px; min-height: 62px; }
+  #mmCtl.mmTouchLarge .btn:active { transform: none; filter: brightness(1.16); }
+}
 #mapOv { position: fixed; inset: 0; z-index: 9000; display: none; background: #000; }
 #mapOv canvas { position: absolute; inset: 0; cursor: crosshair; touch-action: none; }
 #mapOv .map-top { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); text-align: center; pointer-events: none;
