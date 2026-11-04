@@ -320,7 +320,7 @@ function executeHeroDash(targetX, targetY) {
   } else if (spec.style === "jetpackSlam") {
     if (typeof spawnBlastWave === "function") {
       spawnBlastWave(startX, startY, 45, "#ff9100");
-      spawnBlastWave(endX, endY, 85 * player.area, "#ff6d00");
+      spawnBlastWave(endX, endY, 85 * player.area, "#ff6d00", "player");
     }
   } else if (spec.style === "apparitionBlink") {
     if (typeof spawnBlastWave === "function") {
@@ -450,6 +450,7 @@ function raiseNecroMinionsFromCorpses(kind, countDesired, requireCorpse = true, 
 
 function castArcaneSpell(spellType, manualClick = false) {
   if (!player) return;
+  if (typeof flyGroundSeparated === "function" && flyGroundSeparated() && !["timeRewind", "leviosaFloat"].includes(spellType)) return;
   const wLvl = player.weapons[0] ? player.weapons[0].lvl : 1;
   player.combatAlertTimer = 1.8;
 
@@ -541,7 +542,7 @@ function castArcaneSpell(spellType, manualClick = false) {
         if (typeof eScarAng !== "undefined") { eScarAng[i] = cutA; eScarHeat[i] = 1.0; }
         if (eArmsLost[i] < 2) { eArmsLost[i]++; spawnGroundLimb(eX[i] + 7, eY[i], "#ff1744", 1); }
         else if (eLegsLost[i] < 2) { eLegsLost[i]++; spawnGroundLimb(eX[i], eY[i] + 7, "#ff1744", 0); }
-        eBleed[i] = 1; eBleedRate[i] = eMax[i] * 0.16;
+        eBleed[i] = 1; eBleedRate[i] = eMax[i] * 0.16; eBleedSource[i] = 0; bleedSetOrigin(i, null);
         const sDmg = (115 + wLvl * 18) * player.might;
         eHP[i] -= sDmg;
         spawnDmg(eX[i], eY[i], sDmg, true, true);
@@ -592,7 +593,7 @@ function castArcaneSpell(spellType, manualClick = false) {
     if (typeof sfxDisintegrate === "function") sfxDisintegrate();
     const tx = player.x + Math.cos(player.aim) * 85, ty = player.y + Math.sin(player.aim) * 85;
     if (typeof spawnBlastWave === "function") {
-      spawnBlastWave(tx, ty, 125 * player.area, "#ff6d00");
+      spawnBlastWave(tx, ty, 125 * player.area, "#ff6d00", "player");
       spawnBlastWave(tx, ty, 85 * player.area, "#ffffff");
     }
     spawnParticles(tx, ty, 18);
@@ -621,6 +622,7 @@ function castArcaneSpell(spellType, manualClick = false) {
 function triggerSpell(sIdx) {
   if (!player || !Array.isArray(player.spellbook) || !player.spellbook[sIdx]) return;
   const sp = player.spellbook[sIdx];
+  if (typeof flyGroundSeparated === "function" && flyGroundSeparated() && !["timeRewind", "leviosaFloat"].includes(sp.type)) { if (typeof flyTip === "function") flyTip("⬇ DESCEND TO REACH THE GROUND"); return; }
   if (sp.cd > 0.05) return;
   sp.cd = sp.cdMax * (player.cdr || 1.0) * (player.utilCdrMul || 1.0);
   castArcaneSpell(sp.type, true);
@@ -801,6 +803,9 @@ function startRun() {
   document.getElementById("hud").classList.add("active");
   document.getElementById("hud").classList.toggle("flip", opts.hudFlip);
   updateHUD();
+  // Place the HUD after run-start hooks have added controls and the top bar
+  // is active, before a player can touch the newly displayed controls.
+  if (typeof HUDL !== "undefined" && typeof hudFrame === "function") { HUDL.dirty = true; hudFrame(); }
   sfx(220, 660, 0.18, "triangle");
 }
 
@@ -1120,6 +1125,27 @@ function fireWeapon(w) {
     return;
   }
 
+  // v14.3: Neo's "Dual Micro-Uzis & Telekinesis" — a short burst from each Uzi, each hand on its own target
+  // (js/dualaim.js), and every third cycle a telekinetic push when something is in his face.
+  // (Before: one Uzi was drawn and it fired only the push — with an Uzi sound.)
+  if (w.id === 39) {
+    w.tkN = (w.tkN || 0) + 1;
+    if (best < 95 * player.area && w.tkN % 3 === 0) { executeForceKineticPush(player.x, player.y, aimAng, w.lvl, baseDmg * 0.8); return; }
+    const pairOn = typeof dualPairOn === "function" ? dualPairOn(w) : true;
+    const angs = pairOn && typeof dualPairAngles === "function" ? dualPairAngles(w, aimAng) : [aimAng, aimAng];
+    const n = 2 + Math.floor(w.lvl / 4) + player.projCnt + sup;
+    for (let h = 0; h < (pairOn ? 2 : 1); h++) {
+      const a0 = h === 0 ? aimAng : angs[1] + (Math.random() - 0.5) * eyeJitter, hy = h === 0 ? 4.5 : -4.5;
+      const ox = player.x - Math.sin(a0) * hy, oy = player.y + Math.cos(a0) * hy;
+      for (let k = 0; k < n; k++) {
+        const a = a0 + (Math.random() - 0.5) * 0.07, spd = 560 * player.projSpd;
+        spawnProj(ox - Math.cos(a) * k * 9, oy - Math.sin(a) * k * 9, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.38, 0.6 * player.dur, 4, 1 + player.pierce + sup * 2, 4, sup, 0, 39);
+      }
+      if (typeof sfxWeapon === "function") sfxWeapon(w.style, 39, false);
+    }
+    return;
+  }
+
   if (typeof sfxWeapon === "function") sfxWeapon(w.style, w.id, false);
 
   if (w.id === 52 || w.id === 13) {
@@ -1181,7 +1207,12 @@ function fireWeapon(w) {
 /* === 10. 2-BUTTON UTILITY ROUTER & AUTONOMOUS SPELL/CQC/HARDWARE LOOP === */
 function triggerUtility(uIdx) {
   if (!player || !player.utils[uIdx]) return;
-  const u = player.utils[uIdx]; if (u.cd > 0) return; u.cd = u.cdMax * player.utilCdrMul;
+  const u = player.utils[uIdx];
+  if (typeof flyGroundSeparated === "function" && flyGroundSeparated() && !["timeRewind", "cyborgRush", "leviosaFloat"].includes(u.type)) {
+    if (typeof flyTip === "function") flyTip("⬇ DESCEND TO REACH THE GROUND");
+    return; // no cooldown or ammunition is spent
+  }
+  if (u.cd > 0) return; u.cd = u.cdMax * player.utilCdrMul;
   player.combatAlertTimer = 2.0;
 
   if (["leviosaFloat", "patronusStag", "avadaKedavra", "sectumSlash", "youShallNotPass", "piertotumKnights", "raiseDead", "summonHound", "timeRewind", "kneeDarts", "bobaDisintegrate"].includes(u.type)) {
@@ -1320,7 +1351,7 @@ function updateHeroSpecials(simDt) {
   if (player.combatAlertTimer > 0) player.combatAlertTimer = Math.max(0, player.combatAlertTimer - simDt);
   if (forcePushVis.timer > 0) forcePushVis.timer = Math.max(0, forcePushVis.timer - simDt);
 
-  if ([51, 19, 41, 42].includes(player.cid) && player.cqcCD <= 0) {
+  if ([51, 19, 41, 42].includes(player.cid) && player.cqcCD <= 0 && !(typeof flyGroundSeparated === "function" && flyGroundSeparated())) {
     for (let i = 0; i < MAX_E; i++) {
       if (eAct[i] && !allyIs(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 42) {
         player.cqcCD = 3.2 * (player.cdr || 1.0);
@@ -1387,7 +1418,7 @@ function updateHeroSpecials(simDt) {
 
   const sig = HERO_SIG_GEAR[player.cid] || HERO_SIG_GEAR[0];
   player.sigGearCD -= simDt;
-  if (player.sigGearCD <= 0) {
+  if (player.sigGearCD <= 0 && !(typeof flyGroundSeparated === "function" && flyGroundSeparated())) {
     let best = -1, maxH = 0;
     for (let i = 0; i < MAX_E; i++) {
       if (eAct[i] && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i)) && !(eStagger[i] > 0) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 280 && eHP[i] > maxH) {
@@ -1418,7 +1449,7 @@ function updateHeroSpecials(simDt) {
     }
   }
 
-  if (player.cid === 54) {
+  if (player.cid === 54 && !(typeof flyGroundSeparated === "function" && flyGroundSeparated())) {
     if (player.autoFlameCD <= 0) {
       let nearCnt = 0;
       for (let i = 0; i < MAX_E; i++) { if (eAct[i] && !allyIs(i) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 115) nearCnt++; }

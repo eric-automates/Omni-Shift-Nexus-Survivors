@@ -54,7 +54,7 @@ function rmState() {
   if (!R.city || !RM_INDIANA.some(c => c[0] === R.city)) R.city = "Indianapolis";
   if (!Array.isArray(R.recent)) R.recent = [];
   if (R.place && !(typeof R.place.lat === "number" && typeof R.place.lon === "number")) R.place = null;
-  R.scale = rmScaleNorm(R.scale == null ? 1 / 3 : R.scale);   // v14.3 map scale (1:3 default)
+  R.scale = rmScaleNorm(R.scale == null ? RM_BASE_SCALE : R.scale);   // preserve existing choices; new players use the v15 baseline
   S.real = R;
   return R;
 }
@@ -123,7 +123,7 @@ function rmPreload(place, drop, onProg) {
 }
 function rmDropMetres() {   // the drop zone picked on the map for this place (world tiles → metres), if any
   if (typeof meta === "undefined") return null;
-  const P = rmChosenPlace(), wk = "real|" + P.lat.toFixed(3) + "," + P.lon.toFixed(3) + (Math.abs(P.S - 1) < 1e-6 ? "" : "|" + rmScaleLabel(P.S));
+  const P = rmChosenPlace(), wk = "real|" + P.lat.toFixed(3) + "," + P.lon.toFixed(3) + (Math.abs(P.S - 1) < 1e-6 ? "" : "|" + rmScaleKey(P.S));
   let d = null;
   if (typeof LOC !== "undefined" && LOC.dropKey === wk && Array.isArray(meta.cityDrop)) d = meta.cityDrop;
   else if (meta.cityDrops && Array.isArray(meta.cityDrops[wk])) d = meta.cityDrops[wk];
@@ -307,8 +307,8 @@ function rmRenderReal(body, S) {
     if (R.recent.length) html += '<div class="rm-msg">Recent</div><div class="rm-chips">' + R.recent.map((p, i) => '<span class="rm-chip' + (cur && cur.lat === p.lat && cur.lon === p.lon ? " on" : "") + '" data-rmrecent="' + i + '">' + rmEsc(p.name) + "<i>" + rmEsc(p.region || "") + "</i></span>").join("") + "</div>";
     html += '<div class="rm-msg">Quick picks</div><div class="rm-chips">' + RM_WORLD_PICKS.map((p, i) => '<span class="rm-chip' + (cur && cur.lat === p[1] && cur.lon === p[2] ? " on" : "") + '" data-rmpick="' + i + '">' + p[0] + "<i>" + p[3] + "</i></span>").join("") + "</div>";
   }
-  // v14.3 map scale: roads, houses and cars sized to the heroes (1:3), or roomier
-  html += '<div class="lc-sec">MAP SCALE</div><div class="lc-row">' + RM_SCALES.map(q => '<div class="lc-card' + (Math.abs(R.scale - q[0]) < 1e-3 ? " on" : "") + '" data-rmscale="' + q[0] + '" style="flex:1 1 150px;max-width:190px"><b>📏 ' + q[1] + "</b><i style=\"font-size:10.5px;color:#9bb\">" + q[2] + (q[0] < 0.4 ? " — streets, houses and cars sized to your hero" : q[0] < 0.9 ? " — wider streets, bigger rooms" : " — real metres, everything huge next to the heroes") + "</i></div>").join("") + "</div>";
+  // Map sizes are expressed relative to the standard baseline, not as geographic ratios.
+  html += '<div class="lc-sec">MAP SCALE</div><div class="lc-row">' + RM_SCALES.map(q => '<div class="lc-card' + (Math.abs(R.scale - q[0]) < 1e-3 ? " on" : "") + '" data-rmscale="' + q[0] + '" style="flex:1 1 150px;max-width:190px"><b>📏 ' + q[1] + "</b><i style=\"font-size:10.5px;color:#9bb\">" + q[2] + "</i></div>").join("") + "</div>";
   html += '<div class="lc-sec">WHO\'S AFTER YOU</div><div class="lc-row">' + Object.keys(RM_THREATS).map(k => { const T = RM_THREATS[k]; return '<div class="lc-card lc-world' + (R.threat === k ? " on" : "") + '" data-rmthreat="' + k + '" style="flex:1 1 170px;max-width:185px"><b>' + T.icon + " " + T.name + "</b><i style=\"font-size:10.5px;color:#9bb\">" + T.desc + "</i></div>"; }).join("") + "</div>";
   html += '<div class="lc-sec">THE MAP</div><div class="lc-prev"><canvas id="locCv" width="300" height="300"></canvas><div class="lc-info" id="locInfo"></div></div>';
   html += '<div class="rm-foot">' + rmAttr(true, R.mode === "offline") + ' · Real names appear only because they are on the map — <a id="rmDisc">ⓘ disclaimer</a>' + (R.mode === "online" ? ' · <a id="rmClear">🗑 clear downloaded maps</a>' : "") + "</div>";

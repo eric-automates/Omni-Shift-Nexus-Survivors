@@ -101,7 +101,7 @@ function allyTakeHit(a, i, dt) {
   if (eHP[a] <= 0) {
     allyUid[a] = 0; allyCount = Math.max(0, allyCount - 1);
     killNoPayDepth++;
-    try { killEnemy(a, false); } finally { killNoPayDepth = Math.max(0, killNoPayDepth - 1); }
+    try { killEnemy(a, false, null, "#00f0ff", "enemy"); } finally { killNoPayDepth = Math.max(0, killNoPayDepth - 1); }
   }
 }
 function allyRebuildList() {
@@ -177,10 +177,10 @@ function allyEnemyStep(i, dt) {
   } else { eVX[i] = 0; eVY[i] = 0; }
   if (t < 0 || allyAtkCD[i] > 0) return;
   const base = (42 + runTime * 1.15) * (player.stg ? player.stg.hpMul : 1) * (player.diff ? player.diff.hpMul : 1);
-  if (ranged && d < 240) {                                      // friendly blaster bolt (player-owned: passes through allies)
+  if (ranged && d < 240) {                                      // friendly bolt: passes through allies, but belongs to the persuaded fighter
     allyAtkCD[i] = 0.85;
     const fa = Math.atan2(dy, dx);
-    spawnProj(eX[i], eY[i], Math.cos(fa) * 300, Math.sin(fa) * 300, base * 0.4, 1.0, 4, 0, 4, 0, 0, -1);
+    spawnProj(eX[i], eY[i], Math.cos(fa) * 300, Math.sin(fa) * 300, base * 0.4, 1.0, 4, 0, 4, 0, 0, -1, 2);
   } else if (d < 21) {
     allyAtkCD[i] = 0.45;
     const dmg = base * 0.3 * (eType[t] >= 98 ? 0.8 : 1);
@@ -188,7 +188,7 @@ function allyEnemyStep(i, dt) {
     eStun[t] = Math.max(eStun[t], 0.12);
     spawnDmg(eX[t], eY[t], dmg, false);
     if (Math.random() < 0.5) spawnParticles(eX[t], eY[t], 2);
-    if (eHP[t] <= 0 && !(eStagger[t] > 0)) killEnemy(t, false);
+    if (eHP[t] <= 0 && !(eStagger[t] > 0)) killEnemy(t, false, null, "#00f0ff", "squad");
   }
 }
 
@@ -231,7 +231,7 @@ function forcePersuade(cands, n, dur, line) {
   return got;
 }
 function forcePersuadeStep(dt) {
-  if (!forceLightUser()) return;
+  if (!forceLightUser() || (typeof flyGroundSeparated === "function" && flyGroundSeparated())) return;
   const F = forceState;
   F.persuadeCD -= dt;
   if (F.persuadeCD > 0 || F.willT >= 0 || forceSdBusy()) return;
@@ -279,7 +279,7 @@ function yodaLiftStep(dt) {
       F.lifts.splice(k, 1);
     }
   }
-  if (player.cid !== 79 || yodaSaberLvl() < 5) return;
+  if (player.cid !== 79 || yodaSaberLvl() < 5 || (typeof flyGroundSeparated === "function" && flyGroundSeparated())) return;
   F.liftCD -= dt;
   if (F.liftCD > 0 || F.willT >= 0 || forceSdBusy() || F.lifts.length) return;
   const cands = forceGatherNear(player.x, player.y, 205, true);
@@ -332,7 +332,7 @@ function yodaWillStep(dt) {
     }
     return;
   }
-  if (player.cid !== 79 || yodaSaberLvl() < 7) return;
+  if (player.cid !== 79 || yodaSaberLvl() < 7 || (typeof flyGroundSeparated === "function" && flyGroundSeparated())) return;
   F.willCD -= dt;
   if (F.willCD > 0 || forceSdBusy()) return;
   let n = 0;

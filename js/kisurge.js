@@ -426,6 +426,7 @@ function kiAbsorb(cid, how) {
 function kiAbsorbStep(dt) {
   if (!KI.absorbed.length) return;
   for (const a of KI.absorbed) {
+    if ((a.k === "lightning" || a.k === "burn" || a.k === "freeze") && typeof flyGroundSeparated === "function" && flyGroundSeparated()) continue;
     if (a.k === "lightning") { a.t = (a.t || 0) - dt; if (a.t <= 0) { a.t = 2.4; let n = a.v; for (let j = 0; j < MAX_E && n > 0; j++) if (eAct[j] && Math.hypot(eX[j] - player.x, eY[j] - player.y) < 260) { eHP[j] -= 40 * (player.might || 1); if (typeof spawnParticles === "function") spawnParticles(eX[j], eY[j], 3, 8); if (eHP[j] <= 0) killEnemy(j); n--; } } }
     else if (a.k === "burn") { for (let j = 0; j < MAX_E; j++) if (eAct[j] && Math.hypot(eX[j] - player.x, eY[j] - player.y) < 90) { eHP[j] -= a.v * dt * (player.might || 1); if (eHP[j] <= 0) killEnemy(j); } }
     else if (a.k === "freeze") { a.t = (a.t || 0) - dt; if (a.t <= 0) { a.t = 4; for (let j = 0; j < MAX_E; j++) if (eAct[j] && Math.hypot(eX[j] - player.x, eY[j] - player.y) < 130) eStun[j] = Math.max(eStun[j], 0.8); } }
@@ -503,6 +504,7 @@ const KI_PALM = { 34: "#4fc3f7", 35: "#ffd54f", 36: "#ffd54f", 38: "#4fc3f7", 84
     window.triggerUtility = triggerUtility = function (uIdx) {
       const u = player && player.utils && player.utils[uIdx];
       if (u && (u.type === "kiIT" || u.type === "kiAbsorb" || u.type === "kiRegen")) {
+        if (u.type === "kiAbsorb" && typeof flyGroundSeparated === "function" && flyGroundSeparated()) { if (typeof flyTip === "function") flyTip("⬇ DESCEND TO REACH THE GROUND"); return; }
         if (u.cd > 0) return;
         if (u.type === "kiIT") { kiITOpen(); u.cd = 1; }
         else if (u.type === "kiRegen") { player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.4); if (player.limbs) for (let i = 0; i < player.limbs.length; i++) player.limbs[i] = 100; spawnSpeech(player.x, player.y - 30, "REGENERATE!", "#76ff03", 1.8); u.cd = u.cdMax * (player.utilCdrMul || 1); }

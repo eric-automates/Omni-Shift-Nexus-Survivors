@@ -324,7 +324,7 @@ function drawSaberBladePose(tCtx, w, R, col, handCol, aim, slotIdx, bladeSt, mai
 /* === 4. CANON 80-HERO SPRITE RENDERER (STATURE SCALING, R2-D2 DROID, YODA, CLINT, VADER) === */
 const HELMET_HEROES = new Set([1, 2, 4, 7, 9, 17, 19, 23, 26, 29, 30, 32, 33, 47, 49, 50, 54, 55, 76]);
 
-function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx, guardZone = -1) {
+function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx, guardZone = -1, flightPose = null) {
   const out = typeof getOutfit === "function" ? getOutfit(cid) : { head: 0, torso: 0, legs: 0, back: 0, blade: 0 };
   const pal = typeof getHeroOutfits === "function" ? getHeroOutfits(cid) : null;
   const cHead = (pal && pal.head && pal.head[out.head || 0]) ? pal.head[out.head || 0][1] : fac.c1;
@@ -338,10 +338,14 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   const isLivePlayer = (tCtx === ctx && typeof player !== "undefined" && player && player.cid === cid);
   const kStyle = getHeroKinematicStyle(cid);
   const bSpec = getHeroBodySpec(cid);
-  const stride = Math.sin(walk * 2.2) * 3.2;
+  // Flight uses a held directional leg adjustment, never a walk-cycle.
+  const flightSpeed = flightPose ? Math.hypot(flightPose.vx, flightPose.vy) : 0;
+  const flightAngle = flightSpeed > 0.01 ? Math.atan2(flightPose.vy, flightPose.vx) - aim : 0;
+  const flightAmount = flightPose ? Math.min(1, flightSpeed / Math.max(1, flightPose.top)) : 0;
+  const stride = flightPose ? (Math.sin(flightAngle) * 2.1 + Math.cos(flightAngle) * 0.8) * flightAmount : Math.sin(walk * 2.2) * 3.2;
   const acrobatZ = isLivePlayer ? (player.acrobatZ || 0) : 0;
-  const hoverBob = (kStyle === 3 || kStyle === 5) ? Math.sin((typeof runTime !== "undefined" ? runTime : 0) * 5.5) * 2.0 : 0;
-  const bankAng = isLivePlayer ? (player.bankTilt || 0) : 0;
+  const hoverBob = (kStyle === 3 || kStyle === 5 || flightPose) ? Math.sin((typeof runTime !== "undefined" ? runTime : 0) * 5.5) * 2.0 : 0;
+  const bankAng = (isLivePlayer ? (player.bankTilt || 0) : 0) + (flightPose ? Math.sin(flightAngle) * flightAmount * 0.10 : 0);
 
   // v13 creator jetpack: the hero really flies - raised sprite over a ground shadow
   const flyer = cid === CUSTOM_CID && typeof customHasJetpack === "function" && customHasJetpack();
@@ -411,7 +415,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     tCtx.fillRect(-6.8, -5.5, 13.6, 9.5);
     if (flyer) {                                                  // twin thruster nozzles (the jets are drawn under the boots)
       tCtx.fillStyle = "#455a64"; tCtx.fillRect(-5.6, 3.6, 3.4, 2.0); tCtx.fillRect(2.2, 3.6, 3.4, 2.0);
-    } else if (Math.abs(stride) > 0.4) {
+    } else if ((flightPose && flightPose.jet) || Math.abs(stride) > 0.4) {
       tCtx.fillStyle = "#ff9100";
       tCtx.fillRect(-5, 4, 3, 4 + Math.random() * 3);
       tCtx.fillRect(2, 4, 3, 4 + Math.random() * 3);
@@ -830,6 +834,17 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
         drawBallHand(tCtx, 2.5 + fanBob, -5.8, 2.3, handCol);
       }
       tCtx.restore();
+
+      // v14.3: a matched pair (Neo's Micro-Uzis) — the twin sits in the free hand and aims on its own (js/dualaim.js)
+      if (slotIdx === 0 && w.id === 39 && (activeWpns.length === 1 || kStyle === 5)) {
+        const a2 = (isLivePlayer && typeof w.armAng2 === "number") ? w.armAng2 : armAng + 0.18;
+        tCtx.save();
+        tCtx.rotate(a2);
+        tCtx.translate(reachDist, -4.5);
+        drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, wActiveCol, 0, 0, 0, null, w.hilt);
+        drawBallHand(tCtx, 0, 0, 2.5, handCol);
+        tCtx.restore();
+      }
     });
   }
 
@@ -1483,8 +1498,25 @@ function renderScene() {
     ctx.restore();
   }
 
-  // v11: the body steps into Form strikes (lunge offset from js/saberforms.js)
-  drawHeroSprite(player.x + (player.sfLX || 0), player.y + (player.sfLY || 0), player.fac, player.cid, player.walk, player.aim, player.inVehicle, ctx, player.guardZone);
+  // Keep a self-flying hero at their normal screen size while the ground and
+  // NPCs recede. Scale around the hero only, never the world or hitboxes.
+  const selfFlight = typeof FLY !== "undefined" && ((FLY.on && FLY.self && FLY.air) || !!FLY.chute);
+  const legacyHover = !player.inVehicle && player.flying && !selfFlight;
+  const pose = selfFlight ? { vx: FLY.vxm || 0, vy: FLY.vym || 0, top: (FLY.S && FLY.S.top) || 42, jet: !!(FLY.S && FLY.S.trail === "jet") } :
+    legacyHover ? { vx: player.vx || 0, vy: player.vy || 0, top: player.spd || 145, jet: true } : null;
+  const hx = player.x + (player.sfLX || 0), hy = player.y + (player.sfLY || 0);
+  ctx.save();
+  if (selfFlight) { const k = 1 / Math.max(0.00001, FLY.zoom || 1); ctx.translate(hx, hy); ctx.scale(k, k); ctx.translate(-hx, -hy); }
+  if (selfFlight && FLY.on && FLY.self && FLY.S && FLY.S.trail === "broom" && typeof flyDrawOwn === "function") {
+    ctx.save(); ctx.translate(hx, hy + 8); ctx.rotate(FLY.hdg); ctx.scale(0.32, 0.32); flyDrawOwn(ctx, "broom", runTime, null); ctx.restore();
+  }
+  if (selfFlight && FLY.chute) {
+    ctx.save(); ctx.translate(hx, hy); ctx.strokeStyle = "#cfd8dc"; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(-4, -2); ctx.lineTo(-16, -23); ctx.moveTo(4, -2); ctx.lineTo(16, -23); ctx.stroke();
+    ctx.fillStyle = "#ffca70"; ctx.beginPath(); ctx.arc(0, -23, 16, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+  drawHeroSprite(hx, hy, player.fac, player.cid, player.walk, player.aim, player.inVehicle, ctx, player.guardZone, pose);
+  ctx.restore();
 
   if (typeof thrownBlade !== "undefined" && thrownBlade.active) {
     ctx.save();

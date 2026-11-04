@@ -284,9 +284,9 @@ function spawnBlastWave(x, y, maxRadius = 68, color = "#ff6d00") {
   }
 }
 
-function triggerRocketDetonation(x, y, dmg, blastRadius) {
+function triggerRocketDetonation(x, y, dmg, blastRadius, owner) {
   if (typeof fxDetonation === "function") fxDetonation(x, y, blastRadius);
-  spawnBlastWave(x, y, blastRadius, "#ff6d00");
+  spawnBlastWave(x, y, blastRadius, "#ff6d00", owner || "unknown");
   spawnParticles(x, y, 12);
   // v9.01 coloured particles: fireball core + rolling smoke
   const fireN = opts.lowPart ? 4 : 12;
@@ -297,21 +297,24 @@ function triggerRocketDetonation(x, y, dmg, blastRadius) {
   }
   sfx(120, 45, 0.28, "sawtooth", 0.32);
   for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j] || allyIs(j)) continue;
+    if (!eAct[j] || allyIs(j) || (typeof sdIgnore === "function" && sdIgnore(j))) continue;
     const d = Math.hypot(eX[j] - x, eY[j] - y);
     if (d <= blastRadius) {
       const splash = dmg * 1.35 * (1 - (d / blastRadius) * 0.45);
       eHP[j] -= splash;
       eStun[j] = Math.max(eStun[j], 0.85);
       spawnDmg(eX[j], eY[j], splash, true);
-      if (eHP[j] <= 0) killEnemy(j, false);
+      if (eHP[j] <= 0) killEnemy(j, false, null, "#00f0ff", owner || "unknown");
     }
   }
 }
 
 // v12: > 0 while a kill is credited to someone else (a Rival's opening finisher on its challenger): full gore, no payout
 let killNoPayDepth = 0;
-function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0ff") {
+// Scoped kill evidence for synchronous hooks. "legacy" retains old behaviour
+// only for unconverted damage paths; it is not proof of player responsibility.
+let currentKillSource = "legacy", currentKillOrigin = null;
+function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0ff", source = "legacy", origin = null) {
   if (!eAct[idx]) return;
   const ex = eX[idx], ey = eY[idx], et = eType[idx], rCid = eRivalCid[idx];
   // v10 rewind: an enemy that was already killed (and paid out) before a rewind comes back as a
@@ -320,7 +323,13 @@ function killEnemy(idx, wasHeadshot = false, sliceAngle = null, glowCol = "#00f0
   eAct[idx] = 0;
   eKneel[idx] = 0;
   if (typeof eLevitate !== "undefined") { eLevitate[idx] = 0; eLevZ[idx] = 0; }
-  if (V10.onKill.length) v10Run(V10.onKill, idx, ex, ey, et, isEcho);
+  if (V10.onKill.length) {
+    const previousSource = currentKillSource, previousOrigin = currentKillOrigin;
+    currentKillSource = killNoPayDepth > 0 ? "unknown" : source;
+    currentKillOrigin = currentKillSource === "player" ? origin : null;
+    try { v10Run(V10.onKill, idx, ex, ey, et, isEcho); }
+    finally { currentKillSource = previousSource; currentKillOrigin = previousOrigin; }
+  }
   eStagger[idx] = 0; eEcho[idx] = 0; eDummy[idx] = 0;
   if (!isEcho) player.kills++;
 
@@ -418,7 +427,7 @@ function updateMinionsSim(simDt) {
         }
         if (mAtkCD[m] <= 0) {
           mAtkCD[m] = 0.82;
-          spawnProj(mX[m], mY[m], Math.cos(ang) * 380, Math.sin(ang) * 380, mDmg[m], 0.85, 5, 1, 4, 0, 0, 75);
+          spawnProj(mX[m], mY[m], Math.cos(ang) * 380, Math.sin(ang) * 380, mDmg[m], 0.85, 5, 1, 4, 0, 0, 75, 2);
           sfx(640, 280, 0.04, "triangle", 0.09);
         }
       } else {
@@ -432,7 +441,7 @@ function updateMinionsSim(simDt) {
         if (d <= reach && mAtkCD[m] <= 0) {
           mAtkCD[m] = kind === 1 ? 0.34 : (kind === 4 ? 0.92 : 0.52);
           if (kind === 4) {
-            spawnBlastWave(mX[m], mY[m], 62, mCol[m]);
+            spawnBlastWave(mX[m], mY[m], 62, mCol[m], "squad");
             sfx(110, 42, 0.18, "sawtooth", 0.24);
             for (let k = 0; k < MAX_E; k++) {
               if (!eAct[k]) continue;
@@ -441,21 +450,21 @@ function updateMinionsSim(simDt) {
                 eHP[k] -= mDmg[m];
                 eStun[k] = Math.max(eStun[k], 0.85);
                 spawnDmg(eX[k], eY[k], mDmg[m], true);
-                if (eHP[k] <= 0) killEnemy(k, false);
+                if (eHP[k] <= 0) killEnemy(k, false, null, "#00f0ff", "squad");
               }
             }
           } else {
             eHP[bestE] -= mDmg[m];
             eScarAng[bestE] = ang + 0.4;
             eScarHeat[bestE] = 0.85;
-            if (kind === 1) { eBleed[bestE] = 1; eBleedRate[bestE] = eMax[bestE] * 0.08; eSlow[bestE] = 1.5; }
+            if (kind === 1) { eBleed[bestE] = 1; eBleedRate[bestE] = eMax[bestE] * 0.08; eBleedSource[bestE] = 2; bleedSetOrigin(bestE, null); eSlow[bestE] = 1.5; }
             if ((kind === 0 || kind === 3) && Math.random() < 0.28 && eArmsLost[bestE] < 2) {
               eArmsLost[bestE]++;
               spawnGroundLimb(eX[bestE], eY[bestE], "#ff5252", 1);
             }
             spawnDmg(eX[bestE], eY[bestE], mDmg[m], kind === 3);
             sfx(260, 110, 0.045, "triangle", 0.11);
-            if (eHP[bestE] <= 0) killEnemy(bestE, false, (kind === 0 || kind === 3) ? ang : null, mCol[m]);
+            if (eHP[bestE] <= 0) killEnemy(bestE, false, (kind === 0 || kind === 3) ? ang : null, mCol[m], "squad");
           }
           mHP[m] -= (eType[bestE] >= 98 ? 14 : 5);
         }
@@ -479,7 +488,7 @@ function checkBladeSegmentSlice(hx, hy, tx, ty, w, bladeSweepAngle, glowCol, hm)
   const segLenSq = segDX * segDX + segDY * segDY;
   if (segLenSq < 1) return;
   for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j] || eScarHitCD[j] > 0 || allyIs(j)) continue;
+    if (!eAct[j] || eScarHitCD[j] > 0 || allyIs(j) || (typeof sdIgnore === "function" && sdIgnore(j))) continue;
     const eRad = eType[j] === 99 ? 22 : (eType[j] === 3 ? 15 : 11);
     const ex = eX[j], ey = eY[j];
     let t = ((ex - hx) * segDX + (ey - hy) * segDY) / segLenSq;
@@ -494,6 +503,8 @@ function checkBladeSegmentSlice(hx, hy, tx, ty, w, bladeSweepAngle, glowCol, hm)
 // instant kill), 1 = committed cut, 2 = heavy (Falling Avalanche: breaks guards, splits top-to-bottom),
 // 3 = thrust (runs the target through: intact, scorched corpse), 4 = flurry cut (short re-hit window).
 function bladeHitEnemy(j, cx, cy, w, bladeSweepAngle, glowCol, hm) {
+  // A form sweep can call this directly, so enforce showdown/ally immunity here too.
+  if (typeof sdIgnore === "function" && sdIgnore(j)) return;
   const isPlasmaSaber = ![18, 19, 24, 48, 50, 67, 71].includes(w.id);
   const visorBonus = (player.activeVisor && player.activeVisor > 0) ? 0.10 : 0;
   const kind = hm ? hm.kind : 1;
@@ -534,7 +545,7 @@ function bladeHitEnemy(j, cx, cy, w, bladeSweepAngle, glowCol, hm) {
       killed = true;
     } else if (Math.abs(relX) > 0.52 && eArmsLost[j] < 2) {
       eArmsLost[j]++;
-      eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.14;
+      eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.14; eBleedSource[j] = 0; bleedSetOrigin(j, null);
       spawnGroundLimb(ex + (relX > 0 ? 9 : -9), ey, isPlasmaSaber ? "#263238" : "#ff1744", 1);
       const limbDmg = eMax[j] * 0.65;
       eHP[j] -= limbDmg;
@@ -542,7 +553,7 @@ function bladeHitEnemy(j, cx, cy, w, bladeSweepAngle, glowCol, hm) {
       if (eHP[j] <= 0) { killEnemy(j, false, bladeSweepAngle, glowCol); killed = true; }
     } else if (relY > 0.42 && eLegsLost[j] < 2) {
       eLegsLost[j]++;
-      eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.16;
+      eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.16; eBleedSource[j] = 0; bleedSetOrigin(j, null);
       spawnGroundLimb(ex, ey + 8, isPlasmaSaber ? "#263238" : "#ff1744", 0);
       const legDmg = eMax[j] * 0.65;
       eHP[j] -= legDmg;
@@ -559,7 +570,7 @@ function bladeHitEnemy(j, cx, cy, w, bladeSweepAngle, glowCol, hm) {
     if (eArmsLost[j] < 2 && !isBossOrRival) {
       eArmsLost[j]++;
       eFormType[j] = 0;
-      eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.12;
+      eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.12; eBleedSource[j] = 0; bleedSetOrigin(j, null);
       spawnGroundLimb(ex + (relX >= 0 ? 9 : -9), ey, "#ffd166", 1);
     }
     if (w.id === 78) eShred[j] = Math.min(12, eShred[j] + 4);
@@ -578,8 +589,11 @@ function bladeHitEnemy(j, cx, cy, w, bladeSweepAngle, glowCol, hm) {
 }
 
 function hitTestPlayerProj(i) {
+  // Orbiting/aura attacks travel with the hero; shots already fired at ground
+  // level remain independent and can finish their trajectory after takeoff.
+  if (typeof flyGroundSeparated === "function" && flyGroundSeparated() && pSource[i] === 0 && (pStyle[i] === 1 || pStyle[i] === 6 || pStyle[i] === 8)) return;
   for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j] || allyIs(j)) continue;
+    if (!eAct[j] || allyIs(j) || (typeof sdIgnore === "function" && sdIgnore(j))) continue;
     const eRad = eType[j] === 99 ? 24 : (eType[j] === 3 ? 17 : 13);
     const dx = pX[i] - eX[j], dy = pY[i] - eY[j];
     if (Math.hypot(dx, dy) > pRad[i] + eRad) continue;
@@ -588,7 +602,7 @@ function hitTestPlayerProj(i) {
     projRecordHit(i, j);
 
     if (pStyle[i] === 2) {
-      triggerRocketDetonation(pX[i], pY[i], pDmg[i], Math.max(58, pRad[i] * 5.2));
+      triggerRocketDetonation(pX[i], pY[i], pDmg[i], Math.max(58, pRad[i] * 5.2), projectileOwner(i));
       pAct[i] = 0;
       return;
     }
@@ -614,7 +628,7 @@ function hitTestPlayerProj(i) {
       eHP[j] = 0;
       spawnDmg(eX[j], eY[j], avadaDmg, true);
       spawnParticles(eX[j], eY[j], 10);
-      killEnemy(j, true);
+      killEnemy(j, true, null, "#00f0ff", projectileOwner(i), projectileShotOrigin(i));
       pPrc[i]--;
       if (pPrc[i] < 0) pAct[i] = 0;
       return;
@@ -643,14 +657,14 @@ function hitTestPlayerProj(i) {
       eLegDmg[j] += finalDmg;
       if (eLegDmg[j] > eMax[j] * (pStyle[i] === 8 ? 0.16 : 0.26)) {
         eLegDmg[j] = 0; eLegsLost[j]++;
-        eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.09;
+        eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.09; eBleedSource[j] = pSource[i] <= 2 ? pSource[i] : 3; bleedSetOrigin(j, projectileShotOrigin(i));
         spawnGroundLimb(eX[j], eY[j] + 8, "#ff1744", 0);
       }
     } else if (isArm && eArmsLost[j] < 2) {
       eTailDmg[j] += finalDmg;
       if (eTailDmg[j] > eMax[j] * (pStyle[i] === 8 ? 0.16 : 0.24)) {
         eTailDmg[j] = 0; eArmsLost[j]++;
-        eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.08;
+        eBleed[j] = 1; eBleedRate[j] = eMax[j] * 0.08; eBleedSource[j] = pSource[i] <= 2 ? pSource[i] : 3; bleedSetOrigin(j, projectileShotOrigin(i));
         spawnGroundLimb(eX[j] + (nx > 0 ? 9 : -9), eY[j], "#ff5252", 1);
       }
     }
@@ -661,7 +675,7 @@ function hitTestPlayerProj(i) {
     eY[j] += Math.sin(ka) * kbDist;
 
     if (eHP[j] <= 0) {
-      killEnemy(j, isHead, pStyle[i] === 8 ? pVX[i] : null, "#ff9100");
+      killEnemy(j, isHead, pStyle[i] === 8 ? pVX[i] : null, "#ff9100", projectileOwner(i), projectileShotOrigin(i));
     }
 
     if (pBounce[i] > 0 && pStyle[i] !== 8) {
@@ -961,6 +975,8 @@ function stepSimulation(rawDt) {
   const activeSlots = Math.min(armCap, enabledWpns.length);
   if (typeof saberEngineBeginStep === "function") saberEngineBeginStep(simDt);
   for (let s = 0; s < activeSlots; s++) {
+    // Do not spend ammunition/cooldowns or strike the ground plane during high flight.
+    if (typeof flyGroundSeparated === "function" && flyGroundSeparated()) continue;
     const w = enabledWpns[(player.handSlotOffset + s) % enabledWpns.length];
     const isMeleeBlade = (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 44, 73].includes(w.id));
 
@@ -1060,7 +1076,8 @@ function stepSimulation(rawDt) {
       } else {
         six.burst -= simDt;
         if (six.burst <= 0) {
-          fireWeapon(w); player.recoilKick = 1.0; six.left--;
+          const fired = fireWeapon(w);
+          if (fired !== false) { player.recoilKick = 1.0; six.left--; }
           six.reload = six.left <= 0 ? Math.max(0.32, 0.55 * (player.cdr || 1) * hasteCdr) : 0;
           if (six.left > 0) six.burst = Math.max(0.06, 0.12 * (player.cdr || 1) * hasteCdr);
         }
@@ -1071,8 +1088,8 @@ function stepSimulation(rawDt) {
       if (w.cd <= 0) {
         const baseCD = w.style === "orbit" ? 0.36 : (w.style === "beam" ? 0.48 : (w.style === "cone" ? 0.62 : 0.52));
         w.cd = Math.max(0.06, baseCD * (player.cdr || 1) * hasteCdr * (w.lvl >= 10 ? 0.78 : 1.0));
-        fireWeapon(w);
-        if (!isMeleeBlade) player.recoilKick = 1.0;
+        const fired = fireWeapon(w);
+        if (!isMeleeBlade && fired !== false) player.recoilKick = 1.0;
       }
     }
   }
@@ -1156,7 +1173,7 @@ function stepSimulation(rawDt) {
     if (eBleed[i] > 0) {
       eHP[i] -= eBleedRate[i] * simDt;
       if (Math.random() < 3.5 * simDt) spawnDrip(eX[i], eY[i] + 8, i, 2.5 + Math.random() * 1.8);
-      if (eHP[i] <= 0) { killEnemy(i, false); continue; }
+      if (eHP[i] <= 0) { const cause = ["player", "enemy", "squad", "unknown"][eBleedSource[i]] || "unknown"; killEnemy(i, false, null, "#00f0ff", cause, cause === "player" ? bleedShotOrigin(i) : null); continue; }
     }
     if (eStagger[i] > 0) continue;   // v10 glory-kill stagger: frozen & harmless (timer runs in js/glory.js)
     if (eSlow[i] > 0) eSlow[i] = Math.max(0, eSlow[i] - simDt);
@@ -1231,13 +1248,13 @@ function stepSimulation(rawDt) {
     }
     if (distP < (eType[i] === 99 ? 26 : 16) && !(typeof CITY !== "undefined" && CITY.on && !!player.roof !== (typeof accEnemyOnRoof === "function" && accEnemyOnRoof(i)))) {   // v14.1: roof vs street
       player.combatAlertTimer = 2.0;
-      if (player.cid === 30) {
+      if (player.cid === 30 && !(typeof flyGroundSeparated === "function" && flyGroundSeparated())) {
         const acidDmg = 80 * simDt * 3.0;
         eHP[i] -= acidDmg;
         if (Math.random() < 0.25) spawnDmg(eX[i], eY[i], acidDmg, false);
         if (eHP[i] <= 0) { killEnemy(i, false); continue; }
       }
-      if (player.cid === 47 && mag > 0.2) {
+      if (player.cid === 47 && mag > 0.2 && !(typeof flyGroundSeparated === "function" && flyGroundSeparated())) {
         const screwDmg = 65 * (player.might || 1) * simDt * 3.0;
         eHP[i] -= screwDmg;
         if (eHP[i] <= 0) { killEnemy(i, false); continue; }
@@ -1270,7 +1287,7 @@ function stepSimulation(rawDt) {
 
         if (player.inVehicle === 3 && typeof vehDamage === "function" && VEH.me) {
           // v14.1: city vehicles take hits on the body where they land (js/vehicles.js)
-          const [lx, ly] = vehToLocal(VEH.me, eX[i], eY[i]); vehDamage(VEH.me, lx, ly, netDmg * 3, "melee", 0, 0, null);
+          const [lx, ly] = vehToLocal(VEH.me, eX[i], eY[i]); vehDamage(VEH.me, lx, ly, netDmg * 3, "melee", 0, 0, "enemy");
         } else if (player.inVehicle > 0) {
           player.vehicleHp -= netDmg;
           if (player.vehicleHp <= 0) { player.inVehicle = 0; spawnBlastWave(player.x, player.y, 75, "#00e5ff"); sfx(120, 45, 0.25); }
@@ -1288,7 +1305,7 @@ function stepSimulation(rawDt) {
     if (!pAct[i]) continue;
     pLife[i] -= simDt;
     if (pLife[i] <= 0) {
-      if (pStyle[i] === 2) triggerRocketDetonation(pX[i], pY[i], pDmg[i], pRad[i] * 4.8);
+      if (pStyle[i] === 2) triggerRocketDetonation(pX[i], pY[i], pDmg[i], pRad[i] * 4.8, projectileOwner(i));
       pAct[i] = 0; continue;
     }
 
@@ -1353,6 +1370,9 @@ function stepSimulation(rawDt) {
       }
 
       const dp = Math.hypot(pX[i] - player.x, pY[i] - player.y);
+      // Ground-level shots continue past the airborne hero without a hit,
+      // deflection or repulsor effect (including shots fired before ascent).
+      if (typeof flyGroundSeparated === "function" && flyGroundSeparated()) continue;
       if (dp < 38 && !pSnap[i]) { pSnap[i] = 1; if (typeof sfxSnap === "function") sfxSnap(); }
 
       if (player.hasRepulsor && dp < 30) {
@@ -1378,14 +1398,13 @@ function stepSimulation(rawDt) {
         if (typeof sfxRicochet === "function") sfxRicochet();
         continue;
       }
-      if (dp < 14 && (player.flyAlt || 0) > 60) continue;   // v14.2: shots from the ground don't reach that high (js/flight.js)
       if (dp < 14 && player.invulnT > 0) { pAct[i] = 0; spawnParticles(pX[i], pY[i], 2, 9); continue; }
       if (dp < 14) {
         player.combatAlertTimer = 2.0;
         const effArmor = (player.armor || 0) + (player.adaptTimer > 0 ? 5 : 0);
         const boltDmg = Math.max(1, pDmg[i] * (100 / (100 + effArmor * 8)));
         if (player.inVehicle === 3 && typeof vehDamage === "function" && VEH.me) {
-          const [lx, ly] = vehToLocal(VEH.me, pX[i] - pVX[i] * 0.02, pY[i] - pVY[i] * 0.02); vehDamage(VEH.me, lx, ly, boltDmg, "bullet", 0, 0, null);
+          const [lx, ly] = vehToLocal(VEH.me, pX[i] - pVX[i] * 0.02, pY[i] - pVY[i] * 0.02); vehDamage(VEH.me, lx, ly, boltDmg, "bullet", 0, 0, projectileOwner(i));
         } else if (player.inVehicle > 0) {
           // Vehicles soak enemy bolts the same way they soak melee contact.
           player.vehicleHp -= boltDmg;

@@ -55,19 +55,26 @@ function actEl() {
   // getting out of a moving vehicle is a short hold (no bailing out at 60 because a thumb slipped)
   b.addEventListener("pointerdown", e => {
     e.preventDefault(); e.stopPropagation(); if (e.pointerType === "touch") ACT.touch = true; b.classList.add("down");
+    actGuardPointerClick(e);
     if (actMovingExit()) { b.classList.add("hold"); ACT.holdT = setTimeout(() => { ACT.holdT = 0; b.classList.remove("hold"); actFire(); }, 380); return; }
     actFire();
   });
   for (const ev of ["pointerup", "pointercancel", "pointerleave"]) b.addEventListener(ev, () => { b.classList.remove("down"); b.classList.remove("hold"); if (ACT.holdT) { clearTimeout(ACT.holdT); ACT.holdT = 0; } });
+  b.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && !e.repeat) { e.preventDefault(); e.stopPropagation(); actFire(); } });
   b.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); });
   document.body.appendChild(b);
   const f = document.createElement("button");
   f.id = "actFly"; f.type = "button"; f.textContent = "🚀"; f.title = "Fly (G)";
-  f.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); if (typeof flyToggleSelf === "function") flyToggleSelf(); });
+  const flyingPointers = new Set();
+  f.addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); flyingPointers.add(e.pointerId); f.classList.add("flight-pressed"); actGuardPointerClick(e); if (typeof flyToggleSelf === "function") flyToggleSelf(); });
+  for (const ev of ["pointerup", "pointercancel"]) window.addEventListener(ev, e => { flyingPointers.delete(e.pointerId); if (!flyingPointers.size) f.classList.remove("flight-pressed"); }, true);
+  window.addEventListener("blur", () => { flyingPointers.clear(); f.classList.remove("flight-pressed"); });
   document.body.appendChild(f);
   ACT.el = b; ACT.fly = f;
   // left-handed HUD: the button lives on the left
   const st2 = document.createElement("style"); st2.textContent = "body.act-left #actBtn,body.act-left #actFly{right:auto;left:max(10px,env(safe-area-inset-left))}body.act-left #gaLight{right:auto!important;left:max(10px,env(safe-area-inset-left))}";
+  st2.textContent += "@media (pointer:coarse) and (min-height:521px) and (max-height:880px){body:not(.act-left) #actFly.self-active{right:calc(74px + env(safe-area-inset-right))}}" +
+    "@media (max-height:520px){body.act-left #actFly{left:calc(28px + min(52vw,300px) + env(safe-area-inset-left))}}";
   document.head.appendChild(st2);
   return b;
 }
@@ -102,13 +109,15 @@ function actFrame() {
   const show = ACT.cur || (typeof CITY !== "undefined" && CITY.on ? actRoofExit() : null);
   if (!show || (typeof runPaused !== "undefined" && runPaused)) actHide();
   else {
-    const P = actParse(show.label), mv = show.kind === "exitVeh" && actMovingExit(), key = P.icon + "|" + P.text + "|" + (ACT.live ? 1 : 0) + "|" + show.kind + "|" + mv;
+    const P = actParse(show.label), choice = ACT.live && actChoicePerson(show), mv = show.kind === "exitVeh" && actMovingExit();
+    if (choice) { P.icon = "✋"; P.text = "CHOOSE ACTION"; }
+    const key = P.icon + "|" + P.text + "|" + (ACT.live ? 1 : 0) + "|" + show.kind + "|" + mv;
     el.classList.toggle("compact", mv);
     if (key !== ACT.key) {
       ACT.key = key;
       el.querySelector(".ab-ic").textContent = P.icon;
       el.querySelector(".ab-tx").textContent = P.text;
-      el.querySelector(".ab-k").style.display = actIsTouch() ? "none" : "";
+      el.querySelector(".ab-k").style.display = (actIsTouch() || choice) ? "none" : "";
       el.classList.toggle("sticky", !!ACT.cur && !ACT.live);
       el.classList.toggle("roof", show.kind === "actRoof" || show.kind === "accDrop" || show.kind === "accDown");
       el.querySelector(".ab-tx").textContent = P.text + (show.kind === "exitVeh" && actMovingExit() ? " (HOLD)" : "");
@@ -121,10 +130,46 @@ function actFrame() {
     try { can = typeof CITY !== "undefined" && CITY.on && !player.inVehicle && typeof flySelfSpec === "function" && !!flySelfSpec() && !(document.getElementById("kiFly") && document.getElementById("kiFly").offsetParent); } catch (e) {}
     const on = typeof FLY !== "undefined" && FLY.on && FLY.self;
     if (on) can = true;
+    if (!ACT.fly.classList.contains("flight-pressed")) ACT.fly.classList.toggle("self-active", !!on);
     ACT.fly.style.display = can ? "block" : "none";
     if (can) ACT.fly.textContent = on ? "🛬" : "🚀";
   }
 }
+// Suppress only the compatibility click belonging to a pointer that already
+// activated the action button on pointerdown. A newly opened dialog can appear
+// under that finger before its click is dispatched.
+function actGuardPointerClick(down) {
+  const id=down.pointerId, x=down.clientX, y=down.clientY, touch=down.pointerType==="touch";
+  let releaseTimer=0;
+  const expiry=setTimeout(clear,30000);
+  function clear() {
+    clearTimeout(expiry); clearTimeout(releaseTimer);
+    window.removeEventListener("click",onClick,true);
+    window.removeEventListener("pointerup",onUp,true);
+    window.removeEventListener("pointercancel",onCancel,true);
+    window.removeEventListener("pointerdown",onNextDown,true);
+  }
+  function onUp(e) { if(e.pointerId===id) releaseTimer=setTimeout(clear,1000); }
+  function onCancel(e) { if(e.pointerId===id) clear(); }
+  // A cancelled/dragged gesture may emit no click. Never consume a later tap
+  // from a browser that reuses the same pointer ID.
+  function onNextDown(e) { if(e.pointerId===id) clear(); }
+  function onClick(e) {
+    // Keyboard/programmatic clicks have detail 0 and must not be intercepted.
+    if(!e.isTrusted || !e.detail) return;
+    const sameId=typeof e.pointerId==="number" && e.pointerId>=0 && e.pointerId===id;
+    const legacy=touch && !(typeof e.pointerId==="number" && e.pointerId>=0) &&
+      Math.abs(e.clientX-x)<4 && Math.abs(e.clientY-y)<4 &&
+      (!e.sourceCapabilities || e.sourceCapabilities.firesTouchEvents);
+    if(!sameId && !legacy) return;
+    e.preventDefault(); e.stopImmediatePropagation(); clear();
+  }
+  window.addEventListener("click",onClick,true);
+  window.addEventListener("pointerup",onUp,true);
+  window.addEventListener("pointercancel",onCancel,true);
+  window.addEventListener("pointerdown",onNextDown,true);
+}
+
 function actMovingExit() {
   try { const v = typeof VEH !== "undefined" ? VEH.me : null; return !!(v && player.inVehicle && (typeof vehRealMs === "function" ? vehRealMs(v) : Math.hypot(v.vx, v.vy) / 32) > 3.6); } catch (e) { return false; }
 }
@@ -137,9 +182,78 @@ function actFire() {
   try { if (navigator.vibrate) navigator.vibrate(12); } catch (e) {}
   if (t.kind === "actRoof") { actGetDown(); return; }
   let live = null; try { live = findInteractTarget(); } catch (e) {}
+  const person = ACT.live && actSameChoiceTarget(t, live) ? actChoicePerson(live) : null;
+  if (person) { actChoiceOpen(live, person); return; }
+  // A same-kind target is not necessarily the same object. Never act on a newly
+  // arrived car, kiosk or person under a stale prompt; the next frame offers it normally.
+  if (live && live.kind === t.kind && (((t.kind === "cityCar" || t.kind === "ecoKiosk") && !actSameChoiceTarget(t, live)) || (t.kind === "tfTalk" && t.p !== live.p))) {
+    ACT.cur = null; ACT.seenT = -99; ACT.key = ""; return;
+  }
   if (live && live.kind === t.kind) { if (typeof triggerWorldInteract === "function") triggerWorldInteract(); }
   else { ACT.force = t; try { if (typeof triggerWorldInteract === "function") triggerWorldInteract(); } finally { ACT.force = null; } }
   ACT.cur = null; ACT.seenT = -99; ACT.key = "";
+}
+// When a person and a car/counter overlap, keep the single thumb button and let the player choose.
+// No priority is changed, so F and every other interaction retain their existing behavior.
+function actChoicePerson(t) {
+  if (!t || (t.kind !== "cityCar" && t.kind !== "ecoKiosk") || !player || player.inVehicle || player.roof ||
+      typeof TF === "undefined" || !TF.on || TF.panel || typeof tfNearestWalker !== "function") return null;
+  let best = null, bd = 30;
+  for (const p of TF.walk) {
+    if (!actChoicePersonValid(p)) continue;
+    const d = Math.hypot(player.x - p.w.x, player.y - p.w.y);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+function actChoicePersonValid(p) {
+  if (!p || !p.alive || !p.w) return false;
+  if (!p.w.inside) return true;
+  const b = typeof cityBuildingAt === "function" ? cityBuildingAt(player.x, player.y) : null;
+  return !!b && b.uid === p.w.inside;
+}
+function actSameChoiceTarget(a, b) {
+  if (!a || !b || a.kind !== b.kind) return false;
+  if (a.kind === "cityCar") {
+    const x = a.car && a.car.q, y = b.car && b.car.q;
+    return !!(x && y && ((x.v && x.v === y.v) || (x.p && x.p === y.p) || (x.b && x.b === y.b && x.fi === y.fi)));
+  }
+  if (a.kind === "ecoKiosk") return !!(a.K && b.K && a.K.b === b.K.b && a.K.fi === b.K.fi);
+  return false;
+}
+function actChoiceClose(restore = true) {
+  const c = ACT.choice; if (!c) return;
+  ACT.choice = null; c.el.remove();
+  if (restore && typeof runActive !== "undefined" && runActive) runPaused = c.wasPaused;
+}
+function actChoiceOpen(t, p) {
+  if (ACT.choice || !runActive || runPaused) return;
+  const overlay = document.createElement("div"); overlay.id = "actChoice";
+  overlay.setAttribute("role", "dialog"); overlay.setAttribute("aria-modal", "true"); overlay.setAttribute("aria-label", "Choose an action");
+  overlay.style.cssText = "position:fixed;inset:0;z-index:99975;display:flex;align-items:center;justify-content:center;background:rgba(3,7,12,.78);font-family:system-ui,sans-serif";
+  const panel = document.createElement("div");
+  panel.style.cssText = "box-sizing:border-box;width:min(360px,92vw);max-height:85vh;overflow:auto;padding:16px;border:1px solid #ffd16688;border-radius:12px;background:#081019;color:#dbe9f3;display:flex;flex-direction:column;gap:10px";
+  const title = document.createElement("strong"); title.textContent = "Choose an action"; panel.appendChild(title);
+  function button(id, text) { const b = document.createElement("button"); b.id = id; b.className = "btn"; b.textContent = text; b.style.cssText = "min-height:44px;width:100%;white-space:normal;touch-action:manipulation"; panel.appendChild(b); return b; }
+  const primary = button("actChoicePrimary", actParse(t.label).text);
+  const talk = button("actChoiceTalk", "💬 TALK — " + (p.name || "person"));
+  const cancel = button("actChoiceCancel", "CANCEL");
+  overlay.appendChild(panel); document.body.appendChild(overlay);
+  ACT.choice = { el: overlay, wasPaused: runPaused }; runPaused = true;
+  const dismiss = () => { actChoiceClose(); ACT.cur = null; ACT.seenT = -99; ACT.key = ""; };
+  cancel.onclick = dismiss;
+  // Do not dismiss on backdrop click: the opening pointerdown can synthesize a click on it.
+  overlay.onkeydown = e => { if (e.key === "Escape") { e.preventDefault(); dismiss(); } };
+  talk.onclick = () => {
+    dismiss();
+    if (runActive && !runPaused && TF.on && TF.walk.includes(p) && actChoicePersonValid(p) && !player.inVehicle && !player.roof && Math.hypot(player.x-p.w.x, player.y-p.w.y) < 30) tfTalkOpen(p);
+  };
+  primary.onclick = () => {
+    dismiss();
+    let now = null; try { now = findInteractTarget(); } catch (e) {}
+    if (runActive && !runPaused && actSameChoiceTarget(t, now) && typeof triggerWorldInteract === "function") triggerWorldInteract();
+  };
+  primary.focus();
 }
 // off the roof from anywhere on it: the nearest ladder (within ~7 m), else straight off the nearest edge
 function actGetDown() {
@@ -216,7 +330,10 @@ function actTouchifyEl(el) {
     }
   };
   setInterval(watch, 1500);
-  if (typeof V10 !== "undefined") V10.onRunStart.push(() => { ACT.cur = null; ACT.key = ""; watch(); });
+  if (typeof V10 !== "undefined") {
+    V10.onRunReset.push(() => actChoiceClose(false));
+    V10.onRunStart.push(() => { actChoiceClose(false); ACT.cur = null; ACT.key = ""; watch(); });
+  }
   requestAnimationFrame(actFrame);
 })();
 function actTouchAll() {

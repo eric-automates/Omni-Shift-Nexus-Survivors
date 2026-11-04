@@ -73,7 +73,7 @@ function convoyOnEnter(v) {
   if (!list.length) { cvRebuildColumn(); cvAllyBoard(cvAllyFollowers(v.x, v.y, CV_MOUNT_R), [v].concat(CONVOY.vehicles)); return; }
   cvFill(v, list);
   let left = list.filter(m => !mBoard[m] && !mSeat[m]);
-  if (left.length) {
+  if (left.length && v15FeatureEnabled("T22.MULTI_VEHICLE_CONVOY")) {
     const cand = vehNearby(v.x, v.y, CV_MOUNT_R, u => u !== v && vehCanDrive(u) && !u.dead && !u.drv && !vehOcc(u) && (u.fuel > 0.04 || u.S.horse)).filter(q => !q.wreck);
     // the convoy is built around the group: closest vehicles to the followers first, more seats break ties
     let gx = 0, gy = 0; for (const m of left) { gx += mX[m]; gy += mY[m]; } gx /= left.length; gy /= left.length;
@@ -96,11 +96,16 @@ function convoyOnEnter(v) {
     }
   }
   // nobody left behind silently: the rest hold position, marked on your map
-  if (left.length) cvHold(left);
+  if (left.length) {
+    // Re-entering while overflow is already holding must retire the old
+    // shared marker before a replacement is created, not leave stale pins.
+    for (const m of left) if (mHold[m]) cvReleaseHold(m);
+    cvHold(left);
+  }
   cvRebuildColumn();
   cvAllyBoard(cvAllyFollowers(v.x, v.y, CV_MOUNT_R), [v].concat(CONVOY.vehicles));
   const n = list.length - left.length, nv = CONVOY.vehicles.length;
-  if (n) cvRadio(nv ? "MOUNT UP! " + (nv + 1) + "-VEHICLE CONVOY, CLOSE COLUMN" : "MOUNT UP!", "#c5e1a5");
+  if (n && !left.length) cvRadio(nv ? "MOUNT UP! " + (nv + 1) + "-VEHICLE CONVOY, CLOSE COLUMN" : "MOUNT UP!", "#c5e1a5");
 }
 function cvFill(v, list) {
   const seats = v.seats.filter(s => !s.occ);
@@ -123,12 +128,15 @@ function cvHold(list) {
     try { mapMarkers().push(mark); } catch (e) { mark = null; }
   }
   for (const m of list) mHold[m] = { x: mX[m], y: mY[m], mark };
-  CONVOY.holdMarks.push(mark);
+  if (mark) CONVOY.holdMarks.push(mark);
   cvRadio(list.length + " HOLDING POSITION — NO SEATS LEFT (MARKED ON MAP)", "#ffd166");
 }
 function cvReleaseHold(m) {
   const H = mHold[m]; mHold[m] = null;
-  if (H && H.mark && !mHold.some(h => h && h.mark === H.mark)) { try { const L = mapMarkers(), i = L.indexOf(H.mark); if (i >= 0) L.splice(i, 1); } catch (e) { } }
+  if (H && H.mark && !mHold.some(h => h && h.mark === H.mark)) {
+    try { const L = mapMarkers(), i = L.indexOf(H.mark); if (i >= 0) L.splice(i, 1); } catch (e) { }
+    const i = CONVOY.holdMarks.indexOf(H.mark); if (i >= 0) CONVOY.holdMarks.splice(i, 1);
+  }
 }
 function convoyMountUp(v) {   // horn: anyone within 44 m who isn't riding mounts up (picks up the hold group too)
   const list = cvFollowers(v.x, v.y, CV_MOUNT_R).concat(mHold.map((h, m) => h && mAct[m] && !mSeat[m] && !mBoard[m] && Math.hypot(mX[m] - v.x, mY[m] - v.y) < CV_MOUNT_R * 1.4 ? m : -1).filter(m => m >= 0 && !cvFollowers(v.x, v.y, CV_MOUNT_R).includes(m)));
@@ -137,8 +145,16 @@ function convoyMountUp(v) {   // horn: anyone within 44 m who isn't riding mount
   cvFill(v, list);
   const left = list.filter(m => !mBoard[m] && !mSeat[m]);
   for (const u of CONVOY.vehicles) if (left.length) { cvFill(u, left); }
+  // With overflow convoys deferred, preserve unseated members and their map
+  // marker instead of silently releasing their hold when the horn is used.
+  let holding = 0;
+  if (!v15FeatureEnabled("T22.MULTI_VEHICLE_CONVOY")) {
+    const remaining = list.filter(m => !mBoard[m] && !mSeat[m] && !mHold[m]);
+    holding = remaining.length;
+    if (holding) cvHold(remaining);
+  }
   cvAllyBoard(cvAllyFollowers(v.x, v.y, CV_MOUNT_R), [v].concat(CONVOY.vehicles));
-  cvRadio("MOUNTING UP", "#c5e1a5");
+  if (!holding) cvRadio("MOUNTING UP", "#c5e1a5");
 }
 function convoySwapDriver(v, ds) {
   const m = ds.occ && ds.occ.m;
@@ -265,6 +281,26 @@ function cvSpotClear(v, x, y, h) {   // would the vehicle fit at this pose (tile
   for (const u of VEH.list) if (u !== v && !u.far && Math.hypot(u.x - x, u.y - y) < (Math.max(u.D, u.L) + Math.max(v.D, v.L)) * 0.5) return false;
   return true;
 }
+// Check a conservative swept footprint before and throughout a straight
+// reverse; never assume the lane behind remains clear of moving traffic.
+function cvBackClear(v, distance) {
+  const fx = Math.cos(v.ang), fy = Math.sin(v.ang);
+  for (let d = 12; d <= distance; d += 12) {
+    if (!cvSpotClear(v, v.x - fx * d, v.y - fy * d, v.ang)) return false;
+  }
+  return true;
+}
+// Never catch up by teleporting a vehicle whose body is in either the last
+// painted camera or the current calculated camera. Unknown views fail closed.
+function cvOutsideViews(v, x, y) {
+  const previous = typeof TRF !== "undefined" ? TRF.view : null; let current;
+  try { current = typeof camView === "function" ? camView(140) : null; } catch (_) { return false; }
+  if (!v || !previous || !current || ![x,y,v.L,v.D,previous.l,previous.t,previous.w,previous.h,current.left,current.top,current.vw,current.vh].every(Number.isFinite) ||
+      v.L <= 0 || v.D <= 0 || previous.w <= 0 || previous.h <= 0 || current.vw <= 0 || current.vh <= 0) return false;
+  const margin = Math.hypot(v.L, v.D) / 2 + 60;
+  const outside = (l,t,w,h) => x + margin < l || x - margin > l + w || y + margin < t || y - margin > t + h;
+  return outside(previous.l,previous.t,previous.w,previous.h) && outside(current.left,current.top,current.vw,current.vh);
+}
 function convoyStep(dt) {
   if (!VEH.me) { for (const u of CONVOY.vehicles) if (u.convoy) { u.ctl.thr = 0; u.ctl.hb = 1; } }
   else cvTrailRecord();
@@ -288,7 +324,7 @@ function convoyStep(dt) {
   }
   if (me) { CONVOY.vehicles = CONVOY.vehicles.filter(u => u.convoy && !u.dead); }
 }
-function cvDrive(v, dt, sTarget, gap, i) {
+function cvDriveNormal(v, dt, sTarget, gap, i) {
   const c = v.convoy, cs = Math.cos(v.ang), sn = Math.sin(v.ang), vf = v.vx * cs + v.vy * sn, top = v.S.top * VPX;
   if (!CONVOY.trail.length || !VEH.me) { v.ctl.thr = vf > 10 ? -1 : 0; v.ctl.hb = 1; return; }
   v.ctl.hb = 0;
@@ -302,19 +338,28 @@ function cvDrive(v, dt, sTarget, gap, i) {
   const unseen = Math.hypot(v.x - player.x, v.y - player.y) > 820 && !(typeof cityVisibleAt === "function" && cityVisibleAt(v.x, v.y) && Math.hypot(v.x - player.x, v.y - player.y) < 1100);
   if (unseen && !CONVOY.halted && (c.stuckAcc > 3 || err < -1100 || (P.d > 320 && runTime - (c.joinT || (c.joinT = runTime)) > 6)) && runTime - (c.snapT || 0) > 3) {
     const pt = cvTrailAt(Math.max(0, sTarget));
-    if (pt && cvSpotClear(v, pt.x, pt.y, pt.h)) {
+    if (pt && cvOutsideViews(v, v.x, v.y) && cvOutsideViews(v, pt.x, pt.y) && cvSpotClear(v, pt.x, pt.y, pt.h)) {
       v.x = pt.x; v.y = pt.y; v.ang = pt.h; v.vx = Math.cos(pt.h) * lead * 0.8; v.vy = Math.sin(pt.h) * lead * 0.8; v.w = 0; v.steerA = 0;
       c.lastS = null; c.stuckAcc = 0; c.progT = null; c.tries = 0; c.revT = 0; c.fwdT = 0; c.snapT = runTime; c.st = "go"; c.unparked = true;
       return;
     }
   }
+  // A late vehicle must first close up to its slot; stopping immediately while
+  // hundreds of pixels behind can strand the column after the leader halts.
+  // Keep normal obstacle feelers and the leader-spacing cap active while joining.
+  if (CONVOY.halted && c.st !== "herring" && err < -gap * 0.8) c.st = "rejoin";
   // halted: herringbone - pull off alternately right / left at ~45°, road kept clear
   if (CONVOY.halted && c.st !== "rejoin") {
     if (c.st !== "herring" && Math.abs(vf) < 30 && Math.abs(err) < gap * 0.8) {
-      const side = (i % 2 === 0) ? 1 : -1, base = cvTrailAt(Math.min(P.s + 40, cvLeadS() - 60)) || { x: v.x, y: v.y, h: v.ang };
-      const off = v.L * 0.9 + 14, hx = base.x - Math.sin(base.h) * off * side + Math.cos(base.h) * 36, hy = base.y + Math.cos(base.h) * off * side + Math.sin(base.h) * 36;
-      if (!cityCircleBlocked(hx, hy, Math.max(v.L, 40) * 0.5, false)) { c.st = "herring"; c.hx = hx; c.hy = hy; c.side = side; }
-      else c.st = "column";
+      const preferred = (i % 2 === 0) ? 1 : -1, base = cvTrailAt(Math.min(P.s + 40, cvLeadS() - 60)) || { x: v.x, y: v.y, h: v.ang };
+      const off = v.L * 0.9 + 14;
+      c.st = "column";
+      // Prefer alternating shoulders, but do not give up if just that side
+      // is blocked. Both choices still pass the existing terrain check.
+      for (const side of [preferred, -preferred]) {
+        const hx = base.x - Math.sin(base.h) * off * side + Math.cos(base.h) * 36, hy = base.y + Math.cos(base.h) * off * side + Math.sin(base.h) * 36;
+        if (!cityCircleBlocked(hx, hy, Math.max(v.L, 40) * 0.5, false) && cvSpotClear(v, hx, hy, base.h)) { c.st = "herring"; c.hx = hx; c.hy = hy; c.side = side; break; }
+      }
     }
     if (c.st === "herring") {
       const d = Math.hypot(c.hx - v.x, c.hy - v.y);
@@ -328,10 +373,15 @@ function cvDrive(v, dt, sTarget, gap, i) {
     const aim = P.d > 140 ? cvTrailAt(P.s + 160) : cvTrailAt(P.s + Ld);
     if (!aim) return;
     tx = aim.x; ty = aim.y;
-    if (P.d < 90 && c.st !== "go") c.st = "go";
+    if (P.d < 90 && c.st !== "go" && !(CONVOY.halted && err < -gap * 0.8)) c.st = "go";
     // speed: hold the slot, catch up when behind (catch-up speed above the march rate), never past the leader
     const catchUp = Math.min(top, lead * 1.25 + 110);
     vDes = err < -gap * 0.4 ? catchUp : Math.max(0, lead - err * 1.1);
+    // A vehicle can be at the right trail arclength but still be well off
+    // the trail. When the leader stops, slot error alone is zero and used to
+    // strand it in rejoin forever. Creep toward the trail only from behind
+    // its slot; the leader-spacing cap and obstacle feelers still apply.
+    if (CONVOY.halted && c.st === "rejoin" && P.d > 90 && err <= 0) vDes = Math.max(vDes, Math.min(90, P.d * .5));
     if (CONVOY.contactT > 0 && err < 0) vDes = Math.min(top, vDes + 80);     // close up and drive through
     if (P.s + v.D * 0.5 >= cvLeadS() - VEH.me.D * 0.5 - gap * 0.35) vDes = Math.min(vDes, lead * 0.6);
   }
@@ -349,7 +399,20 @@ function cvDrive(v, dt, sTarget, gap, i) {
   const dC = feel(0);
   let block = dC < look ? dC : 1e9;
   if (dC < look * 0.9) { const dL = feel(-0.55), dR = feel(0.55); if (Math.max(dL, dR) > dC + 10) a += dL > dR ? -0.6 : 0.6; }
-  if (block < 1e9) vDes = Math.min(vDes, Math.max(25, (block - 20) * 1.6));
+  const wantedSpeed = vDes;
+  // Do not creep into a vehicle or wall when the available stopping gap is
+  // gone. A clear path immediately restores the normal pursuit speed.
+  if (block < 1e9) vDes = Math.min(vDes, Math.max(0, (block - 20) * 1.6));
+  // Distinguish an obstruction from deliberately holding formation. After a
+  // wait, try a short straight reverse into checked space. If boxed in, keep
+  // braking and recheck periodically rather than forcing through traffic.
+  if (wantedSpeed > 60 && block <= 20 && Math.abs(vf) < 14 && !(c.revT > 0) && !(c.fwdT > 0)) {
+    c.blockWait = (c.blockWait || 0) + dt;
+    if (c.blockWait >= 4) {
+      if (cvBackClear(v, 84)) { c.revT = 1.5; c.yieldReverse = true; c.blockWait = 0; }
+      else c.blockWait = 3;
+    }
+  } else if (!(c.revT > 0)) c.blockWait = 0;
   // leaving a tight parking spot: back up first if the nose is against something
   if (!c.unparked) {
     c.unparked = true;
@@ -357,10 +420,21 @@ function cvDrive(v, dt, sTarget, gap, i) {
     let carAhead = false; for (const u of VEH.list) { if (u === v || u.far) continue; const dx = u.x - fx, dy = u.y - fy, along = dx * cs + dy * sn; if (along > -10 && along < 60 + u.D * 0.5 && Math.abs(-dx * sn + dy * cs) < (u.L + v.L) * 0.5) carAhead = true; }
     if ((fr.hit && fr.t < 0.8) || carAhead) { c.revT = 0.9; c.revSt = Math.sign(a) || 1; }
   }
-  // stuck recovery: back out steering AWAY from the blocked side, then go with full lock toward the path;
+  // stuck recovery: reverse straight into checked space, then steer toward the path;
   // after a few tries the crew cross-loads into the column (or holds) instead of sitting in a wedged car
-  if (c.revT > 0) { c.revT -= dt; v.ctl.thr = -0.85; v.ctl.st = -c.revSt; v.ctl.hb = 0; if (c.revT <= 0) c.fwdT = 0.8; return; }
-  if (c.fwdT > 0) { c.fwdT -= dt; v.ctl.thr = 0.9; v.ctl.st = c.revSt; v.ctl.hb = 0; return; }
+  if (c.revT > 0) {
+    if (!cvBackClear(v, 84)) { c.revT = 0; c.fwdT = 0; c.yieldReverse = false; v.ctl.thr = 0; v.ctl.st = 0; v.ctl.hb = 1; return; }
+    const yielding = !!c.yieldReverse;
+    c.revT -= dt; v.ctl.thr = yielding ? -0.5 : -0.85; v.ctl.st = 0; v.ctl.hb = 0;
+    if (c.revT <= 0) { c.revT = 0; c.fwdT = yielding ? 0 : 0.8; c.yieldReverse = false; }
+    return;
+  }
+  if (c.fwdT > 0 && block <= 20) c.fwdT = 0;
+  if (c.fwdT > 0) {
+    c.fwdT -= dt; v.ctl.thr = Math.max(-1, Math.min(0.9, (vDes - vf) / 90));
+    v.ctl.st = c.revSt; v.ctl.hb = vDes < 5 && Math.abs(vf) < 10 ? 1 : 0;
+    return;
+  }
   if (vDes > 60 && Math.abs(vf) < 14) {
     c.stuckT += dt;
     if (c.stuckT > 1.4) {
@@ -378,8 +452,89 @@ function cvDrive(v, dt, sTarget, gap, i) {
   if (vDes < 5 && Math.abs(vf) < 10) { v.ctl.thr = 0; v.ctl.hb = 1; }
 }
 
+// Halt manoeuvres use the ordinary vehicle physics and collision resolution.
+// These samples are planning/early-braking aids, not a certified swept path.
+// If a suitable shoulder cannot be found, wait instead of forcing a placement.
+function cvHaltStaticPoseClear(v, x, y, h) {
+  const c = Math.cos(h), s = Math.sin(h);
+  for (let fy = -.5; fy <= .5; fy += .25) for (let fx = -.5; fx <= .5; fx += .5) {
+    const f = cityFlagsAt(x + c * fy * v.D - s * fx * v.L, y + s * fy * v.D + c * fx * v.L);
+    if ((f & F_MOVE) && !(v.S.hover && (f & (F_LOW | F_WATER)))) return false;
+  }
+  return true;
+}
+function cvHaltPoseClear(v, x, y, h) {
+  const c = Math.cos(h), s = Math.sin(h);
+  const box = { cx: x, cy: y, c, s, hf: v.D * .5 + 12, hw: v.L * .5 + 12 };
+  for (const u of VEH.list) {
+    if (u === v || u.far) continue;
+    const radius = Math.hypot(box.hf, box.hw) + Math.hypot(u.D, u.L) * .5;
+    if ((x - u.x) ** 2 + (y - u.y) ** 2 > radius * radius) continue;
+    // Following traffic yields to a parking car; parking cars yield to all cars.
+    if (v.convoy?.st !== 'herring' && u.convoy?.st !== 'herring') continue;
+    if (vehSAT(box, vehBox(u, {}))) return false;
+  }
+  const near = (xx, yy, r) => {
+    const dx = xx - x, dy = yy - y;
+    return Math.abs(dx * c + dy * s) < box.hf + r && Math.abs(-dx * s + dy * c) < box.hw + r;
+  };
+  if (player.inVehicle !== 3 && !player.roof && (player.flyAlt || 0) <= 3 && near(player.x, player.y, 10)) return false;
+  if (typeof TF !== 'undefined' && TF.on) for (const p of TF.walk) {
+    const w = p.w; if (p.alive && w && !w.inside && near(w.x, w.y, 10)) return false;
+  }
+  for (let m = 0; m < MAX_MINION; m++) {
+    if (mAct[m] && !(typeof mSeatOf === 'function' && mSeatOf(m)) && near(mX[m], mY[m], 10)) return false;
+  }
+  return true;
+}
+function cvDrive(v, dt, target, gap, i) {
+  const was = v.convoy?.st;
+  cvDriveNormal(v, dt, target, gap, i);
+  const c = v.convoy;
+  if (!c || !CONVOY.halted) return;
+  if (was === 'herring' || c.st !== 'herring') {
+    const vf = v.vx * Math.cos(v.ang) + v.vy * Math.sin(v.ang);
+    if (vf > 0 || v.ctl.thr > 0) {
+      const steer = Math.max(-1, Math.min(1, v.ctl.st));
+      const wb = Math.max(30 * (v.k || 1), v.D * .62), curv = Math.tan(steer * v.S.st) / wb;
+      const look = Math.max(96, Math.min(200, vf * vf / 100 + 64));
+      let blocked = false;
+      for (let j = 1; j <= 8; j++) {
+        const d = look * j / 8, ang = v.ang + curv * d;
+        const x = v.x + Math.cos(v.ang + curv * d * .5) * d;
+        const y = v.y + Math.sin(v.ang + curv * d * .5) * d;
+        if (!cvHaltPoseClear(v, x, y, ang)) { blocked = true; break; }
+      }
+      if (blocked) { v.ctl.thr = vf > 5 ? -1 : 0; v.ctl.hb = vf < 5 ? 1 : 0; v.ctl.st = 0; }
+    }
+    return;
+  }
+  if (c.planRetryAt && runTime < c.planRetryAt) {
+    c.st = 'column'; v.ctl.thr = 0; v.ctl.hb = 1; return;
+  }
+  const base = cvTrailAt(cvProject(v).s), h = base ? base.h : v.ang;
+  const fx = Math.cos(h), fy = Math.sin(h), orig = { x: c.hx, y: c.hy };
+  let found = false;
+  for (const forward of [240, 180, 300, 120, 360]) {
+    const x = orig.x + fx * forward, y = orig.y + fy * forward, leader = VEH.me;
+    if (!leader || (x - leader.x) * Math.cos(leader.ang) + (y - leader.y) * Math.sin(leader.ang) > -(v.D + leader.D) * .5 - gap * .35) continue;
+    const dh = vehAngDiff(h + Math.sign(c.side || 1) * .5, v.ang);
+    let clear = true;
+    for (let j = 1; j <= 10; j++) {
+      const t = j / 10, ang = v.ang + dh * t, px = v.x + (x - v.x) * t, py = v.y + (y - v.y) * t;
+      if (!cvHaltStaticPoseClear(v, px, py, ang) || !cvHaltPoseClear(v, px, py, ang)) {
+        clear = false; break;
+      }
+    }
+    if (clear && !cityCircleBlocked(x, y, Math.max(v.L, 40) * .5, false)) {
+      c.hx = x; c.hy = y; found = true; break;
+    }
+  }
+  if (!found) { c.st = 'column'; c.planRetryAt = runTime + 2; v.ctl.thr = 0; v.ctl.hb = 1; }
+}
 /* === 5. RIDERS: boarding, gunners on their side, holding groups ===================================================== */
 const mAimT = typeof MAX_MINION !== "undefined" ? new Float32Array(MAX_MINION) : [];
+
 function cvSeatWorld(v, s) { return vehToWorld(v, s.u * v.L, -s.w * v.D); }
 // the door to walk to: the seat's own side if it is clear, else the other side, else the back (a parked car may be against a wall)
 function cvDoorWorld(v, s, fx, fy) {
@@ -442,7 +597,7 @@ function convoyMinionStep(m, dt) {
         if (Math.abs(eX[j] - sx) > 40 || Math.abs(eY[j] - sy) > 40 || Math.hypot(eX[j] - sx, eY[j] - sy) > 38) continue;
         const rel = vehAngDiff(Math.atan2(eY[j] - sy, eX[j] - sx), v.ang); if (!cvArcOk(v, s, rel)) continue;
         mAtkCD[m] = kind === 1 ? 0.45 : 0.6; mAim[m] = Math.atan2(eY[j] - sy, eX[j] - sx); mAimT[m] = runTime;
-        eHP[j] -= mDmg[m]; spawnDmg(eX[j], eY[j], mDmg[m], false); if (eHP[j] <= 0) killEnemy(j, false);
+        eHP[j] -= mDmg[m]; spawnDmg(eX[j], eY[j], mDmg[m], false); if (eHP[j] <= 0) killEnemy(j, false, null, "#00f0ff", "squad");
         break;
       }
       return true;

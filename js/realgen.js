@@ -1182,7 +1182,7 @@ function rmChunkPost(C) {
   if (typeof V10 !== "undefined" && V10.onStep) V10.onStep.push(dt => { if (CITY.on && RG.real && player) rmStep(dt); });
 })();
 // per-world key (drops, caches): the place, plus the map scale unless it is true size (v14.2 saves stay valid at 1:1)
-function rmPlaceKey() { const p = RM.place; return (p ? (p.lat.toFixed(3) + "," + p.lon.toFixed(3)) : "0,0") + (Math.abs(RM.S - 1) < 1e-6 ? "" : "|" + rmScaleLabel(RM.S)); }
+function rmPlaceKey() { const p = RM.place; return (p ? (p.lat.toFixed(3) + "," + p.lon.toFixed(3)) : "0,0") + (Math.abs(RM.S - 1) < 1e-6 ? "" : "|" + rmScaleKey(RM.S)); }
 // a pavement spot near (xm, ym): the edge of the nearest ordinary street, clear of walls and water
 function rmPickDrop(xm, ym) {
   const z = RM.S;

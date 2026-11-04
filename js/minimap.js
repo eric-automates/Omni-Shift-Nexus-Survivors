@@ -125,7 +125,22 @@ function miniRect() {
   if (typeof HUDL !== "undefined" && HUDL.enabled && HUDL.mini) return HUDL.mini;   // v14.1: placed by the HUD layout manager
   const S = Math.round(Math.min(210, Math.max(132, Math.min(W, H) * 0.26))); return { S, x: W - S - 10, y: H - S - 30 };
 }
+// Compact companion to the suppressor: this changes consequences, not damage
+// or the separate squad fire-discipline setting. Warnings are a separate feature.
+function miniCivilianControlSync() {
+  const b = document.getElementById("mmCiv"); if (!b) return;
+  const on = opts.civilianConsequences !== false;
+  const label = "Civilian injury heat " + (on ? "on" : "off") + " · economy only · damage still applies";
+  if (b.title !== label) { b.title = label; b.setAttribute("aria-label", label); b.setAttribute("aria-pressed", String(on)); b.textContent = on ? "👥✓" : "👥−"; }
+  const warn = document.getElementById("mmCivWarn");
+  if (warn) {
+    const enabled = opts.civilianWarning !== false;
+    const text = "Off-screen civilian warning " + (enabled ? "on" : "off") + " · visible people only · no warning does not mean all clear";
+    if (warn.title !== text) { warn.title = text; warn.setAttribute("aria-label", text); warn.setAttribute("aria-pressed", String(enabled)); warn.textContent = enabled ? "⚠✓" : "⚠−"; }
+  }
+}
 function miniLayout() {
+  miniCivilianControlSync();
   const r = miniRect(), hud = document.getElementById("cityHud"), ctl = document.getElementById("mmCtl"), managed = typeof HUDL !== "undefined" && HUDL.enabled;
   if (hud && !managed) hud.style.bottom = (30 + r.S + 30) + "px";
   if (ctl) { if (!managed) { ctl.style.bottom = (30 + r.S + 6) + "px"; ctl.style.right = "10px"; } ctl.style.display = CITY.on && runActive ? "flex" : "none"; }
@@ -258,6 +273,9 @@ function mapEnsureDom() {
   el.querySelector("#mapNotes").onclick = () => { const s = el.querySelector("#mapSide"); s.classList.toggle("on"); mapSideSync(); };
   el.querySelector("#mapRand").onclick = () => { if (typeof meta !== "undefined") { delete meta.cityDrop; mapSave(); } mapClose(); };
   el.querySelector("#mapClose").onclick = mapClose;
+  const jobs = document.createElement("button"); jobs.id = "mapJobs"; jobs.className = "btn gold"; jobs.type = "button"; jobs.textContent = "💼 LOCAL DISPATCH";
+  jobs.style.cssText = "position:absolute;bottom:calc(50px + env(safe-area-inset-bottom));left:max(14px,env(safe-area-inset-left));min-height:48px;z-index:4";
+  jobs.onclick = () => { if (typeof jdOpen === "function") jdOpen(); }; el.appendChild(jobs);
   el.querySelector("#mapNew").onclick = () => {
     if (typeof meta === "undefined") return;
     meta.citySeed = 1000 + Math.floor(Math.random() * 2e9); delete meta.cityDrop; mapSave();
@@ -337,6 +355,9 @@ function mapOpen(mode) {
   MAPV.wasPaused = runPaused; if (runActive) runPaused = true;
   document.getElementById("mapRand").style.display = MAPV.mode === "drop" ? "" : "none";
   document.getElementById("mapNew").style.display = MAPV.mode === "drop" ? "" : "none";
+  const jobButton = document.getElementById("mapJobs");
+  jobButton.style.display = MAPV.mode === "run" && runActive && (v15AnyCareerAvailable() || v15HeldJob()) ? "" : "none";
+  jobButton.textContent = v15HeldJob() ? "💼 SAVED JOB · PAUSED" : "💼 LOCAL DISPATCH";
   document.getElementById("mapTitle").textContent = MAPV.mode === "drop" ? "CHOOSE YOUR DROP ZONE" : (cityShortNameSafe() + " · " + (CITY.theme ? CITY.theme.name : ""));
   document.getElementById("mapHint").textContent = MAPV.mode === "drop" ? "Click anywhere to land there next deploy · drag to pan · wheel to zoom" : "Click to drop a marker · drag to pan · wheel to zoom · M / Esc to close";
   mapResize(); mapEdClose(); mapSideSync();
@@ -393,6 +414,7 @@ function mapFrame() {
   }
   // markers
   for (const m of mapMarkers()) { const [sx, sy] = toS(m.x, m.y); if (sx < -20 || sx > w + 20 || sy < -20 || sy > h + 20) continue; mapDrawSymbol(g, sx, sy, m, 1.15); if (m.n && mpp < 12) { g.font = "700 11px 'Segoe UI', sans-serif"; g.fillStyle = St.txt; g.strokeStyle = St.halo; g.lineWidth = 3; g.strokeText(m.n.slice(0, 40), sx, sy + 20); g.fillText(m.n.slice(0, 40), sx, sy + 20); } }
+  if (MAPV.mode === "run" && typeof jdDrawMap === "function") jdDrawMap(g, toS);
   // drop zone / you
   if (typeof meta !== "undefined" && Array.isArray(meta.cityDrop) && (MAPV.mode === "drop" || !runActive)) {
     const [sx, sy] = toS(meta.cityDrop[0] / 2, meta.cityDrop[1] / 2), k = MAPV.dropFlash ? Math.max(0, 1 - (performance.now() - MAPV.dropFlash) / 600) : 0;
@@ -438,13 +460,26 @@ function mapWorldLabel() { return "🌆 WORLD: " + (typeof meta !== "undefined" 
   d.onclick = () => mapOpen("drop");
   go.insertAdjacentElement("afterend", d); go.insertAdjacentElement("afterend", w);
   const ctl = document.createElement("div"); ctl.id = "mmCtl";
-  ctl.innerHTML = '<button class="btn" id="mmOut" title="Minimap zoom out ( [ )">−</button><button class="btn" id="mmIn" title="Minimap zoom in ( ] )">+</button><button class="btn" id="mmMap" title="City map (M)">🗺</button><button class="btn" id="mmSneak" title="Sneak (hold Shift)">🥷</button><button class="btn" id="mmSup" title="Suppressor (V)">🔇</button>';
+  ctl.innerHTML = '<button class="btn" id="mmOut" title="Minimap zoom out ( [ )">−</button><button class="btn" id="mmIn" title="Minimap zoom in ( ] )">+</button><button class="btn" id="mmMap" title="City map (M)">🗺</button><button class="btn" id="mmSneak" title="Sneak (hold Shift)">🥷</button><button class="btn" id="mmSup" title="Suppressor (V)">🔇</button><button class="btn" id="mmCiv" type="button" aria-label="Civilian injury consequences" aria-pressed="true">👥✓</button><button class="btn" id="mmCivWarn" type="button" aria-label="Off-screen civilian warning" aria-pressed="true">⚠✓</button>';
   document.body.appendChild(ctl);
   ctl.querySelector("#mmOut").onclick = () => { MAPV.mini = Math.min(MAPV.miniSizes.length - 1, MAPV.mini + 1); };
   ctl.querySelector("#mmIn").onclick = () => { MAPV.mini = Math.max(0, MAPV.mini - 1); };
   ctl.querySelector("#mmMap").onclick = () => mapOpen("run");
   ctl.querySelector("#mmSneak").onclick = () => { if (typeof ST !== "undefined") { ST.touchSneak = !ST.touchSneak; ctl.querySelector("#mmSneak").classList.toggle("gold", ST.touchSneak); } };
   ctl.querySelector("#mmSup").onclick = () => { if (typeof stealthToggleSuppressor === "function") stealthToggleSuppressor(); };
+  ctl.querySelector("#mmCiv").onclick = () => {
+    opts.civilianConsequences = opts.civilianConsequences === false;
+    if (typeof saveOpts === "function") saveOpts();
+    miniCivilianControlSync();
+    if (player && typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 28, opts.civilianConsequences ? "CIVILIAN INJURY HEAT ON" : "CIVILIAN INJURY HEAT OFF · DAMAGE STILL ON", "#ffd166", 1.5);
+  };
+  ctl.querySelector("#mmCivWarn").onclick = () => {
+    opts.civilianWarning = opts.civilianWarning === false;
+    if (typeof saveOpts === "function") saveOpts();
+    miniCivilianControlSync();
+    if (player && typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 28, opts.civilianWarning ? "CIVILIAN WARNINGS ON · VISIBLE PEOPLE ONLY" : "CIVILIAN WARNINGS OFF", "#ffd166", 1.5);
+  };
+  miniCivilianControlSync();
 })();
 window.addEventListener("keydown", e => {
   if (MAPV.open) {

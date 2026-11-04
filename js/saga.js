@@ -348,6 +348,7 @@ function sagaMatchText(w) { const b = sagaFormBase(w); return b && SAGA_MATCH_TX
     triggerUtility = function (uIdx) {
       const u = player && player.utils && player.utils[uIdx];
       if (!u || !mine[u.type]) return _tu(uIdx);
+      if (typeof flyGroundSeparated === "function" && flyGroundSeparated() && !["forceSpeed", "soresuShelter"].includes(u.type)) { if (typeof flyTip === "function") flyTip("⬇ DESCEND TO REACH THE GROUND"); return; }
       if (u.cd > 0) return;
       if (mine[u.type]() !== false) { u.cd = u.cdMax * (player.utilCdrMul || 1); player.combatAlertTimer = 2.0; }
       if (typeof updateHUD === "function") updateHUD();
@@ -358,7 +359,7 @@ function sagaMatchText(w) { const b = sagaFormBase(w); return b && SAGA_MATCH_TX
     V10.onStep.push(dt => {
       if (!player) return;
       if (SAGA.shelterT > 0) SAGA.shelterT -= dt;
-      if (player.cid === 82) sagaDookuLightning(dt);
+      if (player.cid === 82 && !(typeof flyGroundSeparated === "function" && flyGroundSeparated())) sagaDookuLightning(dt);
       if (player.cid === 81) sagaQuiGonStep(dt);
       if (SAGA.pillars.length) sagaPillarStep(dt);
     });

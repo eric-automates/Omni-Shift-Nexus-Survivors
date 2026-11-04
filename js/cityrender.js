@@ -1499,12 +1499,23 @@ function cityRenderOverlay() {
 function crFog(left, top, vw, vh) {
   const V = cityVis;
   if (!V.grid) return;
-  const N = V.n;
+  // The two artistic blend passes are expensive in software rasterizers.
+  // Keep the original effect when frames are fast; after sustained slow
+  // frames, use one darker wash over the SAME visibility grid instead. This
+  // changes only presentation, never what the player or AI can see.
+  const now = performance.now(), fdt = now - (CR.lastFog || now); CR.lastFog = now;
+  if (fdt > 0 && fdt < 250) CR.fms = (CR.fms || 16.7) * 0.97 + fdt * 0.03;
+  if (CR.fogSat !== false && CR.fogSat !== "forced" && runActive && !runPaused) {
+    CR.lowT = CR.fms > 19.5 ? (CR.lowT || 0) + 1 : Math.max(0, (CR.lowT || 0) - 2);
+    if (CR.lowT > 90) CR.fogSat = false;
+  }
+  const fast = CR.fogSat === false, N = V.n;
   if (!CR.fogC || CR.fogC.width !== N) { CR.fogC = crCanvas(N, N); CR.fogG = CR.fogC.getContext("2d"); CR.fogImg = CR.fogG.createImageData(N, N); CR.fogGen = -1; }
-  if (CR.fogGen !== V.stamp) {
+  if (CR.fogGen !== V.stamp || CR.fogFast !== fast) {
     const d = CR.fogImg.data, Gd = V.grid;
-    for (let i = 0, j = 0; i < N * N; i++, j += 4) { d[j] = 118; d[j + 1] = 122; d[j + 2] = 132; d[j + 3] = Gd[i] ? 0 : 255; }
-    CR.fogG.putImageData(CR.fogImg, 0, 0); CR.fogGen = V.stamp;
+    const r = fast ? 45 : 118, g = fast ? 49 : 122, b = fast ? 55 : 132;
+    for (let i = 0, j = 0; i < N * N; i++, j += 4) { d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = Gd[i] ? 0 : 255; }
+    CR.fogG.putImageData(CR.fogImg, 0, 0); CR.fogGen = V.stamp; CR.fogFast = fast;
   }
   const X = V.ox * 16 - CITY.orx, Y = V.oy * 16 - CITY.ory, S = N * 16;
   ctx.save();
@@ -1512,19 +1523,15 @@ function crFog(left, top, vw, vh) {
   const pass = (op, alpha) => {
     ctx.globalCompositeOperation = op; ctx.globalAlpha = alpha;
     ctx.drawImage(CR.fogC, X, Y, S, S);
-    ctx.fillStyle = "rgb(118,122,132)";
+    ctx.fillStyle = fast ? "rgb(45,49,55)" : "rgb(118,122,132)";
     const L = left - 50, Tt = top - 50, R = left + vw + 50, B = top + vh + 50;
     if (Y > Tt) ctx.fillRect(L, Tt, R - L, Y - Tt);
     if (Y + S < B) ctx.fillRect(L, Y + S, R - L, B - Y - S);
     if (X > L) ctx.fillRect(L, Math.max(Tt, Y), X - L, Math.min(B, Y + S) - Math.max(Tt, Y));
     if (X + S < R) ctx.fillRect(X + S, Math.max(Tt, Y), R - X - S, Math.min(B, Y + S) - Math.max(Tt, Y));
   };
-  // true desaturation looks best but is the priciest blend on GPU-less devices: drop to a grey wash if FPS stays low
-  const now = performance.now(), fdt = now - (CR.lastFog || now); CR.lastFog = now;
-  if (fdt > 0 && fdt < 250) CR.fms = (CR.fms || 16.7) * 0.97 + fdt * 0.03;   // smoothed real frame interval
-  if (CR.fogSat !== false && CR.fogSat !== "forced" && runActive && !runPaused) { CR.lowT = CR.fms > 19.5 ? (CR.lowT || 0) + 1 : Math.max(0, (CR.lowT || 0) - 2); if (CR.lowT > 150) CR.fogSat = false; }
-  if (CR.fogSat !== false) pass("saturation", 0.92); else pass("source-over", 0.36);
-  pass("multiply", 0.62);
+  if (fast) pass("source-over", 0.5);
+  else { pass("saturation", 0.92); pass("multiply", 0.62); }
   ctx.restore();
 }
 // EOF:js/cityrender.js

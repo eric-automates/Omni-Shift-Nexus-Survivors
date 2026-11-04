@@ -86,7 +86,8 @@ const PROVING_TESTS = [
     setup(D) {
       D.xp0 = player.xp; D.lvl0 = player.lvl;
       for (let k = 0; k < 3; k++) spawnOrb(player.x + 10 + k * 6, player.y - 8, 4);
-      D.pod = pgChunkObj(4, 22, 0);
+      // The proving target must be closer than naturally generated interactables.
+      D.pod = pgChunkObj(4, 0, 0);
       triggerWorldInteract();
     },
     tick(D) {
@@ -109,7 +110,7 @@ const PROVING_TESTS = [
     cleanup() { if (player) { player.pendingLevelUps = 0; player.nextXp = 1e12; } } },
 
   { name: "Driving", desc: "Board a hovercraft, drive it, dismount",
-    setup(D) { D.veh = pgChunkObj(5, 10, 0); triggerWorldInteract(); D.stage = 0; D.x0 = player.x; D.y0 = player.y; D.key = "KeyD"; },
+    setup(D) { D.veh = pgChunkObj(5, 0, 0); triggerWorldInteract(); D.stage = 0; D.x0 = player.x; D.y0 = player.y; D.key = "KeyD"; },
     tick(D) {
       if (D.stage === 0) {
         if (player.inVehicle !== 1) { if (D.t > 0.3 && D.t < 0.35) triggerWorldInteract(); return D.t > 1 ? "could not board" : null; }
@@ -210,7 +211,13 @@ const PROVING_TESTS = [
       }
       spawnEnemy(false, true);
       D.ri = -1; for (let i = 0; i < MAX_E; i++) if (eAct[i] && eType[i] === 98) D.ri = i;
-      if (D.ri >= 0) { eFireCD[D.ri] = 999; D.rUid = eUid[D.ri]; }
+      if (D.ri >= 0) {
+        // This automated scene observes the entire ring/finisher, then removes
+        // the rival explicitly. Stray fire from a prior action must not end it
+        // before the ceremony is measured; ordinary gameplay is untouched.
+        eHP[D.ri] = eMax[D.ri] = Math.max(eMax[D.ri], 100000);
+        eFireCD[D.ri] = 999; D.rUid = eUid[D.ri];
+      }
       D.stage = 0;
     },
     tick(D) {

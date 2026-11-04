@@ -69,9 +69,18 @@ if (typeof VK !== "undefined") {
 
 const FLY = { on: false, self: false, v: null, S: null, alt: 0, vz: 0, vxm: 0, vym: 0, hdg: 0, air: false, safe: true, brake: 0, cockpit: false, lod: false, zoom: 1, parts: null,
   touchUp: 0, touchDn: 0, touchBrake: 0, tiles: new Map(), built: 0, noise: null, msgT: -99, lastHit: 0, chute: null, confirm: null, cloudT: 0, warnT: -99 };
-const FLY_LOD0 = 0.13;   // below this camera zoom the ground is drawn from aerial tiles
+const FLY_LOD_ENTER = 0.40, FLY_LOD_EXIT = 0.44; // aerial cache hysteresis, in effective camera zoom
 function flySpec(v) { return v && FLY_SPECS[v.kind] ? FLY_SPECS[v.kind] : null; }
 function flyZoomFor(alt) { const z0 = typeof opts !== "undefined" ? opts.zoom || 1 : 1; return 1 / (1 + Math.max(0, alt) * z0 / 34); }   // relative to opts.zoom
+// Ground can use cached aerial art before the character/craft is too small to draw normally.
+function flyFarView() {
+  if ((FLY.on && FLY.self) || FLY.chute) return false; // the hero, not an arrow, remains visible at every height
+  const z = (typeof opts !== "undefined" ? opts.zoom || 1 : 1) * (FLY.zoom || 1);
+  return FLY.lod && (z < 0.13 || (FLY.on && FLY.air && FLY.alt > 50 && Math.hypot(FLY.vxm, FLY.vym) > 55 && z < 0.32));
+}
+// Current projectiles and enemies live on a ground plane; flight above this
+// boundary is travel, not an air-combat simulation. Landing/crash damage is separate.
+function flyGroundSeparated() { return !!(player && (player.flyAlt || 0) > 60); }
 function flyUnits(ms) { const mph = typeof opts !== "undefined" && opts.vehUnits === "kmh" ? false : true; return mph ? Math.round(ms * 2.237) + " mph" : Math.round(ms * 3.6) + " km/h"; }
 // v14.3: on a scaled real map (1:3) horizontal speeds run at the same factor as cars (FLY_K); gauges show nominal speeds
 function flyK() { return typeof RG !== "undefined" && RG.real && typeof RM !== "undefined" && RM.S < 1 && typeof vehSpeedK === "function" ? vehSpeedK(RM.S) : 1; }
@@ -92,7 +101,11 @@ function flyBegin(v) {
   flyUiShow(true);
   if (typeof meta !== "undefined" && typeof cityTip === "function" && !(meta.vehTips && meta.vehTips.fly)) {
     meta.vehTips = meta.vehTips || {}; meta.vehTips.fly = 1; if (typeof saveMeta === "function") saveMeta();
-    cityTip("🛩 <b>" + S.n + "</b> — push where you want to go · <b>▲ Space/E</b> climb · <b>▼ Shift/Q</b> descend · <b>⏹ H</b> hover (kills the drift) · <b>🛡 K</b> flight assists · <b>👁 C</b> cockpit · <b>F</b> get out (bail out up high)" + (S.vtol ? "" : " · planes need " + flyUnits(S.takeoff) + " on a runway to take off"), 9);
+    const touch = typeof actIsTouch === "function" ? actIsTouch() : !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+    const controls = touch
+      ? " · hold <b>▲</b> to climb · hold <b>▼</b> to descend · hold <b>⏹</b> to hover · <b>🛡</b> flight assists · <b>👁</b> cockpit · tap <b>EXIT VEHICLE</b> to get out (hold while moving; bail out up high)"
+      : " · <b>▲ Space/E</b> climb · <b>▼ Shift/Q</b> descend · <b>⏹ H</b> hover (kills the drift) · <b>🛡 K</b> flight assists · <b>👁 C</b> cockpit · <b>F</b> get out (bail out up high)";
+    cityTip("🛩 <b>" + S.n + "</b> — push where you want to go" + controls + (S.vtol ? "" : " · planes need " + flyUnits(S.takeoff) + " on a runway to take off"), 9);
   } else flyTip("🛩 " + S.n + (S.vtol ? " — ▲ to lift off" : " — " + flyUnits(S.takeoff) + " to take off"));
 }
 function flyBeginSelf() {
@@ -111,10 +124,15 @@ function flyToggleSelf() {
   return true;
 }
 function flyEnd(why) {
+  // Ended flights must not carry a stale touch command into a later flight.
+  // A jet-class pilot bailing out transfers directly into self-flight; keep
+  // a still-held control through that immediate handoff until its release.
+  const selfHandoff = why === "bail" && FLY.on && !FLY.self && !!flySelfSpec();
+  if (!selfHandoff) FLY.touchUp = FLY.touchDn = FLY.touchBrake = 0;
   if (!FLY.on) return;
   if (FLY.self && player) { player.flying = !!player.flySaved; player.flyingBy = null; }
   if (FLY.v) { FLY.v.flyAir = false; FLY.v.flyAlt = 0; }
-  FLY.on = false; FLY.self = false; FLY.v = null; FLY.air = false; FLY.alt = 0; FLY.lod = false; FLY.cockpit = FLY.cockpit && false;
+  FLY.on = false; FLY.self = false; FLY.v = null; FLY.air = false; FLY.alt = 0; FLY.lod = false; FLY.groundSeparated = false; FLY.cockpit = FLY.cockpit && false;
   if (player) player.flyAlt = 0;
   if (typeof VEH !== "undefined") VEH.noCam = false;
   flyUiShow(false);
@@ -242,6 +260,11 @@ function flyStep(dt) {
     player.x += FLY.vxm * 32 * dt; player.y += FLY.vym * 32 * dt; player.vx = FLY.vxm * 32; player.vy = FLY.vym * 32; player.moveDir = FLY.hdg;
   } else { v.vx = FLY.vxm * 32; v.vy = FLY.vym * 32; v.flyAlt = FLY.alt; v.awake = true; v.sleep = 0; }
   player.flyAlt = FLY.alt;
+  const separated = flyGroundSeparated();
+  if (separated !== !!FLY.groundSeparated) {
+    FLY.groundSeparated = separated;
+    flyTip(separated ? "✈ GROUND OUT OF RANGE — descend to fight" : "⬇ GROUND COMBAT IN RANGE");
+  }
   FLY.brake = Math.max(0, FLY.brake - dt);
   if (!FLY.self && v.hp <= 0) flyCrash("💥 BREAKING UP");
 }
@@ -538,6 +561,17 @@ function flyUiShow(on) {
   if (!el && on) {
     el = document.createElement("div"); el.id = "flyUi";
     el.style.cssText = "position:fixed;right:10px;top:38%;z-index:9000;display:flex;flex-direction:column;gap:6px;touch-action:none;user-select:none";
+    // Keep the flight strip inside short landscape touch viewports. The
+    // action/exit button occupies a separate lane, so do not move it or
+    // transform the flight toggle while a player is holding it.
+    const style = document.createElement("style");
+    style.textContent = "@media (pointer:coarse) and (orientation:landscape) and (max-height:520px){" +
+      "#flyUi{top:clamp(24px,38vh,calc(100vh - 296px))!important;gap:2px!important}" +
+      "#flyUi>button{min-height:48px;box-sizing:border-box}}" +
+      "@media (pointer:coarse) and (orientation:landscape) and (max-height:300px){" +
+      "#flyUi{top:8px!important;right:auto!important;left:50%;transform:translateX(-50%);flex-direction:row!important;gap:6px!important}" +
+      "#flyUi>button{min-width:48px!important}}";
+    document.head.appendChild(style);
     const b = (id, txt, title) => '<button class="btn" id="' + id + '" title="' + title + '" style="min-width:54px;padding:8px 6px;font-size:15px">' + txt + "</button>";
     el.innerHTML = b("flyUp", "▲", "Climb (Space / E)") + b("flyDn", "▼", "Descend (Shift / Q)") + b("flyBrk", "⏹", "Hover — kill the drift (H)") + b("flySafe", "🛡", "Flight assists (K)") + b("flyCam", "👁", "Cockpit view (C)");
     document.body.appendChild(el);
@@ -555,6 +589,9 @@ function flySafetyToggle() {
   const el = document.createElement("div"); FLY.confirm = el; const wasP = runPaused; runPaused = true;
   el.style.cssText = "position:fixed;inset:0;z-index:99990;background:rgba(40,0,0,0.55);display:flex;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif";
   el.innerHTML = '<div style="width:min(420px,92vw);background:#1a0606;border:2px solid #ff5252;border-radius:10px;padding:16px;color:#ffdede;text-align:center"><b style="font-size:18px;color:#ff5252">⚠ TURN OFF FLIGHT ASSISTS?</b><p style="font-size:13px">No altitude hold, almost no drag, double top speed — full inertia. Much faster, much less forgiving. ⏹ HOVER still works.</p><button class="btn" id="flyYes" style="background:#7f1010">YES — UNSAFE</button> <button class="btn" id="flyNo">NO</button></div>';
+  // Finger-sized confirmation targets; keep the desktop dialog unchanged.
+  if (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches)
+    for (const b of el.querySelectorAll("button")) { b.style.minWidth = "48px"; b.style.minHeight = "48px"; }
   document.body.appendChild(el);
   const close = (yes) => { el.remove(); FLY.confirm = null; runPaused = wasP; if (yes) { FLY.safe = false; flyTip("⚠ ASSISTS OFF — red light, hands steady"); if (typeof sfx === "function") sfx(700, 350, 0.3, "square", 0.12); } flyUiShow(true); };
   el.querySelector("#flyYes").onclick = () => close(true); el.querySelector("#flyNo").onclick = () => close(false);
@@ -565,7 +602,7 @@ function flyRenderScreen(g) {
   g.save(); g.setTransform(1, 0, 0, 1, 0, 0);
   const dpr = W0 / Math.max(1, window.innerWidth || W0);
   // you, when the world is far below: a marker at the centre
-  if (FLY.lod) {
+  if (flyFarView()) {
     g.translate(W0 / 2, H0 / 2); g.rotate(FLY.self ? FLY.hdg : (FLY.v ? FLY.v.ang : 0));
     g.fillStyle = "rgba(0,0,0,0.35)"; g.beginPath(); g.moveTo(16 * dpr, 2 * dpr); g.lineTo(-10 * dpr, -9 * dpr); g.lineTo(-5 * dpr, 2 * dpr); g.lineTo(-10 * dpr, 12 * dpr); g.fill();
     g.fillStyle = FLY.safe ? "#80deea" : "#ff5252"; g.beginPath(); g.moveTo(14 * dpr, 0); g.lineTo(-11 * dpr, -11 * dpr); g.lineTo(-6 * dpr, 0); g.lineTo(-11 * dpr, 11 * dpr); g.closePath(); g.fill();
@@ -684,12 +721,19 @@ function flyDrawCockpit(g, W0, H0, d, alt, sp, vs, head) {
     if (FLY.on && !FLY.self) flyEnd("exit");
     return r;
   });
-  // the ground from up high
+  // A zoomed-out city view can contain hundreds of detailed tiles, even for a
+  // slow jetpack. Use the existing bounded aerial cache once those details are
+  // tiny on screen, not only for fast aircraft. Hysteresis avoids flickering.
+  // Close to a roof/tree retain the detailed view for safe approach and landing;
+  // only rendering changes: ground simulation, collisions and interactions run.
   wrap("cityRenderGround", o => function (left, top, vw, vh) {
-    const z = (typeof opts !== "undefined" ? opts.zoom || 1 : 1) * (FLY.on || FLY.chute ? FLY.zoom : 1);
-    // fast and low, the city art can't bake fast enough: the aerial levels take over earlier (motion hides the softness)
-    const fast = FLY.on && FLY.air && FLY.alt > 50 && Math.hypot(FLY.vxm, FLY.vym) > (FLY.lod ? 55 : 70);
-    FLY.lod = (FLY.on || !!FLY.chute) && (z < FLY_LOD0 || (fast && z < 0.32)); FLY.frame = (FLY.frame || 0) + 1;
+    const flying = FLY.on || !!FLY.chute;
+    const z = (typeof opts !== "undefined" ? opts.zoom || 1 : 1) * (flying ? FLY.zoom : 1);
+    const alt = FLY.chute ? FLY.chute.alt : FLY.alt;
+    const clearance = flying && player && alt > 40 ? alt - flyGroundAt(player.x, player.y) : 0;
+    const farEnough = clearance > (FLY.lod ? 30 : 40);
+    FLY.lod = !!(flying && farEnough && z < (FLY.lod ? FLY_LOD_EXIT : FLY_LOD_ENTER));
+    FLY.frame = (FLY.frame || 0) + 1;
     if (FLY.lod) { flyRenderGround(left, top, vw, vh); return; }
     return o.apply(this, arguments);
   });
@@ -745,7 +789,7 @@ function flyDrawCockpit(g, W0, H0, d, alt, sp, vs, head) {
         if (!v.flyAir) continue;
         const alt = v.flyAlt || 0, sc = 1 + Math.min(0.5, alt / 120);
         if (alt < 250) { g.save(); g.globalAlpha = Math.max(0.05, 0.3 - alt / 900); g.fillStyle = "#000"; g.beginPath(); g.ellipse(v.x + alt * 9, v.y + alt * 12, v.L * 0.5, v.D * 0.4, v.ang, 0, 7); g.fill(); g.restore(); }
-        if (!FLY.lod || v !== FLY.v) flyDrawCraft(g, v, runTime, sc);
+        if (!flyFarView() || v !== FLY.v) flyDrawCraft(g, v, runTime, sc);
       }
       if (FLY.on && FLY.self && FLY.alt < 300 && player) {   // a hero in the air: shadow + trail
         const a = FLY.alt; g.save(); g.globalAlpha = Math.max(0.05, 0.3 - a / 600); g.fillStyle = "#000"; g.beginPath(); g.ellipse(player.x + a * 9, player.y + a * 12, 10, 6, 0, 0, 7); g.fill(); g.restore();
@@ -753,7 +797,6 @@ function flyDrawCockpit(g, W0, H0, d, alt, sp, vs, head) {
         g.save(); g.globalCompositeOperation = tr === "smoke" ? "source-over" : "lighter"; g.fillStyle = c;
         for (let k = 0; k < 5; k++) { const d = (k + 1) * 7; g.globalAlpha = 0.35 - k * 0.06; g.beginPath(); g.arc(player.x - Math.cos(FLY.hdg) * d, player.y - Math.sin(FLY.hdg) * d + 6, 5 - k * 0.6, 0, 7); g.fill(); }
         g.restore();
-        if (tr === "broom") { g.save(); g.translate(player.x, player.y + 8); g.rotate(FLY.hdg); flyDrawOwn(g, "broom", runTime, null); g.restore(); }
       }
     });
     V10.onRenderScreen.splice(1, 0, flyRenderSky, flyRenderScreen);   // after the night light, before the minimap

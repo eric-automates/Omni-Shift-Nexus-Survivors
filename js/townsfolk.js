@@ -344,6 +344,29 @@ function tfStep(dt) {
       tfMove(W, W.x + Math.cos(a) * 160, W.y + Math.sin(a) * 160, 150, dt);
       continue;
     }
+    // Dispatch contacts wait for interview, but still flee and take damage.
+    if (W.jobContact) {
+      // The missing witness follows on foot through the normal collision-aware
+      // mover. They never board vehicles or teleport; wait when the player is
+      // airborne or driving and preserve ordinary alarm/injury behavior.
+      if(W.jobClinic) {
+        const target=typeof jdClinicTarget==="function" ? jdClinicTarget(p) : null;
+        // Do not stop at an arbitrary 25px radius: a corner can leave the contact
+        // close to the door but without the body-clear line required for handoff.
+        // Walk normally towards the validated entrance until it is actually clear.
+        if(target && (Math.hypot(W.x-target.x,W.y-target.y)>8 || !stClearLine(W.x,W.y,target.x,target.y,7)))tfMove(W,target.x,target.y,100,dt);
+        else W.vx=W.vy=0;
+      } else if(W.jobSupport) {
+        const target=typeof jdSupportTarget==="function" ? jdSupportTarget(p) : null;
+        if(target && (Math.hypot(W.x-target.x,W.y-target.y)>(target.stop||30) || (target.stop===8 && !stClearLine(W.x,W.y,target.x,target.y,7))))tfMove(W,target.x,target.y,100,dt);
+        else W.vx=W.vy=0;
+      } else if(W.jobEscort && !player.inVehicle && !player.roof && (player.flyAlt||0)<=2) {
+        const target=typeof jdEscortTarget==="function" ? jdEscortTarget(p) : {x:player.x,y:player.y,stop:48};
+        if(Math.hypot(W.x-target.x,W.y-target.y)>target.stop)tfMove(W,target.x,target.y,200,dt);
+        else W.vx=W.vy=0;
+      } else W.vx = W.vy = 0;
+      continue;
+    }
     if (W.sleep) { W.vx = W.vy = 0; continue; }
     if (W.inside) {   // indoors: potter about, stay at your post
       W.idle -= dt;
@@ -361,7 +384,9 @@ function tfStep(dt) {
   tfCollateral(dt);
   // a drawn weapon in town makes people nervous (brandishing — not a crime, just unwelcome)
   if (SCN.mode === "economy" && (TF.frame % 20) === 0 && typeof sheatheArmed === "function" && sheatheArmed() && !player.inVehicle) {
-    for (const p of TF.walk) { const W = p.w; if (!W || W.sleep || W.flee > 0 || W.patrol || Math.hypot(W.x - player.x, W.y - player.y) > 150) continue; W.flee = 1.6; W.fleeX = player.x; W.fleeY = player.y; if (Math.random() < 0.3) tfSay(p, ["Whoa — put that away!", "Easy with that thing…", "Is that real?!", "I don't want any trouble."][Math.floor(Math.random() * 4)], 1.8); }
+    // A dispatch contact remains approachable with the default low-ready setting;
+    // gunfire, damage and other real alarms still make them flee normally.
+    for (const p of TF.walk) { const W = p.w; if (!W || W.sleep || W.flee > 0 || W.patrol || (W.jobContact && sheatheGunMode() !== "aim" && sheatheBladeMode() !== "hand") || Math.hypot(W.x - player.x, W.y - player.y) > 150) continue; W.flee = 1.6; W.fleeX = player.x; W.fleeY = player.y; if (Math.random() < 0.3) tfSay(p, ["Whoa — put that away!", "Easy with that thing…", "Is that real?!", "I don't want any trouble."][Math.floor(Math.random() * 4)], 1.8); }
   }
 }
 // stray shots, blasts and cars hurt people too — and who did it matters (js/economy.js)
@@ -374,34 +399,49 @@ function tfCollateral(dt) {
       if (!pAct[i]) continue;
       const dx = pX[i] - W.x, dy = pY[i] - W.y, rr = (pRad[i] || 4) + 7;
       if (dx * dx + dy * dy > rr * rr) continue;
-      tfHurt(p, Math.min(30, (pDmg[i] || 10) * 0.6), "shot", "player");
-      if (!(typeof isPersistentProj === "function" && isPersistentProj(i))) pAct[i] = 0;
+      // Do not blame the hero for a hostile round. Squad fire is recorded separately;
+      // context-aware squad consequences and off-screen safety warnings are still planned.
+      const by = typeof projectileOwner === "function" ? projectileOwner(i) : (pEnemy[i] ? "enemy" : "player");
+      if (pStyle[i] === 2 && typeof triggerRocketDetonation === "function") {
+        // Resolve the impact as one blast, rather than charging the same victim
+        // for a direct shot and a second blast from one rocket.
+        pAct[i] = 0;
+        triggerRocketDetonation(pX[i], pY[i], pDmg[i], pRad[i] * 4.8, by);
+      } else {
+        const origin = projectileShotOrigin(i);
+        // React to the incoming travel direction, not the hero's current
+        // position or an omniscient assumption about who fired the round.
+        const speed=Math.hypot(pVX[i],pVY[i]);
+        const danger=![1,6,8].includes(pStyle[i]) && speed>1 && Number.isFinite(speed)
+          ? {x:W.x-pVX[i]/speed*80,y:W.y-pVY[i]/speed*80} : null;
+        tfHurt(p, Math.min(30, (pDmg[i] || 10) * 0.6), "shot", by, origin, danger);
+        if (!(typeof isPersistentProj === "function" && isPersistentProj(i))) pAct[i] = 0;
+      }
       break;
     }
-    // a car you drive
-    if (player.inVehicle === 3 && typeof VEH !== "undefined" && VEH.ride) {
-      const v = VEH.ride, sp = Math.hypot(v.vx, v.vy);
-      if (sp > 110 * (v.sv || 1) && Math.hypot(v.x - W.x, v.y - W.y) < Math.max(v.L, v.D) * 0.55) {
-        if (Math.random() < 0.35 && sp < 260) { const a = Math.atan2(W.y - v.y, W.x - v.x); W.x += Math.cos(a) * 30; W.y += Math.sin(a) * 30; tfSay(p, "Watch it!!", 1.6); W.flee = 3; W.fleeX = v.x; W.fleeY = v.y; }
-        else tfHurt(p, sp / 6, "car", "player");
-      }
-    }
+
   }
 }
-function tfHurt(p, dmg, how, by) {
+function tfHurt(p, dmg, how, by, origin, danger) {
   const W = p.w; if (!W || !p.alive) return;
-  W.hp -= dmg; W.flee = 6; W.fleeX = player.x; W.fleeY = player.y; W.sleep = false;
+  // Danger location drives movement only. It is not identity or legal evidence.
+  // If the impact direction is unknown, move forward instead of guessing that
+  // the player caused the harm. Direct melee supplies its actual source.
+  const face=Number.isFinite(W.face)?W.face:0;
+  const spot=danger && Number.isFinite(danger.x) && Number.isFinite(danger.y)
+    ? danger : {x:W.x-Math.cos(face)*20,y:W.y-Math.sin(face)*20};
+  W.hp -= dmg; W.flee = 6; W.fleeX = spot.x; W.fleeY = spot.y; W.sleep = false;
   if (typeof spawnSpeech === "function") spawnSpeech(W.x, W.y - 16, W.hp > 0 ? "AAH!" : "", "#ff8a80", 0.8);
-  if (W.hp <= 0) tfDie(p, how, by);
-  else if (typeof ecoOnCrime === "function" && by === "player") ecoOnCrime("assault", W.x, W.y, p, how);
+  if (W.hp <= 0) tfDie(p, how, by, origin);
+  else if (typeof ecoOnCrime === "function" && by === "player" && opts.civilianConsequences !== false) ecoOnCrime("assault", W.x, W.y, p, how, origin);
 }
-function tfDie(p, how, by) {
+function tfDie(p, how, by, origin) {
   if (!p.alive) return;
   p.alive = false;
   const W = p.w, x = W ? W.x : player.x, y = W ? W.y : player.y;
   if (W && typeof spawnCorpse === "function" && !(typeof AGE !== "undefined" && AGE.level >= 2)) { try { spawnCorpse(x, y, p.seed, 0, 0, 0, p.shirt, "#d7a98c", -1); } catch (e) { /* art */ } }
   tfMemDeath(p, how, by);
-  if (typeof ecoOnCrime === "function" && by === "player") ecoOnCrime("murder", x, y, p, how);
+  if (typeof ecoOnCrime === "function" && by === "player" && opts.civilianConsequences !== false) ecoOnCrime("murder", x, y, p, how, origin);
   tfAlarm(x, y, 520, "death");
 }
 
@@ -463,7 +503,9 @@ function tfJobsTick() {
   }
   // a few go bad: the jobless, the broke, the grieving — at night, near you, it becomes your problem
   if (SCN.mode === "economy" && Math.random() < 0.02) {
-    const L = TF.walk.filter(p => p.alive && !p.bad && !p.w.inside && (p.occ === "unemployed" || p.mood < 0.35));
+    // Active dispatch actors have their own explicit loss paths. Do not silently
+    // replace a witness or support worker with an unrelated street enemy.
+    const L = TF.walk.filter(p => p.alive && !p.bad && p.w && !p.w.inside && !p.w.jobContact && (p.occ === "unemployed" || p.mood < 0.35));
     const p = L[Math.floor(Math.random() * L.length)];
     if (p && typeof ecoTurnBad === "function") ecoTurnBad(p);
   }
@@ -533,6 +575,12 @@ function tfRender(g) {
     g.scale(S.s, S.s);
     try { erBodyHuman(g, S, 100000 + (p.seed % 50000), W.face, walk, 0, false, false); } catch (e) { g.fillStyle = p.shirt; g.beginPath(); g.arc(0, 0, 6, 0, 7); g.fill(); }
     g.restore();
+    // Only label the actual visible mission actor; do not reveal them through
+    // city fog or create a marker for an absent/unspawned person.
+    if ((p.jdSupport || p.jdClinic) && p.alive) {
+      const label=p.jdClinic ? "CLINIC CONTACT" : "SUPPORT",width=p.jdClinic ? 80 : 48;
+      g.save();g.font="bold 9px sans-serif";g.textAlign="center";g.fillStyle="rgba(20,20,20,.8)";g.fillRect(W.x-width/2,W.y-44,width,12);g.fillStyle="#ffe292";g.fillText(label,W.x,W.y-35);g.restore();
+    }
     if (W.sayT > runTime && W.say) { g.save(); g.font = "bold 9px sans-serif"; g.textAlign = "center"; g.fillStyle = "rgba(0,0,0,0.55)"; const tw = g.measureText(W.say).width + 8; g.fillRect(W.x - tw / 2, W.y - 34, tw, 12); g.fillStyle = "#fff"; g.fillText(W.say, W.x, W.y - 25); g.restore(); }
     if (W.sleep && (TF.frame >> 4) % 3 === 0) { g.fillStyle = "#cfd8dc"; g.font = "9px sans-serif"; g.fillText("z", W.x + 8, W.y - 12); }
   }
@@ -570,7 +618,20 @@ function townsLights(push) {
     return _twi();
   };
   if (typeof noiseEmit === "function") { const _ne = noiseEmit; window.noiseEmit = function (x, y, L0, kind, src, data) { const r = _ne.apply(this, arguments); if (TF.on && L0 >= 95 && (src === 2 || src === undefined)) tfAlarm(x, y, Math.min(900, L0 * 6), kind || "noise"); return r; }; }
-  if (typeof spawnBlastWave === "function") { const _sb = spawnBlastWave; window.spawnBlastWave = function (x, y, R) { const r = _sb.apply(this, arguments); if (TF.on) { for (const p of TF.walk.slice()) { const W = p.w; if (W && Math.hypot(W.x - x, W.y - y) < (R || 68) * 1.1) tfHurt(p, 40, "blast", "player"); } tfAlarm(x, y, 700, "blast"); } return r; }; }
+  if (typeof spawnBlastWave === "function") {
+    const _sb = spawnBlastWave;
+    window.spawnBlastWave = function (x, y, R, color, owner) {
+      const r = _sb.apply(this, arguments);
+      // A visual ring is not necessarily an explosion (revival, magic effects,
+      // and enemy hit flashes use it too). Only an explicitly caused blast hurts.
+      if (TF.on && owner) {
+        const by = ["player", "squad", "enemy", "unknown"].includes(owner) ? owner : "unknown";
+        for (const p of TF.walk.slice()) { const W = p.w; if (W && Math.hypot(W.x - x, W.y - y) < (R || 68) * 1.1) tfHurt(p, 40, "blast", by, null, {x,y}); }
+        tfAlarm(x, y, 700, "blast");
+      }
+      return r;
+    };
+  }
   window.addEventListener("keydown", e => { if (e.code === "Escape" && TF.panel) tfTalkClose(); });
   if (typeof V10 !== "undefined") {
     V10.onRunStart.push(() => {
@@ -582,4 +643,106 @@ function townsLights(push) {
     V10.onRunReset.push(() => { TF.on = false; TF.walk.length = 0; tfTalkClose(); });
   }
 })();
+// Optional assist for straight-projectile auto-fire. It checks the actual
+// spawned direction of each projectile, so independent hands and spread are
+// treated independently. It is not a prediction for blasts, ricochets,
+// utilities, unknown civilians or every weapon effect.
+const TF_AUTO_FIRE = { context: null, heldUntil: 0 };
+function tfAutoFireAllowed(x, y, vx, vy, life, rad, style, enemy, sourceKind) {
+  const context = TF_AUTO_FIRE.context;
+  if (!context || enemy || (sourceKind != null && sourceKind !== 0) || (style !== 3 && style !== 4 && style !== 5) ||
+      !TF.on || !CITY.on || !player || (typeof flyGroundSeparated === "function" && flyGroundSeparated())) return true;
+  const speed = Math.hypot(vx, vy);
+  if (!(speed > 1) || !(life > 0) || !Number.isFinite(rad)) return true;
+  const ux = vx / speed, uy = vy / speed, reach = Math.min(1000, speed * life + 20);
+  for (const p of TF.walk) {
+    const q = p && p.w; if (!p || !p.alive || !q || !(q.hp > 0)) continue;
+    const dx = q.x - x, dy = q.y - y, along = dx * ux + dy * uy;
+    const bodyRadius = Math.max(0, rad) + 7;
+    // The projectile appears 20 px ahead, but its body may already overlap a
+    // person whose centre is slightly behind that muzzle point.
+    if (along < Math.max(0, 20 - bodyRadius) || along > reach + bodyRadius || Math.abs(-dx * uy + dy * ux) > bodyRadius) continue;
+    // Sight is a conservative knowledge test; F_SHOT matches the current
+    // solid-wall stop rule, while unblocked windows remain traversable.
+    if (!cityLOS(player.x, player.y, q.x, q.y)) continue;
+    const beforePerson = Math.max(20, along - bodyRadius);
+    if (cityRay(x + ux * 20, y + uy * 20, x + ux * beforePerson, y + uy * beforePerson, F_SHOT, 900).hit) continue;
+    context.blocked++;
+    TF_AUTO_FIRE.heldUntil = runTime + .9;
+    return false;
+  }
+  return true;
+}
+function tfAutoFireSpawned(enemy, sourceKind) {
+  if (TF_AUTO_FIRE.context && !enemy && (sourceKind == null || sourceKind === 0)) TF_AUTO_FIRE.context.spawned++;
+}
+(function tfAutoFireWire() {
+  if (typeof window.fireWeapon !== "function") return;
+  const fire = window.fireWeapon;
+  window.fireWeapon = function () {
+    if (opts.autoFireSafety !== true || !TF.on || !CITY.on) return fire.apply(this, arguments);
+    const previous = TF_AUTO_FIRE.context, context = { blocked: 0, spawned: 0 };
+    TF_AUTO_FIRE.context = context;
+    let result;
+    try { result = fire.apply(this, arguments); }
+    finally { TF_AUTO_FIRE.context = previous; }
+    if (!context.blocked) TF_AUTO_FIRE.heldUntil = 0;
+    return context.blocked && !context.spawned ? false : result;
+  };
+  if (typeof V10 !== "undefined") {
+    V10.onRenderScreen.push(g => {
+      if (!runActive || opts.autoFireSafety !== true || TF_AUTO_FIRE.heldUntil <= runTime) return;
+      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+      g.font = "bold 12px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+      const x = W / 2, y = Math.max(32, H * .16); g.fillStyle = "rgba(30,20,4,.9)"; g.fillRect(x - 94, y - 13, 188, 26);
+      g.fillStyle = "#ffd166"; g.fillText("HOLD FIRE · CIVILIAN", x, y); g.restore();
+    });
+    V10.onRunReset.push(() => { TF_AUTO_FIRE.context = null; TF_AUTO_FIRE.heldUntil = 0; });
+  }
+})();
+
+// Off-screen caution, not omniscient detection or a shot guarantee. Only
+// locally simulated, awake civilians with direct sight from the player count.
+// One marker per quadrant limits clutter; unobserved areas remain unknown.
+const TF_WARNING = { t: 0, items: [] };
+function tfWarningCollect() {
+  if (!runActive || !player || !CITY.on || !TF.on || opts.civilianWarning === false || (typeof flyGroundSeparated === "function" && flyGroundSeparated())) return [];
+  const cam = typeof fxCamOut !== "undefined" ? fxCamOut : null, z = opts.zoom * (cam ? cam.zoom || 1 : 1);
+  const cx = W * .5 + (cam ? cam.sx || 0 : 0), cy = H * .5 + (cam ? cam.sy || 0 : 0);
+  const fx = cam ? cam.fx || 0 : 0, fy = cam ? cam.fy || 0 : 0, sectors = [null, null, null, null];
+  for (const p of TF.walk) {
+    const q = p && p.w; if (!p || !p.alive || !q || q.hp <= 0 || q.sleep) continue;
+    const dx = q.x - player.x, dy = q.y - player.y, d = Math.hypot(dx, dy);
+    if (d < 1 || d > 1000) continue;
+    const sx = cx + (dx - fx) * z, sy = cy + (dy - fy) * z;
+    if (sx >= 0 && sy >= 0 && sx <= W && sy <= H) continue;
+    if (!cityLOS(player.x, player.y, q.x, q.y)) continue;
+    const a = Math.atan2(dy, dx), k = (Math.round(a / (Math.PI / 2)) + 4) % 4;
+    if (!sectors[k] || d < sectors[k].d) sectors[k] = { a, d };
+  }
+  return sectors.filter(Boolean);
+}
+function tfWarningStep(dt) {
+  TF_WARNING.t -= dt;
+  if (TF_WARNING.t <= 0) { TF_WARNING.t = .2; TF_WARNING.items = tfWarningCollect(); }
+}
+function tfWarningRender(g) {
+  if (!runActive || !player || !CITY.on || !TF.on || opts.civilianWarning === false || (typeof flyGroundSeparated === "function" && flyGroundSeparated())) return;
+  const cam = typeof fxCamOut !== "undefined" ? fxCamOut : null, z = opts.zoom * (cam ? cam.zoom || 1 : 1);
+  const x = W * .5 + (cam ? cam.sx || 0 : 0) - (cam ? cam.fx || 0 : 0) * z, y = H * .5 + (cam ? cam.sy || 0 : 0) - (cam ? cam.fy || 0 : 0) * z;
+  const r = Math.min(82, Math.min(W, H) * .2);
+  g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = "source-over";
+  g.font = "bold 11px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+  for (const q of TF_WARNING.items) {
+    const px = x + Math.cos(q.a) * r, py = y + Math.sin(q.a) * r;
+    g.fillStyle = "rgba(28,20,4,.9)"; g.strokeStyle = "#ffd166"; g.lineWidth = 2;
+    g.beginPath(); g.arc(px, py, 13, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.fillStyle = "#ffd166"; g.fillText("CIV", px, py);
+  }
+  g.restore();
+}
+V10.onStep.push(tfWarningStep);
+V10.onRenderScreen.push(tfWarningRender);
+V10.onRunStart.push(() => { TF_WARNING.t = 0; TF_WARNING.items = []; });
+V10.onRunReset.push(() => { TF_WARNING.t = 0; TF_WARNING.items = []; });
 // EOF:js/townsfolk.js

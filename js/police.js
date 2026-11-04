@@ -35,7 +35,7 @@ function pdKmh() { return typeof opts !== "undefined" && opts.vehUnits === "kmh"
 // a speed in the units on your speedometer (limits round to the nearest 5 km/h)
 function pdSpd(mph) { return pdKmh() ? Math.round(mph * 1.609344 / 5) * 5 : Math.round(mph); }
 function pdMph(v) { return typeof vehRealMs === "function" ? vehRealMs(v) / 0.44704 : Math.hypot(v.vx, v.vy) / 32 / 0.44704; }
-function pdSight(x0, y0, x1, y1) { try { return !cityRay(x0, y0, x1, y1, F_SIGHT, 2400).hit; } catch (e) { return true; } }
+function pdSight(x0, y0, x1, y1) { try { return !cityRay(x0, y0, x1, y1, F_SIGHT, 2400).hit; } catch (e) { return false; } }
 
 /* --- 1. WHAT THE POLICE NOTICE ----------------------------------------------------------------------------------- */
 const PD_ROAD = new Set(["sedan", "police", "pickup", "suv", "rusted", "anglia", "bus", "armytruck", "tractor", "firetruck", "forklift", "semi"]);
@@ -46,7 +46,7 @@ function pdWatch(dt) {
   // the trail the cruiser follows (your own path is always drivable)
   const T = PD.trail, last = T[T.length - 1];
   if (!last || Math.hypot(last[0] - me.x, last[1] - me.y) > 40 * k) { T.push([me.x, me.y]); if (T.length > 500) T.splice(0, T.length - 500); }
-  if (PD.st === "stop" || PD.st === "walk" || PD.st === "talk" || PD.st === "jail") return;
+  if (PD.st !== "idle" && PD.st !== "chase") return;
   const mph = pdMph(me), road = typeof trfRoadAt === "function" ? trfRoadAt(xm, ym) : null;
   pdLimitSign(road, mph);
   if (road) {
@@ -71,31 +71,41 @@ function pdWatch(dt) {
 }
 function pdOffense(kind, info) {
   if (runTime < PD.cool) return;
-  const P = PD.pend && runTime - PD.pend.t < 25 ? PD.pend : (PD.pend = { kinds: new Set(), t: runTime, mph: 0, lim: 0, road: "", what: "" });
-  P.kinds.add(kind); P.t = runTime;
-  if (info) { if (info.mph && kind === "speed") { P.mph = Math.max(P.mph, info.mph); P.lim = info.lim; } if (info.road) P.road = info.road; if (info.what) P.what = info.what; }
-  if (PD.st === "chase" || PD.st === "flee") return;   // already on you
+  // Do not record an invisible offense for a later officer to inherit. During
+  // a pursuit the actual pursuer can witness a new offense, too; an empty
+  // parked cruiser is not a witness when its officer is on foot.
   const w = pdWitness();
   if (!w) return;
+  const active = PD.st !== "idle";
+  const P = PD.pend && (active || runTime - PD.pend.t < 25) ? PD.pend : (PD.pend = { kinds: new Set(), t: runTime, mph: 0, lim: 0, road: "", what: "" });
+  P.kinds.add(kind); P.t = runTime;
+  if (info) { if (info.mph && kind === "speed") { P.mph = Math.max(P.mph, info.mph); P.lim = info.lim; } if (info.road) P.road = info.road; if (info.what) P.what = info.what; }
+  if (active) { if (!PD.why.includes(kind)) PD.why.push(kind); return; }  // never restart an encounter
   PD.why = [...P.kinds];
   pdStartChase(w);
 }
-// who saw it: a cruiser in traffic (line of sight, ~150 real m) or an officer on foot (~70 real m)
+// who saw it: an occupied cruiser (~150 real m) or an officer on foot (~70 real m)
 function pdWitness() {
   const me = VEH.me, k = pdK(); if (!me) return null;
+  // When an officer is outside their car, only that officer can see from the
+  // unit; do not let the unoccupied parked cruiser observe through a wall.
+  if (PD.st !== "idle") {
+    const p = PD.off || PD.unit;
+    const range = (PD.off ? 70 : 150) * k * 32;
+    if (p && Math.hypot(p.x - me.x, p.y - me.y) <= range && pdSight(p.x, p.y, me.x, me.y)) return { active: true };
+  }
   let best = null, bd = 1e9;
   for (const c of TRF.cars) {
-    if (!c.police) continue;
+    if (!c.police || c.dead) continue;
     const lx = c.x * 32 - CITY.orx, ly = c.y * 32 - CITY.ory, d = Math.hypot(lx - me.x, ly - me.y);
-    if (d > 150 * k * 32 || d > bd) continue;
-    if (d > 20 * k * 32 && !pdSight(lx, ly, me.x, me.y)) continue;
+    if (d > 150 * k * 32 || d > bd || !pdSight(lx, ly, me.x, me.y)) continue;
     best = { car: c }; bd = d;
   }
   if (best) return best;
   if (typeof TF !== "undefined" && TF.walk) for (const p of TF.walk) {
     const W = p.w; if (!W || !p.alive || W.sleep || W.inside) continue;
     const job = p.job && TF.bld && TF.bld.get(p.job.uid); if (!job || job.kind !== "police") continue;
-    const d = Math.hypot(W.x - me.x, W.y - me.y); if (d > 70 * k * 32 + 400) continue;
+    const d = Math.hypot(W.x - me.x, W.y - me.y); if (d > 70 * k * 32) continue;
     if (pdSight(W.x, W.y, me.x, me.y)) return { foot: p };
   }
   return null;
@@ -120,18 +130,46 @@ function pdStartChase(w) {
   pdBanner("🚨 PULL OVER", "Stop the car — the officer will come to you");
   if (typeof sfx === "function") sfx(700, 1250, 0.45, "sine", 0.05);
 }
-// a unit coming up your path from behind, out of sight
+// A radioed unit may materialize only beyond both the last rendered view and
+// the calculated current camera view, with
+// enough clearance for the entire cruiser. If there is no current view or no
+// suitable trail point, pdUnitStep retries and eventually releases the stop.
+function pdUnitOffscreen(x, y, k) {
+  const v = TRF.view; let current;
+  try { current = typeof camView === "function" ? camView(140) : null; } catch (_) { return false; }
+  if (!v || !current || ![v.l, v.t, v.w, v.h, current.left, current.top, current.vw, current.vh, x, y, k].every(Number.isFinite) || v.w <= 0 || v.h <= 0 || current.vw <= 0 || current.vh <= 0 || k <= 0) return false;
+  const m = Math.hypot(64 * k, 144 * k) / 2 + 60;
+  const outside = (l, t, w, h) => x + m < l || x - m > l + w || y + m < t || y - m > t + h;
+  // Rendering can lag simulation while the camera moves. Require separation
+  // from both the last painted view and the current calculated view.
+  return outside(v.l, v.t, v.w, v.h) && outside(current.left, current.top, current.vw, current.vh);
+}
 function pdCallUnit() {
   const T = PD.trail, k = pdK(); if (T.length < 2) return;
-  let i = T.length - 1, dist = 0;
-  while (i > 0 && dist < 45 * k * 32) { dist += Math.hypot(T[i][0] - T[i - 1][0], T[i][1] - T[i - 1][1]); i--; }
-  const a = T[i], b = T[Math.min(T.length - 1, i + 1)];
+  let i = T.length - 1, dist = 0, chosen = -1;
+  while (i > 0) {
+    dist += Math.hypot(T[i][0] - T[i - 1][0], T[i][1] - T[i - 1][1]); i--;
+    if (dist >= 45 * k * 32 && pdUnitOffscreen(T[i][0], T[i][1], k)) { chosen = i; break; }
+  }
+  if (chosen < 0) return;
+  const a = T[chosen], b = T[chosen + 1];
   PD.unit = pdNewUnit(a[0], a[1], Math.atan2(b[1] - a[1], b[0] - a[0]), 0);
-  PD.unit.ti = i + 1; PD.unit.mode = "trail";
+  PD.unit.ti = chosen + 1; PD.unit.mode = "trail";
 }
 function pdUnitStep(dt) {
   const u = PD.unit, me = VEH.me, k = pdK();
-  if (!u) { if (PD.callT && runTime > PD.callT) { PD.callT = 0; pdCallUnit(); } return; }
+  if (!u) {
+    if (PD.callT && runTime > PD.callT) {
+      PD.callT = 0; pdCallUnit();
+      // The radioed unit needs at least two trail samples. Retry rather than
+      // leaving an eternal banner if the player stopped before one was recorded.
+      if (!PD.unit && (PD.st === "chase" || PD.st === "flee")) {
+        if (PD.chaseT < 16) PD.callT = runTime + 1;
+        else { pdEnd(true); PD.cool = runTime + 30; if (typeof itToast === "function") itToast("🚔 No unit available", "#90caf9"); }
+      }
+    }
+    return;
+  }
   const T = PD.trail, VPXK = 32 * k;
   const vmax = (PD.st === "flee" ? 30 : 27) * Math.min(1, 2.24 * k) * 32;   // a cruiser is a little faster than you
   let tx, ty, want = vmax;
@@ -153,7 +191,7 @@ function pdUnitStep(dt) {
     // far behind and out of sight: catch up along the path
     if (u.ti < T.length - 6) {
       let rest = 0; for (let i = u.ti; i < T.length - 1; i++) rest += Math.hypot(T[i + 1][0] - T[i][0], T[i + 1][1] - T[i][1]);
-      if (rest > 70 * VPXK && !pdOnScreen(u.x, u.y)) { let i = T.length - 1, dd = 0; while (i > u.ti && dd < 40 * VPXK) { dd += Math.hypot(T[i][0] - T[i - 1][0], T[i][1] - T[i - 1][1]); i--; } if (!pdOnScreen(T[i][0], T[i][1])) { u.x = T[i][0]; u.y = T[i][1]; u.ti = i + 1; } }
+      if (rest > 70 * VPXK && pdUnitOffscreen(u.x, u.y, u.k || k)) { let i = T.length - 1, dd = 0; while (i > u.ti && dd < 40 * VPXK) { dd += Math.hypot(T[i][0] - T[i - 1][0], T[i][1] - T[i - 1][1]); i--; } if (pdUnitOffscreen(T[i][0], T[i][1], u.k || k)) { u.x = T[i][0]; u.y = T[i][1]; u.ti = i + 1; } }
     }
   }
   if (u.mode === "direct") {
@@ -163,7 +201,7 @@ function pdUnitStep(dt) {
     if (ds < 0.4 * VPXK) want = Math.min(want, vme);
     if (dMe > slotD * 4 && T.length > 2) { u.mode = "join"; }
   }
-  if (PD.st === "stop" || PD.st === "walk" || PD.st === "talk") {
+  if (PD.st === "stop" && !PD.off) {
     tx = sx; ty = sy; const ds = Math.hypot(sx - u.x, sy - u.y); want = Math.min(4 * VPXK, ds * 1.5);
     if (ds < 1.4 * VPXK) {
       // the last metre: ease into the slot square behind you, lined up with your car
@@ -174,6 +212,7 @@ function pdUnitStep(dt) {
     }
   }
   if (PD.st === "leave") { want = u.parked && PD.off ? 0 : 9 * VPXK * 0.9; tx = u.x + Math.cos(u.ang) * 100; ty = u.y + Math.sin(u.ang) * 100; }
+  if (PD.off && (PD.st === "flee" || PD.st === "cover" || PD.st === "walk" || PD.st === "talk")) { want = 0; u.v = 0; tx = undefined; }
   // steer + speed
   if (tx !== undefined) {
     const da = Math.atan2(ty - u.y, tx - u.x), dd = Math.hypot(tx - u.x, ty - u.y);
@@ -192,6 +231,57 @@ function pdUnitStep(dt) {
 function pdOnScreen(x, y) { const v = TRF.view; if (!v) return Math.hypot(x - player.x, y - player.y) < 700; return x > v.l - 60 && x < v.l + v.w + 60 && y > v.t - 60 && y < v.t + v.h + 60; }
 
 /* --- 3. THE STOP: pull over, the walk, the talk, the ticket ------------------------------------------------------- */
+// A routine citation must not freeze an active fight. Nearby foes alone do not make the player guilty.
+function pdActiveFight() {
+  if (!player || !(player.combatAlertTimer > 0) || typeof eAct === "undefined") return false;
+  const R = 420;
+  for (let j = 0; j < MAX_E; j++) {
+    if (!eAct[j] || (typeof allyIs === "function" && allyIs(j)) || (typeof sdIgnore === "function" && sdIgnore(j))) continue;
+    if (Math.hypot(eX[j] - player.x, eY[j] - player.y) < R) return true;
+  }
+  return false;
+}
+function pdExitOfficer() {
+  const u = PD.unit;
+  if (!u || PD.off) return;
+  u.parked = true; u.v = 0;
+  const c = Math.cos(u.ang), s = Math.sin(u.ang);
+  PD.off = { x: u.x + s * (u.wpx / 2 + 10), y: u.y - c * (u.wpx / 2 + 10), face: u.ang, walk: 0 };
+}
+function pdLeftStop() {
+  return !VEH.me && PD.stopX != null && Math.hypot(player.x - PD.stopX, player.y - PD.stopY) > 90;
+}
+// A dismounted officer must physically reach the driver's door before the car moves.
+// Use the existing bounded city pathfinder when a wall blocks the direct route.
+function pdWalkOfficer(O, tx, ty, dt, speed, arrive) {
+  const distance = Math.hypot(tx - O.x, ty - O.y);
+  if (distance <= arrive + .05) { O.walk = 0; return true; }
+  let gx = tx, gy = ty;
+  O.routeT = Math.max(0, (O.routeT || 0) - dt);
+  if (typeof stClearLine === "function" && typeof stFindPath === "function" && !stClearLine(O.x, O.y, tx, ty, 5)) {
+    if (!O.routeT && (!O.path || Math.hypot(O.path.tx - tx, O.path.ty - ty) > 56 || O.path.k >= O.path.pts.length || (O.stuck || 0) > 1)) {
+      O.path = stFindPath(O.x, O.y, tx, ty); O.routeT = 1.5; O.stuck = 0;
+    }
+    const P = O.path;
+    if (P && P.k < P.pts.length) {
+      while (P.k < P.pts.length - 1 && Math.hypot(P.pts[P.k][0] - O.x, P.pts[P.k][1] - O.y) < 12) P.k++;
+      gx = P.pts[P.k][0]; gy = P.pts[P.k][1];
+    }
+  } else O.path = null;
+  const dx = gx - O.x, dy = gy - O.y, d = Math.hypot(dx, dy);
+  if (d < .01) { O.walk = 0; return false; }
+  const step = Math.min(speed * dt, d, distance - arrive), ox = O.x, oy = O.y;
+  const q = cityResolve(ox + dx / d * step, oy + dy / d * step, 7, false);
+  O.x = q[0]; O.y = q[1]; O.face = Math.atan2(dy, dx);
+  const moved = Math.hypot(O.x - ox, O.y - oy);
+  O.stuck = step > .5 && moved < step * .3 ? (O.stuck || 0) + dt : Math.max(0, (O.stuck || 0) - dt);
+  O.walk = moved > .1 ? O.walk + dt * 9 : 0;
+  return false;
+}
+function pdOfficerDoor(u) {
+  const c = Math.cos(u.ang), s = Math.sin(u.ang);
+  return [u.x + s * (u.wpx / 2 + 10), u.y - c * (u.wpx / 2 + 10)];
+}
 function pdStep(dt) {
   PD.on = pdEnabled();
   if (!PD.on) { if (PD.st !== "idle" && PD.st !== "jail") pdEnd(true); return; }
@@ -201,18 +291,42 @@ function pdStep(dt) {
   const me = VEH.me, u = PD.unit, k = pdK(), VPXK = 32 * k;
   if (PD.st === "chase" || PD.st === "flee") {
     PD.chaseT += dt;
-    const mph = me ? pdMph(me) : 0, near = u && Math.hypot(u.x - (me || player).x, u.y - (me || player).y) < 22 * VPXK + (me ? me.D : 0);
-    if (near && mph < 3) { PD.stopT += dt; if (PD.stopT > 0.9) pdPullOver(); } else PD.stopT = Math.max(0, PD.stopT - dt);
-    if (PD.st === "chase" && PD.chaseT > 16 && mph > 15) pdFlee();
-    // lost them
-    if (u) {
-      const far = Math.hypot(u.x - (me || player).x, u.y - (me || player).y) > 110 * VPXK, seen = !far && pdSight(u.x, u.y, (me || player).x, (me || player).y);
-      if (!seen && far) PD.lostT += dt; else PD.lostT = Math.max(0, PD.lostT - dt * 2);
-      if (PD.lostT > (PD.st === "flee" ? 10 : 7)) { pdBanner(null); if (typeof itToast === "function") itToast("🚔 You lost the police", "#69f0ae"); pdEnd(false); PD.cool = runTime + 30; }
+    const mph = me ? pdMph(me) : 0, target = me || player;
+    const pursuer = PD.off || u;
+    const near = pursuer && Math.hypot(pursuer.x - target.x, pursuer.y - target.y) < 22 * VPXK + (me ? me.D : 0);
+    // A fleeing suspect does not become a fresh speeding ticket just by stopping.
+    if (PD.st === "chase" && near && mph < 3 && me) { PD.stopT += dt; if (PD.stopT > 0.9) pdPullOver(); } else PD.stopT = Math.max(0, PD.stopT - dt);
+    if (PD.st === "flee") {
+      if (u && !me && near && !PD.off) pdExitOfficer();
+      const O = PD.off;
+      if (O) {
+        // A car fleeing at speed: return to the parked cruiser first; do not teleport aboard.
+        if (u && me && mph > 9) O.returning = true;
+        // If the suspect gets out close by, an officer can pursue on foot instead.
+        if (!me && Math.hypot(O.x - player.x, O.y - player.y) < 10 * VPXK) O.returning = false;
+        if (O.returning && u) {
+          const door = pdOfficerDoor(u);
+          if (pdWalkOfficer(O, door[0], door[1], dt, 70, 3)) {
+            PD.off = null; u.parked = false; u.mode = "join"; u.ti = 0;
+          }
+        } else if (!me) pdWalkOfficer(O, player.x, player.y, dt, 70, 45);
+      }
     }
-    if (!me && PD.chaseT > 4 && !near) { /* on foot and away from the car: they lose interest */ PD.lostT += dt; }
+    if (PD.st === "chase" && PD.chaseT > 16 && mph > 15) pdFlee();
+    // Losing sight is timed against the actual pursuer, not an empty parked car.
+    if (pursuer) {
+      const far = Math.hypot(pursuer.x - target.x, pursuer.y - target.y) > 110 * VPXK;
+      const seen = !far && pdSight(pursuer.x, pursuer.y, target.x, target.y);
+      if (!seen) PD.lostT += dt; else PD.lostT = Math.max(0, PD.lostT - dt * 2);
+      if (PD.lostT > (PD.st === "flee" ? 10 : 7)) {
+        pdBanner(null); if (typeof itToast === "function") itToast("🚔 You lost the police", "#69f0ae");
+        PD.cool = runTime + 30;
+        if (PD.off && u) { PD.st = "leave"; PD.returnT = 0; u.siren = false; PD.off.returning = true; }
+        else pdEnd(false);
+      }
+    }
   } else if (PD.st === "stop") {
-    if (me && pdMph(me) > 9) return pdFlee();
+    if ((me && pdMph(me) > 9) || pdLeftStop()) return pdFlee();
     // a cruiser that can't line up neatly (a tight spot, a curve) just stops where it is after a few seconds
     PD.parkT = (PD.parkT || 0) + dt;
     if (u && !u.parked && PD.parkT > 4 && Math.hypot(u.x - (me || player).x, u.y - (me || player).y) < 14 * VPXK + (me ? me.D : 0)) { u.parked = true; u.v = 0; }
@@ -222,46 +336,74 @@ function pdStep(dt) {
       PD.off = { x: tgt.x - c * 8 * VPXK, y: tgt.y - s * 8 * VPXK, face: tgt.ang || 0, walk: 0 }; PD.st = "walk"; return;
     }
     if (u && u.parked) {
-      // the officer gets out on the driver's side and walks to your window
-      const c = Math.cos(u.ang), s = Math.sin(u.ang);
-      PD.off = { x: u.x + s * (u.wpx / 2 + 10), y: u.y - c * (u.wpx / 2 + 10), face: u.ang, walk: 0 };
-      PD.st = "walk";
+      // The officer actually gets out before walking up or taking cover.
+      pdExitOfficer(); PD.st = "walk";
     }
-  } else if (PD.st === "walk") {
-    if (me && pdMph(me) > 9) return pdFlee();
+  } else if (PD.st === "walk" || PD.st === "cover") {
+    if ((me && pdMph(me) > 9) || pdLeftStop()) return pdFlee();
+    if (pdActiveFight()) {
+      if (PD.st !== "cover") { PD.st = "cover"; pdBanner("🚔 OFFICER TAKING COVER", "Active fight — the traffic stop can wait"); }
+      PD.quietT = 0;
+      if (PD.off) { PD.off.face = Math.atan2(player.y - PD.off.y, player.x - PD.off.x); PD.off.walk = 0; }
+      return;
+    }
+    if (PD.st === "cover") {
+      PD.quietT = (PD.quietT || 0) + dt;
+      if (PD.quietT < 3) return;
+      PD.st = "walk"; pdBanner("🚔 PULLED OVER", "The officer is coming to speak with you");
+    }
     const O = PD.off, tgt = me || player, c = Math.cos(tgt.ang || 0), s = Math.sin(tgt.ang || 0);
     const tx = me ? me.x + s * (me.L / 2 + 13) + c * me.D * 0.1 : player.x - 26, ty = me ? me.y - c * (me.L / 2 + 13) + s * me.D * 0.1 : player.y;
-    const dx = tx - O.x, dy = ty - O.y, d = Math.hypot(dx, dy), sp = 62 * dt;
-    if (d > 3) { O.x += dx / d * Math.min(sp, d); O.y += dy / d * Math.min(sp, d); O.face = Math.atan2(dy, dx); O.walk += dt * 9; }
-    else { O.face = Math.atan2(tgt.y - O.y, tgt.x - O.x); O.walk = 0; pdTalk(); }
+    // Approach the driver using the same collision-aware walker as pursuit
+    // and return-to-car; a routine stop must not walk through a building.
+    if (!O) { pdEnd(true); return; }
+    const ox = O.x, oy = O.y;
+    if (pdWalkOfficer(O, tx, ty, dt, 62, 3)) { O.face = Math.atan2(tgt.y - O.y, tgt.x - O.x); O.walk = 0; pdTalk(); }
+    else {
+      O.approachStill = Math.hypot(O.x - ox, O.y - oy) < .05 ? (O.approachStill || 0) + dt : Math.max(0, (O.approachStill || 0) - dt * 2);
+      if (O.approachStill > 12) {
+        // An inaccessible driver's window must not hold the encounter open
+        // forever. Cancel without issuing a ticket, then physically return.
+        PD.st = "leave"; PD.returnT = 0; PD.cool = runTime + 30; PD.pend = null; PD.why = [];
+        if (u) u.siren = false;
+        O.returning = true; pdBanner(null);
+        if (typeof itToast === "function") itToast("🚔 Officer unable to reach the vehicle — stop ended", "#90caf9");
+      }
+    }
   } else if (PD.st === "leave") {
     const O = PD.off;
     if (O && u) {
-      const c = Math.cos(u.ang), s = Math.sin(u.ang), tx = u.x + s * (u.wpx / 2 + 10), ty = u.y - c * (u.wpx / 2 + 10);
-      const dx = tx - O.x, dy = ty - O.y, d = Math.hypot(dx, dy);
-      if (d > 3) { O.x += dx / d * Math.min(62 * dt, d); O.y += dy / d * Math.min(62 * dt, d); O.face = Math.atan2(dy, dx); O.walk += dt * 9; }
-      else { PD.off = null; u.parked = false; u.siren = false; PD.leaveT = runTime; }
+      PD.returnT = (PD.returnT || 0) + dt;
+      // An unreachable cruiser must not lock police encounters forever. Clean up
+      // only when both officer and parked cruiser are out of view; no car is spawned.
+      if (PD.returnT > 30 && !pdOnScreen(O.x, O.y) && !pdOnScreen(u.x, u.y)) { pdEnd(true); return; }
+      const door = pdOfficerDoor(u);
+      if (pdWalkOfficer(O, door[0], door[1], dt, 62, 3)) { PD.off = null; u.parked = false; u.siren = false; PD.leaveT = runTime; }
     } else if (u && (!pdOnScreen(u.x, u.y) || runTime - (PD.leaveT || runTime) > 12)) pdEnd(false);
     else if (!u) pdEnd(false);
   }
+  pdSurrenderControl(PD.st === "flee" && pdCanSurrender());
 }
 function pdPullOver() {
-  PD.st = "stop"; PD.stopT = 0; PD.parkT = 0; PD.stats.stops++;
+  PD.st = "stop"; PD.stopT = 0; PD.parkT = 0; PD.stopX = player.x; PD.stopY = player.y; PD.quietT = 0; PD.stats.stops++;
   pdBanner("🚔 PULLED OVER", "Stay in the car — the officer is coming");
   const u = PD.unit; if (u) u.mode = "direct";
 }
 function pdFlee() {
+  if (PD.panel && (PD.st === "talk" || PD.st === "surrender")) runPaused = PD.wasPaused;
   if (PD.panel) pdClosePanel();
   if (PD.st !== "flee") {
-    PD.st = "flee"; PD.chaseT = 0; PD.off = null; if (PD.unit) { PD.unit.parked = false; PD.unit.siren = true; PD.unit.mode = "join"; }
+    PD.st = "flee"; PD.chaseT = 0; if (PD.unit) { PD.unit.parked = !!PD.off; PD.unit.siren = true; PD.unit.mode = "join"; }
     pdBanner("🚨 EVADING POLICE", "Lose them — or stop and face the music");
-    if (typeof ECO !== "undefined" && ECO.on && typeof ecoSetLevel === "function") { ECO.W.heat = Math.max(ECO.W.heat + 25, (typeof ECO_LVL !== "undefined" ? ECO_LVL[2] : 55) + 1); ECO.W.lastSeen = runTime; ecoSetLevel(); }
+    if (!PD.why.includes("evade") && typeof ECO !== "undefined" && ECO.on && typeof ecoSetLevel === "function") { ECO.W.heat = Math.max(ECO.W.heat + 25, (typeof ECO_LVL !== "undefined" ? ECO_LVL[2] : 55) + 1); ECO.W.lastSeen = runTime; ecoSetLevel(); }
     PD.why = [...new Set(PD.why.concat(["evade"]))];
   }
 }
 function pdEnd(quiet) {
+  pdSurrenderControl(false);
+  if (PD.panel && (PD.st === "talk" || PD.st === "surrender")) runPaused = PD.wasPaused;
   pdClosePanel(); pdBanner(null);
-  if (PD.unit && !quiet && typeof trfRemap === "function" && TRF.net && PD.unit.v >= 0) {
+  if (PD.unit && !PD.off && !quiet && typeof trfRemap === "function" && TRF.net && PD.unit.v >= 0) {
     // back into the traffic as a normal patrol car
     const u = PD.unit, [x, y] = trfM(u.x, u.y);
     const c = { id: TRF.id++, L: null, d: 1, s: 0, q: 0, v: u.v / 32, v0: 0, k: u.k, pv: 8, police: true, siren: false, h: u.h, hint: { i: 0 }, st: 0, next: null, wait: 0, stopT: 0, blockT: 0, honkT: 0,
@@ -269,7 +411,36 @@ function pdEnd(quiet) {
     const r = trfRemap({ c, x, y, hx: Math.cos(u.ang), hy: Math.sin(u.ang) });
     if (r) TRF.cars.push(r);
   }
-  PD.unit = null; PD.off = null; PD.st = "idle"; PD.pend = null; PD.why = []; PD.chaseT = 0; PD.stopT = 0; PD.lostT = 0; PD.callT = 0;
+  PD.unit = null; PD.off = null; PD.st = "idle"; PD.pend = null; PD.why = []; PD.chaseT = 0; PD.stopT = 0; PD.lostT = 0; PD.callT = 0; PD.stopX = null; PD.stopY = null; PD.quietT = 0;
+}
+// An explicit, optional off-ramp.  The player must actually stop near the
+// pursuing officer (or occupied cruiser); no dialogue interrupts a firefight.
+function pdCanSurrender() {
+  if (PD.st !== "flee" || PD.panel || !player || (player.flyAlt || 0) > 3 || pdActiveFight()) return false;
+  const me = VEH.me, pursuer = PD.off || PD.unit;
+  if (!pursuer || (me ? pdMph(me) > 3 : Math.hypot(player.vx || 0, player.vy || 0) > 40)) return false;
+  const target = me || player;
+  return Math.hypot(pursuer.x - target.x, pursuer.y - target.y) < 12 * 32 * pdK() && pdSight(pursuer.x, pursuer.y, target.x, target.y);
+}
+function pdSurrenderControl(show) {
+  let b = PD.surrenderButton;
+  if (!b && show) {
+    b = document.createElement("button"); b.id = "pdSurrender"; b.type = "button";
+    b.textContent = "✋ SURRENDER";
+    b.style.cssText = "position:fixed;left:50%;top:calc(max(8px,env(safe-area-inset-top)) + 126px);transform:translateX(-50%);z-index:9601;min-height:48px;padding:8px 20px;border-radius:12px;border:2px solid #90caf9;background:#15243a;color:white;font:700 15px system-ui,sans-serif;touch-action:manipulation";
+    b.addEventListener("pointerdown", e => e.stopPropagation());
+    b.addEventListener("click", e => { e.stopPropagation(); pdOfferSurrender(); });
+    document.body.appendChild(b); PD.surrenderButton = b;
+  }
+  if (b) b.style.display = show ? "block" : "none";
+}
+function pdOfferSurrender() {
+  if (!pdCanSurrender()) { pdSurrenderControl(false); return; }
+  PD.st = "surrender"; PD.wasPaused = runPaused; runPaused = true; pdSurrenderControl(false);
+  const carText = VEH.me ? " Your current vehicle will be impounded." : "";
+  pdPanel("Turn yourself in?", "You can spend the night in jail and be released in the morning. Your current wanted status will be cleared." + carText,
+    [["✋ Surrender · serve time", () => { pdClosePanel(); pdJail(0, true); }],
+     ["↩ Keep going", () => { pdClosePanel(); runPaused = PD.wasPaused; PD.st = "flee"; }]]);
 }
 // fines (dollars): speeding by how far over, crashes, red lights, evading
 function pdFine(P, rude) {
@@ -326,25 +497,36 @@ function pdPay(fine) {
 }
 function pdRelease() {
   pdClosePanel(); runPaused = PD.wasPaused;
-  PD.st = "leave"; PD.cool = runTime + 20; PD.pend = null;
+  PD.st = "leave"; PD.returnT = 0; PD.cool = runTime + 20; PD.pend = null;
 }
 
 /* --- 4. A NIGHT IN JAIL -------------------------------------------------------------------------------------------- */
-function pdJail(fine) {
+function pdCancelJail() {
+  PD.jailSeq = (PD.jailSeq || 0) + 1;
+  for (const id of PD.jailTimers || []) clearTimeout(id);
+  PD.jailTimers = [];
+  const old = document.getElementById("pdJail"); if (old) old.remove();
+}
+function pdJail(fine, voluntary) {
+  pdCancelJail(); pdSurrenderControl(false); pdBanner(null);
+  const seq = PD.jailSeq, later = (fn, ms) => {
+    const id = setTimeout(() => { if (PD.jailSeq === seq) fn(); }, ms); PD.jailTimers.push(id);
+  };
+  const hadCar = !!VEH.me;
   PD.st = "jail"; PD.stats.jail++;
   runPaused = true;
   const ov = document.createElement("div");
   ov.id = "pdJail";
   ov.style.cssText = "position:fixed;inset:0;z-index:9800;background:#000;opacity:0;transition:opacity .9s;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#eceff1;font:600 20px/1.5 system-ui,sans-serif;text-align:center;padding:24px";
-  ov.innerHTML = '<div style="font-size:13px;letter-spacing:4px;color:#90a4ae;margin-bottom:10px">' + tfEscPD(PD.agency.toUpperCase()) + '</div><div id="pdJ1">You couldn\'t afford the $' + fine + ' ticket.</div><div id="pdJ2" style="opacity:0;transition:opacity .8s;margin-top:8px">You spent the night in jail.</div>';
+  ov.innerHTML = '<div style="font-size:13px;letter-spacing:4px;color:#90a4ae;margin-bottom:10px">' + tfEscPD(PD.agency.toUpperCase()) + '</div><div id="pdJ1">' + (voluntary ? 'You surrendered to the police.' : 'You couldn\'t afford the $' + fine + ' ticket.') + '</div><div id="pdJ2" style="opacity:0;transition:opacity .8s;margin-top:8px">You spent the night in jail.</div>';
   document.body.appendChild(ov);
   requestAnimationFrame(() => { ov.style.opacity = "1"; });
-  setTimeout(() => { const e = document.getElementById("pdJ2"); if (e) e.style.opacity = "1"; }, 1700);
-  setTimeout(() => {
+  later(() => { const e = document.getElementById("pdJ2"); if (e) e.style.opacity = "1"; }, 1700);
+  later(() => {
     // the next morning, 7:00 — out the front door of the station, the car impounded
     try { pdMorningAfter(); } catch (e) { if (window.trackProgress) window.trackProgress("pdJail: " + e.message, true); }
     ov.innerHTML = '<div style="font-size:13px;letter-spacing:4px;color:#90a4ae">THE NEXT MORNING</div><div style="font-size:30px;margin-top:6px">7:00 AM</div><div style="font-size:15px;color:#b0bec5;margin-top:6px">Released · ' + tfEscPD(PD.agency) + '</div>';
-    setTimeout(() => { ov.style.opacity = "0"; setTimeout(() => { ov.remove(); runPaused = false; PD.st = "idle"; PD.cool = runTime + 30; pdNotify({ icon: "📋", app: "NOTICE", title: PD.agency, sub: "Released · time served — your car was impounded" }); }, 950); }, 2300);
+    later(() => { ov.style.opacity = "0"; later(() => { ov.remove(); runPaused = false; PD.st = "idle"; PD.cool = runTime + 30; PD.jailTimers = []; pdNotify({ icon: "📋", app: "NOTICE", title: PD.agency, sub: "Released · time served" + (hadCar ? " — your car was impounded" : "") }); }, 950); }, 2300);
   }, 4300);
 }
 function tfEscPD(s) { return String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
@@ -377,6 +559,105 @@ function pdMorningAfter() {
   if (typeof ECO !== "undefined" && ECO.W) { ECO.W.heat = 0; if (typeof ecoSetLevel === "function") ecoSetLevel(); }
   PD.unit = null; PD.off = null; PD.pend = null; PD.why = []; PD.trail.length = 0;
   if (typeof cityRunTick === "function") try { cityRunTick(); } catch (e) {}
+}
+
+/* --- Player-operated observational speed radar ---------------------------------
+   This is a deliberately limited, stationary cruiser tool, not enforcement or
+   a career. The scan selects the nearest moving vehicle in a narrow front/rear
+   cone on the SAME traffic-network link, with direct building/terrain sight.
+   That conservative association may miss traffic at intersections or on a
+   separate representation of the same road; never label a blank as all-clear.
+*/
+const PD_RADAR = { panel:null, mode:"front", next:0, target:null };
+function pdRadarScan(mode) {
+  if (!["front","rear","both"].includes(mode)) return {ok:false,why:"Select front, rear or both."};
+  const me = typeof VEH !== "undefined" ? VEH.me : null;
+  if (!runActive || !CITY.on || !player || !me || player.inVehicle !== 3 || me.kind !== "police" || me.dead || me.flyAir || !TRF.on || !TRF.net)
+    return {ok:false,why:"Radar is available in a working police cruiser on an active traffic map."};
+  const ownMph=pdMph(me);
+  if (!Number.isFinite(ownMph) || !Number.isFinite(me.ang)) return {ok:false,why:"Radar position or speed unavailable."};
+  if (ownMph > 3) return {ok:false,why:"Stop the cruiser to use radar."};
+  const origin=trfM(me.x,me.y), road=trfRoadAt(origin[0],origin[1]), k=pdK();
+  if (!road || !road.link || !Number.isFinite(road.mph) || !(k>0)) return {ok:false,why:"Park on a mapped road to use radar."};
+  const cs=Math.cos(me.ang), sn=Math.sin(me.ang), max=120*k*32, min=5*k*32, cosine=Math.cos(Math.PI/9);
+  let best=null;
+  function consider(id,x,y,mph,vx,vy,link,limit,name) {
+    if (![x,y,mph,vx,vy,limit].every(Number.isFinite) || link!==road.link || mph<1) return;
+    const dx=x-me.x,dy=y-me.y,dist=Math.hypot(dx,dy); if(dist<min || dist>max) return;
+    const forward=(dx*cs+dy*sn)/dist, sector=forward>=cosine?"front":forward<=-cosine?"rear":null;
+    if(!sector || (mode!=="both" && mode!==sector) || (best && dist>=best.dist))return;
+    if(!pdSight(me.x,me.y,x,y))return;
+    const radial=(dx*vx+dy*vy)/dist;
+    best={id,sector,mph,limit,name:String(name||"Mapped road"),x,y,metres:dist/(32*k),motion:Math.abs(radial)<0.25?"crossing":radial<0?"approaching":"receding",dist};
+  }
+  for(const c of TRF.cars) {
+    if(!c || c.dead || c.st!==0 || !c.L || !(c.k>0) || !Number.isFinite(c.ang))continue;
+    const x=c.x*32-CITY.orx,y=c.y*32-CITY.ory,sp=c.v*32;
+    consider("traffic:"+c.id,x,y,c.v/c.k/0.44704,Math.cos(c.ang)*sp,Math.sin(c.ang)*sp,c.L,c.L.lim,c.L.name);
+  }
+  for(const v of VEH.list) {
+    if(!v || v===me || v.dead || v.far || !PD_ROAD.has(v.kind) || v.flyAir)continue;
+    const dx=v.x-me.x,dy=v.y-me.y,d=Math.hypot(dx,dy); if(!Number.isFinite(d) || d<min || d>max)continue;
+    const forward=(dx*cs+dy*sn)/d; if(Math.abs(forward)<cosine || (mode==="front" && forward<0) || (mode==="rear" && forward>0))continue;
+    const px=trfM(v.x,v.y),targetRoad=trfRoadAt(px[0],px[1]); if(!targetRoad)continue;
+    consider("vehicle:"+String(v.key||"unidentified"),v.x,v.y,pdMph(v),v.vx||0,v.vy||0,targetRoad.link,targetRoad.mph,targetRoad.name);
+  }
+  if(best)delete best.dist;
+  return {ok:true,target:best};
+}
+function pdRadarClose() {
+  if(PD_RADAR.panel){PD_RADAR.panel.remove();PD_RADAR.panel=null;}
+  PD_RADAR.next=0;PD_RADAR.target=null;
+}
+function pdRadarRefresh() {
+  const panel=PD_RADAR.panel; if(!panel)return;
+  const result=pdRadarScan(PD_RADAR.mode), out=panel.querySelector(".radar-result");
+  PD_RADAR.target=result.ok?result.target:null;
+  let text;
+  if(!result.ok)text=result.why;
+  else if(!result.target)text="No matching moving vehicle in this beam. This is not an all-clear.";
+  else {
+    const t=result.target,unit=pdKmh()?"km/h":"mph", speed=pdKmh()?Math.round(t.mph*1.609344):Math.round(t.mph), limit=pdSpd(t.limit);
+    text=t.id+" · "+t.sector.toUpperCase()+" · "+t.motion+" · "+Math.round(t.metres)+" m\nSpeed "+speed+" "+unit+" · road limit "+limit+" "+unit+"\n"+t.name;
+  }
+  if(out.textContent!==text)out.textContent=text;
+  panel.querySelectorAll("[data-sector]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.sector===PD_RADAR.mode?"true":"false"));
+}
+function pdRadarOpen() {
+  if(PD_RADAR.panel){pdRadarClose();return;}
+  const check=pdRadarScan(PD_RADAR.mode);
+  if(!check.ok){if(typeof vehToast==="function")vehToast(check.why);return;}
+  const panel=document.createElement("section");panel.id="pdRadar";panel.setAttribute("role","region");panel.setAttribute("aria-label","Cruiser speed radar");
+  panel.style.cssText="position:fixed;right:max(8px,env(safe-area-inset-right));top:max(8px,env(safe-area-inset-top));z-index:9601;width:min(310px,calc(100vw - 24px));box-sizing:border-box;padding:12px;background:#121f2bf5;color:#edf8ff;border:1px solid #80deea;border-radius:12px;font:14px/1.35 system-ui,sans-serif;box-shadow:0 6px 22px #0009";
+  const title=document.createElement("strong");title.textContent="CRUISER RADAR · OBSERVATION ONLY";panel.appendChild(title);
+  const help=document.createElement("p");help.textContent="Stationary scan: nearest moving vehicle in the selected narrow beam on this mapped road. Buildings block sight; other cars do not. No automatic ticket or stop.";help.style.margin="6px 0";panel.appendChild(help);
+  const result=document.createElement("p");result.className="radar-result";result.setAttribute("aria-live","polite");result.style.cssText="white-space:pre-line;color:#b2f5ff;min-height:3em;margin:6px 0";panel.appendChild(result);
+  for(const [mode,label] of [["front","FRONT"],["rear","REAR"],["both","BOTH"]]){
+    const b=document.createElement("button");b.type="button";b.className="btn";b.dataset.sector=mode;b.textContent=label;b.style.cssText="min-width:60px;min-height:44px;margin:2px";b.onclick=()=>{PD_RADAR.mode=mode;pdRadarRefresh();};panel.appendChild(b);
+  }
+  const close=document.createElement("button");close.type="button";close.className="btn";close.textContent="CLOSE";close.style.cssText="min-width:60px;min-height:44px;margin:2px";close.onclick=pdRadarClose;panel.appendChild(close);
+  for(const ev of ["pointerdown","touchstart"])panel.addEventListener(ev,e=>e.stopPropagation(),{passive:true});
+  document.body.appendChild(panel);PD_RADAR.panel=panel;PD_RADAR.next=0;pdRadarRefresh();
+}
+// Both the actual vehicle and its minimap direction are marked; an ID alone
+// would not tell the player which of several traffic cars was measured.
+function pdRadarWorld(g) {
+  const t=PD_RADAR.panel && PD_RADAR.target;if(!t)return;
+  g.save();g.strokeStyle="#65f4ff";g.lineWidth=2;g.beginPath();g.arc(t.x,t.y,24,0,Math.PI*2);g.stroke();
+  g.font="bold 11px sans-serif";g.textAlign="center";g.fillStyle="#65f4ff";g.fillText("RADAR",t.x,t.y-30);g.restore();
+}
+function pdRadarMini(g) {
+  const t=PD_RADAR.panel && PD_RADAR.target;
+  if(!t || !runActive || typeof MAPV==="undefined" || MAPV.open || (typeof HUDL!=="undefined" && HUDL.enabled && HUDL.miniHidden))return;
+  const r=miniRect(),mpp=MAPV.miniSizes[MAPV.mini],[px,py]=mapPlayerM();
+  let dx=((t.x+CITY.orx)/32-px)/mpp,dy=((t.y+CITY.ory)/32-py)/mpp;
+  const lim=r.S/2-10,k=Math.min(1,lim/Math.max(Math.abs(dx),Math.abs(dy),1));dx*=k;dy*=k;
+  g.save();g.fillStyle="#65f4ff";g.strokeStyle="#08212a";g.lineWidth=2;g.beginPath();g.arc(r.x+r.S/2+dx,r.y+r.S/2+dy,6,0,Math.PI*2);g.fill();g.stroke();g.fillStyle="#08212a";g.textAlign="center";g.textBaseline="middle";g.font="bold 9px sans-serif";g.fillText("R",r.x+r.S/2+dx,r.y+r.S/2+dy);g.restore();
+}
+function pdRadarFrame() {
+  if(!PD_RADAR.panel)return;
+  if(!runActive || !CITY.on || !player || !VEH.me || player.inVehicle!==3 || VEH.me.kind!=="police" || (typeof MAPV!=="undefined" && MAPV.open) || PD.panel){pdRadarClose();return;}
+  const now=performance.now(); if(now<PD_RADAR.next)return;PD_RADAR.next=now+350;pdRadarRefresh();
 }
 
 /* --- 5. UI: the talk panel, the banner, the bank notification ---------------------------------------------------- */
@@ -461,9 +742,14 @@ function pdLights(push) {
 /* --- 7. WIRING --------------------------------------------------------------------------------------------------- */
 (function pdWire() {
   if (typeof V10 !== "undefined") {
-    V10.onRunStart.push(() => { pdClosePanel(); pdBanner(null); const j = document.getElementById("pdJail"); if (j) j.remove(); PD.st = "idle"; PD.unit = null; PD.off = null; PD.pend = null; PD.trail = []; PD.cool = 0; PD.lastCrash = typeof VEH !== "undefined" && VEH.stats ? VEH.stats.crashes : 0; PD.speedT = 0; PD.why = []; });
+    V10.onRunReset.push(() => { pdRadarClose(); if (typeof TRF !== "undefined") TRF.view = null; pdCancelJail(); pdSurrenderControl(false); pdClosePanel(); pdBanner(null); PD.unit = null; PD.off = null; PD.st = "idle"; });
+    V10.onRunStart.push(() => { pdRadarClose(); if (typeof TRF !== "undefined") TRF.view = null; pdCancelJail(); pdSurrenderControl(false); pdClosePanel(); pdBanner(null); PD.st = "idle"; PD.unit = null; PD.off = null; PD.pend = null; PD.trail = []; PD.cool = 0; PD.lastCrash = typeof VEH !== "undefined" && VEH.stats ? VEH.stats.crashes : 0; PD.speedT = 0; PD.why = []; });
+    V10.onRenderWorld.push(g => { if(CITY.on && runActive)pdRadarWorld(g); });
+    V10.onRenderScreen.push(g => { if(CITY.on && runActive)pdRadarMini(g); });
+    V10.onFrame.push(() => { try { pdRadarFrame(); } catch (e) { pdRadarClose(); if (window.trackProgress) window.trackProgress("radar: " + e.message, true); } });
     V10.onStep.push(dt => { try { pdStep(dt); } catch (e) { if (window.trackProgress) window.trackProgress("police: " + e.message, true); pdEnd(true); } });
   }
+  window.addEventListener("keydown", e => { if(e.key === "Escape" && PD_RADAR.panel) { e.preventDefault(); e.stopImmediatePropagation(); pdRadarClose(); } }, true);
   if (typeof TRF !== "undefined") TRF.onCrash = (c, v) => { if (PD.on) pdOffense("crash", { what: "a car" }); };
   if (typeof vehRenderLayer === "function") { const _vr = vehRenderLayer; window.vehRenderLayer = vehRenderLayer = function (g, l, t, vw, vh) { _vr(g, l, t, vw, vh); try { pdDraw(g, l, t, vw, vh); } catch (e) {} }; }
   if (typeof scnLights === "function") { const _sl = scnLights; window.scnLights = scnLights = function (push) { _sl(push); pdLights(push); }; }

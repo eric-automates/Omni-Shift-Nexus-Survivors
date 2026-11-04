@@ -77,11 +77,11 @@ const VEH_FURN_T = new Set(["car", "firetruck", "forklift", "tractor"]);
 const VEH = {
   list: [], byKey: new Map(), uid: 1, me: null, debris: [], skids: [], rebuild: new Map(), refresh: [],
   units: "mph", steer: "point", hornT: 0, msgT: 0, lastMsg: "", stats: { crashes: 0, parts: 0, kills: 0, explosions: 0 },
-  baseSpr: new Map(), grid: new Map(), gridFrame: -1, tmpC: [], camZoom: 1
+  baseSpr: new Map(), grid: new Map(), gridFrame: -1, tmpC: [], camZoom: 1, squealLast: -1e9
 };
 function vehReset() {
   VEH.list.length = 0; VEH.byKey.clear(); VEH.me = null; VEH.lastMine = null; VEH.debris.length = 0; VEH.skids.length = 0; VEH.rebuild.clear(); VEH.refresh.length = 0;
-  VEH.baseSpr.clear(); VEH.grid.clear(); VEH.camZoom = 1; if (VEH.healed) VEH.healed.clear(); VEH.stats = { crashes: 0, parts: 0, kills: 0, explosions: 0 };
+  VEH.baseSpr.clear(); VEH.grid.clear(); VEH.camZoom = 1; VEH.squealLast = -1e9; if (VEH.healed) VEH.healed.clear(); VEH.stats = { crashes: 0, parts: 0, kills: 0, explosions: 0 };
   if (typeof cityRT !== "undefined") { cityRT.gopen = cityRT.gopen || new Set(); cityRT.gopen.clear(); cityRT.fenceBroken = cityRT.fenceBroken || new Set(); cityRT.fenceBroken.clear(); }
 }
 function vehHash(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
@@ -161,8 +161,72 @@ function vehPromoteProp(p, why) {
   const v = vehNew(kind, P.x, P.y, P.ang, P.L / pk, P.D / pk, { key, h, v: p.v | 0, themed: p.t === "car", art: p.t, wreck: !!p.wreck, fuel: p.fuel, k: pk });
   if (p.dyn) { const i = cityRT.dyn.indexOf(p); if (i >= 0) cityRT.dyn.splice(i, 1); } else cityRT.used.add(key);
   vehQueueRebuild(p.x + p.w / 2, p.y + p.h / 2, P.x, P.y, Math.max(P.L, P.D));
+  if (p.t === "tractor" && !v.dead) {
+    v.spawnHayOrigin={x:v.x,y:v.y,ang:v.ang};
+    if (why === "convoy") { vehClearEmbeddedHay(v); v.spawnHayOrigin=null; }
+  }
+  if (p.t === "armytruck" && !v.dead) {
+    v.spawnStopOrigin = { x:v.x, y:v.y, ang:v.ang };
+    if (why === "convoy") { vehClearEmbeddedStop(v); v.spawnStopOrigin = null; }
+  }
   v.why = why || "";
   return v;
+}
+// Old generated worlds may overlap a parked tractor with hay or a roadblock
+// truck with a bus stop. Repair only those original overlaps on first entry
+// (or convoy promotion), without changing the world seed. Move the prop to a
+// genuinely clear nearby tile; if none exists, leave it rather than deleting it.
+function vehClearEmbeddedHay(v) { return vehClearEmbeddedProp(v, "haybale"); }
+function vehClearEmbeddedStop(v) { return vehClearEmbeddedProp(v, "busstop"); }
+function vehClearEmbeddedProp(v, propType) {
+  const radius=Math.ceil((Math.hypot(v.L,v.D)/2+64)/16),tx=cityTX(v.x),ty=cityTY(v.y), found=new Map();
+  const vbox=vehBox(v,{}), clearance=Object.assign({},vbox,{hf:vbox.hf+96,hw:vbox.hw+12});
+  for(let cy=(ty-radius)>>7;cy<=(ty+radius)>>7;cy++)for(let cx=(tx-radius)>>7;cx<=(tx+radius)>>7;cx++) {
+    for(const p of cityChunk(cx,cy).props) {
+      if(!p || p.t!==propType || p.dyn || !p.key || cityRT.used.has(p.key))continue;
+      const x0=Math.floor(p.x),y0=Math.floor(p.y),x1=Math.ceil(p.x+p.w),y1=Math.ceil(p.y+p.h);
+      const box={cx:(x0+x1)*8-CITY.orx,cy:(y0+y1)*8-CITY.ory,c:1,s:0,hf:(x1-x0)*8,hw:(y1-y0)*8};
+      if(vehSAT(vbox,box))found.set(p.key,p);
+    }
+  }
+  let count=0;
+  for(const p of found.values()) {
+    if(cityRT.dyn.filter(d=>d.movedFrom).length>=128)break; // bounded per run; never delete a prop to make room
+    let dest=null;
+    // The original prop may straddle tiles; its moved representation uses
+    // whole tiles so clearance and new collision stamping agree exactly.
+    const w=Math.ceil(p.w),h=Math.ceil(p.h);
+    for(let r=4;r<=14&&!dest;r++)for(let dy=-r;dy<=r&&!dest;dy++)for(let dx=-r;dx<=r&&!dest;dx++) {
+      if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;
+      const x=tx+dx,y=ty+dy,lx=(x+w/2)*16-CITY.orx,ly=(y+h/2)*16-CITY.ory;
+      let clear=true;
+      for(let yy=y;yy<y+h&&clear;yy++)for(let xx=x;xx<x+w;xx++)if(cityFlagsT(xx,yy)&(F_MOVE|F_IN|F_WATER)){clear=false;break;}
+      if(!clear)continue;
+      const box={cx:lx,cy:ly,c:1,s:0,hf:w*8,hw:h*8};
+      if(vehSAT(clearance,box) || VEH.list.some(u=>!u.far&&vehSAT(vehBox(u,{}),box)))continue;
+      // Do not place a prop over an actor or live traffic. Non-simulated
+      // objects are still handled by the real collision tiles above.
+      const safeR=Math.hypot(w,h)*8+12, near=(x,y)=>Math.hypot(lx-x,ly-y)<safeR;
+      if(player && !player.inVehicle && near(player.x,player.y))continue;
+      if(typeof TF!=="undefined" && TF.walk && TF.walk.some(a=>a.alive&&a.w&&!a.w.inside&&near(a.w.x,a.w.y)))continue;
+      let occupied=false;
+      if(typeof eAct!=="undefined")for(let i=0;i<eAct.length;i++)if(eAct[i]&&near(eX[i],eY[i])){occupied=true;break;}
+      if(!occupied && typeof mAct!=="undefined")for(let i=0;i<mAct.length;i++)if(mAct[i]&&near(mX[i],mY[i])){occupied=true;break;}
+      if(occupied)continue;
+      if(typeof TRF!=="undefined" && TRF.on && TRF.cars && TRF.cars.some(c=>!c.dead&&Math.hypot(lx-(c.x*32-CITY.orx),ly-(c.y*32-CITY.ory))<safeR+Math.max(c.wpx,c.lpx)/2))continue;
+      if(typeof trfRoadAt==="function" && typeof TRF!=="undefined" && TRF.net && trfRoadAt((lx+CITY.orx)/32,(ly+CITY.ory)/32))continue;
+      dest={x,y,w,h,lx,ly};
+    }
+    if(!dest)continue;
+    cityRT.used.add(p.key);
+    cityRT.dyn.push(Object.assign({},p,{x:dest.x,y:dest.y,w:dest.w,h:dest.h,key:p.key+"|moved",dyn:true,movedFrom:p.key}));
+    vehQueueRebuild(p.x+p.w/2,p.y+p.h/2,(p.x+p.w/2)*16-CITY.orx,(p.y+p.h/2)*16-CITY.ory,Math.max(p.w,p.h)*16+16);
+    vehQueueRebuild(dest.x+dest.w/2,dest.y+dest.h/2,dest.lx,dest.ly,Math.max(dest.w,dest.h)*16+16);
+    count++;
+  }
+  if (propType === "haybale") v.spawnHayMoved = count;
+  else v.spawnStopMoved = count;
+  return count;
 }
 // interior vehicles (garage cars, fire engines, barn tractors, warehouse forklifts)
 function vehPromoteFurn(b, fi, why) {
@@ -482,7 +546,7 @@ function vehNearestOcc(v, lx, ly, r) {
 // one hit on the vehicle. type: crash | person | bullet | blast | melee | scrape. Returns the share that reaches an occupant.
 function vehDamage(v, lx, ly, dv, type, nx, ny, src) {
   const S = v.S, arm = S.arm, vk = v.k || 1;
-  let hp = 0, dent = 0, partHit = 0, R = Math.max(18 * vk, Math.min(v.L * 0.62, 36 * vk)), glass = 0, pass = 0;
+  let hp = 0, dent = 0, partHit = 0, R = Math.max(18 * vk, Math.min(v.L * 0.62, 36 * vk)), glass = 0, pass = 0, faceGlassHit = null;
   switch (type) {
     case "crash": hp = Math.max(0, dv - 96) * 0.075 * arm; dent = Math.max(0, dv - 96) * 0.075 * Math.sqrt(arm); partHit = hp * 1.3; glass = dv > 420 ? 2 : dv > 260 ? 1 : 0; break;
     case "person": { const mr = (src && src.mass || 80) / 80; hp = Math.max(0, dv - 150) * 0.01 * mr * arm; dent = Math.max(0, dv - 100) * 0.004 * mr; partHit = hp * 2; glass = dv > 400 ? 1 : 0; R = 16 * vk; break; }
@@ -511,7 +575,7 @@ function vehDamage(v, lx, ly, dv, type, nx, ny, src) {
     const face = ly < -v.D / 2 + 7 * vk ? "F" : ly > v.D / 2 - 7 * vk ? "B" : Math.abs(lx) > v.L / 2 - 6 * vk ? (lx < 0 ? "L" : "R") : null;
     const gp = face && v.parts.find(p => p.kind === "glass" && p.on !== undefined && (face === "F" ? p.front : face === "B" ? p.rear : face === "L" ? p.side < 0 && !p.front && !p.rear : p.side > 0 && !p.front && !p.rear));
     if (gp && Math.random() < (face === "F" ? 0.45 : 0.4)) {
-      if (gp.on) { gp.hp -= 1; v.sprDirty = true; if (gp.hp <= 0) vehDetach(v, gp, nx, ny); }
+      if (gp.on) { faceGlassHit = gp; gp.hp -= 1; v.sprDirty = true; if (gp.hp <= 0) vehDetach(v, gp, nx, ny); }
       pass = Math.max(pass, gp.on ? 0.55 : 0.9);
       lx = gp.x + gp.w / 2; ly = gp.y + gp.h / 2;   // the round continues from the glass toward the seats
     }
@@ -531,6 +595,9 @@ function vehDamage(v, lx, ly, dv, type, nx, ny, src) {
     if (d >= R) continue;
     const share = 1 - d / R;
     if (p.kind === "glass" || p.kind === "sunroof") {
+      // The 2.5D face-hit above already applied this bullet to this pane.
+      // Do not damage the same pane again in the proximity pass.
+      if (p === faceGlassHit) continue;
       if (glass && share > (type === "bullet" ? 0 : 0.25)) { p.hp -= glass; v.sprDirty = true; if (p.hp <= 0) vehDetach(v, p, nx, ny); else if (typeof sfx === "function" && vehNearPlayer(v, 700)) sfx(2400, 1600, 0.04, "triangle", 0.04); }
       if (type === "bullet" && share > 0) pass = Math.max(pass, p.on ? 0.55 : 0.9);
       continue;
@@ -541,7 +608,10 @@ function vehDamage(v, lx, ly, dv, type, nx, ny, src) {
   }
   if (type === "bullet") { if (pass === 0) pass = Math.abs(ly) < v.D * 0.25 ? 0.25 : 0; for (const p of v.parts) if (p.kind === "door" && !p.on && Math.abs(p.y + p.h / 2 - ly) < p.h && Math.sign(lx) === p.side) pass = 1; }
   if (type === "blast") pass = 0.45;
-  if (v.hp <= 0 && !v.dead && !v.burnt) vehDisable(v, type);
+  if (v.hp <= 0 && !v.dead && !v.burnt) {
+    v.disableBy = typeof src === "string" ? src : (src && src.player ? "player" : "unknown");
+    vehDisable(v, type);
+  }
   v.awake = true; v.sleep = 0;
   return pass;
 }
@@ -598,28 +668,28 @@ function vehExplode(v) {
   v.fire = 0; v.burnt = true; v.dead = true; v.scorch = 1; v.sprDirty = true; VEH.stats.explosions++;
   for (const p of v.parts) if (p.on && (p.kind === "glass" || p.kind === "door" || p.kind === "hood" || p.kind === "trunk" || p.kind === "sunroof" || p.kind === "canvas" || Math.random() < 0.35)) vehDetach(v, p, 0, 0);
   const R = 110 + Math.min(80, v.m / 200), dmg = 60 + (typeof waveNum === "number" ? waveNum : 1) * 9;
-  if (typeof triggerRocketDetonation === "function") triggerRocketDetonation(v.x, v.y, dmg, R);
+  if (typeof triggerRocketDetonation === "function") triggerRocketDetonation(v.x, v.y, dmg, R, v.disableBy || "unknown");
   if (typeof noiseEmit === "function") noiseEmit(v.x, v.y, 150, "explosion", 1);
   if (typeof cityDecal === "function") cityDecal(v.x, v.y, "scorch", 0);
   // occupants are thrown clear; people nearby get hurt (the player only when still inside / close)
   if (typeof convoyEjectAll === "function") convoyEjectAll(v, true);
-  if (player && !(player.invulnT > 0)) { const d = Math.hypot(player.x - v.x, player.y - v.y); if (d < R) { player.hp -= player.maxHp * 0.32 * (1 - d / R); if (player.hp <= 0 && typeof resolvePlayerDeath === "function") resolvePlayerDeath(); } }
-  vehBlast(v.x, v.y, R * 1.25, 18, v);
+  if (player && !(player.invulnT > 0) && (v === VEH.me || v.flyAir || !(typeof flyGroundSeparated === "function" && flyGroundSeparated()))) { const d = Math.hypot(player.x - v.x, player.y - v.y); if (d < R) { player.hp -= player.maxHp * 0.32 * (1 - d / R); if (player.hp <= 0 && typeof resolvePlayerDeath === "function") resolvePlayerDeath(); } }
+  vehBlast(v.x, v.y, R * 1.25, 18, v, v.disableBy || "unknown");
 }
 // a blast pushes and damages every vehicle around it (chain reactions)
-function vehBlast(x, y, R, power, skip) {
+function vehBlast(x, y, R, power, skip, owner) {
   for (const u of VEH.list) {
-    if (u === skip) continue;
+    if (u === skip || (u.flyAir && (u.flyAlt || 0) > 60 && !(skip && skip.flyAir))) continue;
     const d = Math.hypot(u.x - x, u.y - y) - Math.min(u.L, u.D) * 0.4;
     if (d >= R) continue;
     const f = 1 - Math.max(0, d) / R, ax = (u.x - x) / (Math.hypot(u.x - x, u.y - y) || 1), ay = (u.y - y) / (Math.hypot(u.x - x, u.y - y) || 1);
     const kick = 520 * f * Math.min(1.6, 1400 / u.m);
     u.vx += ax * kick; u.vy += ay * kick; u.w += (Math.random() - 0.5) * 3 * f * Math.min(1.5, 1400 / u.m);
     const [lx, ly] = vehToLocal(u, u.x - ax * Math.min(u.L, u.D) * 0.5, u.y - ay * Math.min(u.L, u.D) * 0.5);
-    vehDamage(u, lx, ly, power * f * 2.2, "blast", ax, ay, null);
+    vehDamage(u, lx, ly, power * f * 2.2, "blast", ax, ay, owner || "unknown");
   }
   // parked vehicles in the blast wake up and take it too
-  if (CITY.on) for (const q of vehNearby(x, y, R * 0.8)) if (!q.v && !q.wreck) { const v = vehMakeLive(q, "blast"); if (v && v !== skip) { const dd = Math.hypot(v.x - x, v.y - y) || 1; v.vx += (v.x - x) / dd * 160; v.vy += (v.y - y) / dd * 160; const [lx, ly] = vehToLocal(v, x, y); vehDamage(v, lx, ly, power * 1.6 * (1 - Math.min(1, dd / R)), "blast", 0, 0, null); } }
+  if (CITY.on) for (const q of vehNearby(x, y, R * 0.8)) if (!q.v && !q.wreck) { const v = vehMakeLive(q, "blast"); if (v && v !== skip) { const dd = Math.hypot(v.x - x, v.y - y) || 1; v.vx += (v.x - x) / dd * 160; v.vy += (v.y - y) / dd * 160; const [lx, ly] = vehToLocal(v, x, y); vehDamage(v, lx, ly, power * 1.6 * (1 - Math.min(1, dd / R)), "blast", 0, 0, owner || "unknown"); } }
 }
 function vehToast(msg, col) {
   if (VEH.lastMsg === msg && runTime - VEH.msgT < 2.5) return;
@@ -718,13 +788,13 @@ function vehTryBreak(v, C, speed) {
 }
 function vehBreakProp(p, v, ms) {
   if (!p.key) return;
-  cityRT.used.add(p.key);
+  if (p.dyn) { const i=cityRT.dyn.indexOf(p); if(i>=0)cityRT.dyn.splice(i,1); } else cityRT.used.add(p.key);
   const x = (p.x + p.w / 2) * 16 - CITY.orx, y = (p.y + p.h / 2) * 16 - CITY.ory;
   vehQueueRebuild(p.x + p.w / 2, p.y + p.h / 2, x, y, Math.max(p.w, p.h) * 16 + 16);
   const n = Math.min(14, 5 + Math.floor(ms));
   for (let k = 0; k < n; k++) spawnPt(x, y, v.vx * 0.4 + (Math.random() - 0.5) * 160, v.vy * 0.4 + (Math.random() - 0.5) * 160, 0.6, 2.2, p.t === "haybale" ? 6 : 4, 3);
   if (p.t === "hydrant") VEH.geysers = (VEH.geysers || []).concat([{ x, y, t: 14 }]);
-  if (p.t === "pump") { triggerRocketDetonation(x, y, 70, 130); vehBlast(x, y, 150, 16, null); if (typeof noiseEmit === "function") noiseEmit(x, y, 150, "explosion", 1); }
+  if (p.t === "pump") { triggerRocketDetonation(x, y, 70, 130, v.drv === "P" ? "player" : "unknown"); vehBlast(x, y, 150, 16, null, v.drv === "P" ? "player" : "unknown"); if (typeof noiseEmit === "function") noiseEmit(x, y, 150, "explosion", 1); }
   if (typeof noiseEmit === "function") noiseEmit(x, y, 84, "crash", 1);
   if (vehNearPlayer(v, 800) && typeof sfx === "function") sfx(220, 90, 0.1, "square", 0.08);
   VEH.debris.push({ x, y, vx: v.vx * 0.6, vy: v.vy * 0.6, a: Math.random() * 6, w: (Math.random() - 0.5) * 9, kind: "prop", pw: Math.min(18, p.w * 12), ph: Math.min(10, p.h * 10), col: p.t === "hydrant" ? "#d32f2f" : p.t === "mailbox" ? "#1565c0" : "#6d6d6d", t: 0, life: 120 });
@@ -826,6 +896,7 @@ function vehWorldCollide(v, ox, oy, oa) {
 }
 function vehImpactFx(v, x, y, dv, k) {
   VEH.stats.crashes++;
+  if (v.drv === "P") v.cruise = 0;   // never keep accelerating after a significant impact
   const n = Math.min(16, 3 + Math.floor(dv / 60));
   for (let i = 0; i < n; i++) spawnPt(x, y, (Math.random() - 0.5) * dv * 0.5, (Math.random() - 0.5) * dv * 0.5, 0.3 + Math.random() * 0.3, 1.6, i % 3 === 0 ? 7 : 3, i % 3 === 0 ? 3 : 4);
   if (typeof noiseEmit === "function") noiseEmit(x, y, Math.min(110, 70 + dv / 18), "crash", v.drv === "P" ? 0 : 1);
@@ -922,6 +993,7 @@ function vehResolvePair(A, B, h) {
 
 /* === 10. VEHICLES ↔ PEOPLE ============================================================================================ */
 function vehPeopleStep(v, dt) {
+  if (v.flyAir && (v.flyAlt || 0) > 3) return; // airborne vehicles cannot ram people on the ground plane
   const sp = Math.hypot(v.vx, v.vy);
   const R = Math.hypot(v.L, v.D) * 0.5 + 16, c = Math.cos(v.ang), s = Math.sin(v.ang);
   const hw = v.L / 2, hf = v.D / 2;
@@ -954,12 +1026,38 @@ function vehPeopleStep(v, dt) {
       if (typeof spawnDmg === "function") spawnDmg(eX[j], eY[j], dmg, vn > 300);
       for (let k = 0; k < 3; k++) spawnPt(eX[j], eY[j], nx * vn * 0.4 + (Math.random() - 0.5) * 80, ny * vn * 0.4 + (Math.random() - 0.5) * 80, 0.4, 2, 0, 3);
       if (typeof stAlert === "function" && typeof ST !== "undefined" && ST.state) stAlert(j, v.x, v.y, false);
-      if (eHP[j] <= 0) { if (v.drv === "P") VEH.stats.kills++; killEnemy(j, false, Math.atan2(ny, nx)); }
+      if (eHP[j] <= 0) { if (v.drv === "P") VEH.stats.kills++; killEnemy(j, false, Math.atan2(ny, nx), "#00f0ff", v.drv === "P" ? "player" : "unknown"); }
       else { eX[j] += nx * Math.min(26, vn * 0.05); eY[j] += ny * Math.min(26, vn * 0.05); }
     }
     const [lx, ly] = vehToLocal(v, eX[j] - nx * er, eY[j] - ny * er);
     vehDamage(v, lx, ly, vn, "person", -nx, -ny, { mass, player: v.drv === "P" });
     if (vehNearPlayer(v, 700) && typeof sfx === "function") sfx(140, 60, 0.08, "square", 0.1);
+  }
+  // Townsfolk use the same body geometry as other people. Only the actual
+  // player-driven car is attributed to the player; other drivers remain
+  // squad or unknown rather than inventing blame. Indoor people and airborne
+  // cars do not interact across floors. Injury simulation is independent of
+  // the player's civilian-consequence setting (tfHurt applies that setting).
+  if (typeof TF !== "undefined" && TF.on && TF.walk && typeof tfHurt === "function") for (const person of TF.walk) {
+    const W = person && person.w;
+    if (!person || !person.alive || !W || W.hp <= 0 || W.inside) continue;
+    const dx = W.x - v.x, dy = W.y - v.y;
+    if (Math.abs(dx) > R || Math.abs(dy) > R) continue;
+    const fw = dx * c + dy * s, rt = -dx * s + dy * c;
+    const ox = hw + 7 - Math.abs(rt), oy = hf + 7 - Math.abs(fw);
+    if (ox <= 0 || oy <= 0) continue;
+    let nx, ny, push;
+    if (ox < oy) { const sg = rt >= 0 ? 1 : -1; nx = -s * sg; ny = c * sg; push = ox; }
+    else { const sg = fw >= 0 ? 1 : -1; nx = c * sg; ny = s * sg; push = oy; }
+    const vn = ((v.vx - v.w * dy - (W.vx || 0)) * nx + (v.vy + v.w * dx - (W.vy || 0)) * ny) / (v.sv || 1);
+    const q = cityResolve(W.x + nx * (push + 1), W.y + ny * (push + 1), 7, false);
+    W.x = q[0]; W.y = q[1];
+    const repeated = W.vehHitKey === v.key && runTime >= W.vehHitT && runTime - W.vehHitT < .75;
+    if (vn > 110 && !repeated) {
+      W.vehHitKey = v.key; W.vehHitT = runTime;
+      const by = v === VEH.me && v.drv === "P" ? "player" : v.convoy && v.drv === "AI" ? "squad" : "unknown";
+      tfHurt(person, vn / 6, "car", by, null, {x:v.x,y:v.y});
+    }
   }
   // squad members and the hero on foot just get shoved out of the way
   if (typeof MAX_MINION !== "undefined") for (let m = 0; m < MAX_MINION; m++) {
@@ -969,7 +1067,7 @@ function vehPeopleStep(v, dt) {
     if (ox <= 0 || oy <= 0) continue;
     if (ox < oy) { const sg = rt >= 0 ? 1 : -1; mX[m] += -s * sg * (ox + 1); mY[m] += c * sg * (ox + 1); } else { const sg = fw >= 0 ? 1 : -1; mX[m] += c * sg * (oy + 1); mY[m] += s * sg * (oy + 1); }
   }
-  if (player && player.inVehicle !== 3 && !player.roof) {
+  if (player && player.inVehicle !== 3 && !player.roof && (player.flyAlt || 0) <= 3) {
     const dx = player.x - v.x, dy = player.y - v.y;
     if (Math.abs(dx) < R && Math.abs(dy) < R) {
       const fw = dx * c + dy * s, rt = -dx * s + dy * c, ox = hw + 9 - Math.abs(rt), oy = hf + 9 - Math.abs(fw);
@@ -1033,7 +1131,15 @@ function vehTrailFx(v, dt, sp) {
       v.skidT = 0.03;
       for (const s of [-1, 1]) { const [wx, wy] = vehToWorld(v, s * (v.L / 2 - 4 * (v.k || 1)), v.D * 0.32); VEH.skids.push([wx, wy, v.ang, runTime, v.skid, v.k || 1]); }
       if (VEH.skids.length > 600) VEH.skids.splice(0, VEH.skids.length - 600);
-      if (vehNearPlayer(v, 600) && Math.random() < 0.3 && typeof playNoise === "function") playNoise(0.08, "bandpass", 1800, 1500, 6, 0.05 * v.skid);
+      // One shared audio budget prevents a multi-car pile-up from producing
+      // dozens of overlapping squeals. A slow manoeuvre may leave marks but
+      // should not sound like a high-speed tire slide.
+      if (runTime < VEH.squealLast) VEH.squealLast = -1e9; // run reset / rewind
+      const realSpeed = Math.hypot(v.vx, v.vy) / (v.sv || 1);
+      if (realSpeed > 160 && runTime - VEH.squealLast >= .18 && vehNearPlayer(v, 600) && typeof playNoise === "function") {
+        VEH.squealLast = runTime;
+        playNoise(.10, "bandpass", 1750 + 350 * v.skid, 1250, 6, .035 + .02 * v.skid);
+      }
     }
   }
   if (v.drv && !v.dead && Math.random() < 0.25 + Math.abs(v.ctl.thr) * 0.5 && !v.S.horse) {
@@ -1056,7 +1162,7 @@ function vehLifeFx(v, dt) {
     if (near && Math.random() < dt * 10) spawnPt(ex, ey, (Math.random() - 0.5) * 20, -26, 2.4, 7, 15, 2);
     if (Math.random() < dt * 2 && typeof noiseEmit === "function") noiseEmit(v.x, v.y, 70, "fire", 1);
     // people next to a burning car get singed
-    if (player && player.inVehicle !== 3 && Math.hypot(player.x - v.x, player.y - v.y) < Math.max(v.L, v.D) * 0.6 && !(player.invulnT > 0)) player.hp -= 6 * dt;
+    if (player && player.inVehicle !== 3 && (player.flyAlt || 0) <= 3 && Math.hypot(player.x - v.x, player.y - v.y) < Math.max(v.L, v.D) * 0.6 && !(player.invulnT > 0)) player.hp -= 6 * dt;
     if (v.fire <= 0) vehExplode(v);
   }
 }
@@ -1064,7 +1170,7 @@ function vehLifeFx(v, dt) {
 function vehBashStep(dt) {
   const list = VEH.list;
   for (const v of list) {
-    if (!v.drv && !vehOcc(v)) continue;
+    if ((!v.drv && !vehOcc(v)) || (v.flyAir && (v.flyAlt || 0) > 3)) continue;
     const c = Math.cos(v.ang), s = Math.sin(v.ang), R = Math.hypot(v.L, v.D) * 0.5 + 18;
     for (let j = 0; j < MAX_E; j++) {
       if (!eAct[j] || eStun[j] > 0 || (typeof allyIs === "function" && allyCount > 0 && allyIs(j)) || (typeof sdIgnore === "function" && sdIgnore(j))) continue;
@@ -1161,21 +1267,38 @@ function vehRefuelOne(v, dt, quiet) {
 
 /* === 13. DRIVING INPUT, ENTER / EXIT ================================================================================= */
 function vehAngDiff(a, b) { return Math.atan2(Math.sin(a - b), Math.cos(a - b)); }
+// Cruise maintains the selected forward speed, but does not steer or avoid obstacles.
+function vehCruiseToggle() {
+  const v = VEH.me;
+  if (!v || !CITY.on) return;
+  if (v.cruise) { v.cruise = 0; vehToast("CRUISE OFF"); return; }
+  const forward = v.vx * Math.cos(v.ang) + v.vy * Math.sin(v.ang);
+  if (v.dead || v.S.horse || v.S.hover || v.flyAir || forward < 5 * 32 * (v.sv || 1)) { vehToast("Drive forward before setting cruise"); return; }
+  v.cruise = forward; vehToast("CRUISE SET · steer as normal");
+}
+function vehCruiseThrottle(v, vf) {
+  // Only supplies power; the player is always responsible for braking.
+  return Math.max(0, Math.min(1, 0.15 + (v.cruise - vf) / (100 * (v.sv || 1))));
+}
 // called from js/sim.js instead of walking while player.inVehicle === 3. Returns true when it took over.
 function vehDriveInput(dt, mx, my, mag) {
   const v = VEH.me;
   if (!v || !CITY.on) return false;
   const c = v.ctl, vf = v.vf || 0;
   c.hb = (keys && (keys.Space || keys.KeyX)) || VEH.touchHB ? 1 : 0;
+  if (v.dead || v.burnt || v.fire > 0 || v.fuel <= 0 || v.flyAir || c.hb) v.cruise = 0;
   if (v.dead) { c.thr = 0; c.st = 0; return true; }
   if ((opts && opts.vehSteer === "classic")) {
     const up = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0), side = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
     c.thr = joy && joy.act ? -joy.dy : up; c.st = joy && joy.act ? joy.dx : side;
+    if (c.thr < -0.15) v.cruise = 0;
+    else if (v.cruise && c.thr < 0.15) c.thr = vehCruiseThrottle(v, vf);
     return true;
   }
   // point-to-steer: push where you want to go; pull back to brake / reverse
-  if (mag < 0.15) { c.thr = 0; c.st *= 0.6; return true; }
+  if (mag < 0.15) { c.thr = v.cruise ? vehCruiseThrottle(v, vf) : 0; c.st *= 0.6; return true; }
   const want = Math.atan2(my, mx), diff = vehAngDiff(want, v.ang), sp = Math.abs(vf);
+  if (v.cruise && Math.abs(diff) > 2.0) v.cruise = 0;   // pulling back brakes/cancels
   const svd = v.sv || 1;
   if (Math.abs(diff) > 2.35 && (vf < 40 * svd || v.revMode)) {          // behind you: back up toward it
     v.revMode = true;
@@ -1200,10 +1323,20 @@ function vehFindForPlayer() {
 function vehEnter(q) {
   const v = vehMakeLive(q, "enter");
   if (!v || !vehCanDrive(v)) return false;
+  if (v.spawnHayOrigin) {
+    const o=v.spawnHayOrigin, da=Math.atan2(Math.sin(v.ang-o.ang),Math.cos(v.ang-o.ang));
+    if (Math.hypot(v.x-o.x,v.y-o.y)<2 && Math.abs(da)<0.05) vehClearEmbeddedHay(v);
+    v.spawnHayOrigin=null;
+  }
+  if (v.spawnStopOrigin) {
+    const o = v.spawnStopOrigin, da = Math.atan2(Math.sin(v.ang-o.ang), Math.cos(v.ang-o.ang));
+    if (Math.hypot(v.x-o.x,v.y-o.y) < 2 && Math.abs(da) < 0.05) vehClearEmbeddedStop(v);
+    v.spawnStopOrigin = null;
+  }
   const ds = v.seats.find(s => s.type === "d") || v.seats[0];
   if (ds.occ && ds.occ.t !== "P" && typeof convoySwapDriver === "function") convoySwapDriver(v, ds);
   ds.occ = { t: "P" };
-  v.drv = "P"; v.awake = true; v.sleep = 0; VEH.me = v; VEH.lastMine = v; v.convoy = null; v.ai = null;
+  v.drv = "P"; v.awake = true; v.sleep = 0; v.cruise = 0; VEH.me = v; VEH.lastMine = v; v.convoy = null; v.ai = null;
   player.inVehicle = 3; player.vehicleHp = v.hp; player.cityCar = { kind: v.kind, v: v.pv, ang: v.ang, L: v.L, D: v.D };
   player.x = v.x; player.y = v.y;
   const b = typeof cityBuildingAt === "function" ? cityBuildingAt(v.x, v.y) : null;
@@ -1214,6 +1347,8 @@ function vehEnter(q) {
   if (typeof noiseEmit === "function") noiseEmit(v.x, v.y, v.S.horse ? 60 : 82, "engine", 0);
   if (typeof convoyOnEnter === "function") convoyOnEnter(v);
   if (typeof updateHUD === "function") updateHUD();
+  if (v.spawnHayMoved) { vehToast("Moved hay clear of the tractor"); v.spawnHayMoved=0; }
+  if (v.spawnStopMoved) { vehToast("Moved a bus stop clear of the truck"); v.spawnStopMoved=0; }
   vehTipOnce("drive");
   return true;
 }
@@ -1228,7 +1363,7 @@ function vehExit(forced) {
   }
   if (!out) out = cityFindWalkable(v.x - s * -(v.L / 2 + 16), v.y + c * -(v.L / 2 + 16), 260, false);
   for (const st of v.seats) if (st.occ && st.occ.t === "P") st.occ = null;
-  v.drv = null; v.ctl.thr = 0; v.ctl.st = 0; v.ctl.hb = 1; VEH.me = null; v.revMode = false;
+  v.drv = null; v.cruise = 0; v.ctl.thr = 0; v.ctl.st = 0; v.ctl.hb = 1; VEH.me = null; v.revMode = false;
   player.inVehicle = 0; player.cityCar = null; player.x = out[0]; player.y = out[1]; player.vx = 0; player.vy = 0;
   if (typeof convoyOnExit === "function") convoyOnExit(v, forced);
   if (forced) { player.invulnT = Math.max(player.invulnT || 0, 0.6); spawnSpeech(player.x, player.y - 24, "BAILED OUT!", "#ff8a65", 1.2); }
@@ -1322,10 +1457,38 @@ function vehHudEl() {
   el = document.createElement("div"); el.id = "vehHud";
   el.innerHTML = '<canvas id="vehHudCv" width="64" height="92"></canvas><div class="vh-body"><div class="vh-name"></div><div class="vh-spd"><b>0</b><span>mph</span><i class="vh-gear">D</i></div>' +
     '<div class="vh-fuel"><span class="vh-fl">FUEL</span><div class="vh-bar"><i></i></div><span class="vh-fp">0%</span></div><div class="vh-st"></div><div class="vh-nav"></div></div>' +
-    '<div class="vh-btns"><button class="btn vh-horn" title="Horn: squad mounts up (H)">📯</button><button class="btn vh-hb" title="Hold: handbrake (Space)">HB</button></div>';
+    '<div class="vh-btns"><button class="btn vh-horn" title="Horn: squad mounts up (H)">📯</button><button class="btn vh-hb" title="Hold: handbrake (Space)">HB</button><button class="btn vh-cruise" title="Maintain speed; steer and brake yourself" aria-label="Toggle cruise speed">CRUISE</button><button class="btn vh-radar" title="Stationary cruiser speed radar" aria-label="Open cruiser radar" style="display:none;min-width:80px;min-height:80px">RADAR</button></div>';
   document.body.appendChild(el);
   el.querySelector(".vh-body").addEventListener("click", () => { VEH.units = VEH.units === "mph" ? "kmh" : "mph"; if (opts) { opts.vehUnits = VEH.units; if (typeof saveOpts === "function") saveOpts(); } });
   el.querySelector(".vh-horn").addEventListener("pointerdown", e => { e.stopPropagation(); vehHorn(); });
+  el.querySelector(".vh-cruise").addEventListener("pointerdown", e => { e.stopPropagation(); e.preventDefault(); vehCruiseToggle(); });
+  // HUD auto-fit can move between touch release and the browser's click.
+  // Complete a short touch on release and consume only its matching click,
+  // which might otherwise hit a different control in the newly opened panel.
+  const radar = el.querySelector(".vh-radar");
+  let radarTouch = null;
+  radar.addEventListener("pointerdown", e => {
+    e.stopPropagation();
+    if (e.pointerType === "touch" && e.isPrimary) radarTouch = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  });
+  radar.addEventListener("pointerup", e => {
+    if (e.pointerType !== "touch" || !radarTouch || e.pointerId !== radarTouch.id) return;
+    const tap = Math.hypot(e.clientX - radarTouch.x, e.clientY - radarTouch.y) <= 12;
+    const id = e.pointerId, x = e.clientX, y = e.clientY;
+    radarTouch = null; e.stopPropagation();
+    const consume = click => {
+      const matches = click.detail > 0 && (click.pointerType === "touch" ? click.pointerId === id :
+        !click.pointerType && Math.hypot(click.clientX - x, click.clientY - y) <= 12);
+      if (!matches) return;
+      document.removeEventListener("click", consume, true);
+      click.preventDefault(); click.stopImmediatePropagation();
+    };
+    document.addEventListener("click", consume, true);
+    setTimeout(() => document.removeEventListener("click", consume, true), 1000);
+    if (tap && typeof pdRadarOpen === "function") pdRadarOpen();
+  });
+  radar.addEventListener("pointercancel", e => { if (radarTouch && e.pointerId === radarTouch.id) radarTouch = null; });
+  radar.addEventListener("click", e => { e.stopPropagation(); if (typeof pdRadarOpen === "function") pdRadarOpen(); });
   const hb = el.querySelector(".vh-hb");
   hb.addEventListener("pointerdown", e => { e.stopPropagation(); VEH.touchHB = true; hb.classList.add("gold"); });
   for (const ev of ["pointerup", "pointerleave", "pointercancel"]) hb.addEventListener(ev, () => { VEH.touchHB = false; hb.classList.remove("gold"); });
@@ -1333,6 +1496,7 @@ function vehHudEl() {
 }
 function vehHudFrame() {
   const v = VEH.me, el = vehHudEl();
+  if (v && (runPaused || (typeof MAPV !== "undefined" && MAPV.open))) v.cruise = 0;
   const on = !!(v && runActive && CITY.on && !(typeof MAPV !== "undefined" && MAPV.open));
   if (!on) { if (el.style.display !== "none") el.style.display = "none"; return; }
   el.style.display = "flex";
@@ -1344,6 +1508,8 @@ function vehHudFrame() {
   const nv = typeof CONVOY !== "undefined" ? CONVOY.vehicles.length : 0;
   q(".vh-name").textContent = vehName(v) + (nv ? "  ·  CONVOY LEAD (" + (nv + 1) + ")" : "");
   q(".vh-spd b").textContent = Math.round(spd); q(".vh-spd span").textContent = units === "kmh" ? "km/h" : "mph";
+  q(".vh-radar").style.display = v.kind === "police" && !v.dead && typeof pdRadarOpen === "function" ? "" : "none";
+  const cruise = q(".vh-cruise"); cruise.classList.toggle("gold", !!v.cruise); cruise.textContent = v.cruise ? "CRUISE ON" : "CRUISE"; cruise.setAttribute("aria-pressed", v.cruise ? "true" : "false");
   q(".vh-gear").textContent = v.dead ? "×" : (v.vf || 0) < -10 ? "R" : Math.abs(v.vf || 0) < 10 && Math.abs(v.ctl.thr) < 0.05 ? "N" : "D";
   const horse = !!v.S.horse, val = horse ? v.stamina : v.fuel;
   q(".vh-fl").textContent = horse ? (v.S.horse > 1 ? "HORSES" : "HORSE") : vehFuelName(v);
@@ -1453,7 +1619,7 @@ function vehPushOut(q, r) {
   if (typeof triggerRocketDetonation === "function") {
     const _trd = triggerRocketDetonation;
     window._vehTRD = _trd;
-    window.triggerRocketDetonation = function (x, y, dmg, rad) { _trd(x, y, dmg, rad); if (CITY.on && !VEH.inBlast) { VEH.inBlast = true; try { vehBlast(x, y, rad * 1.3, Math.min(40, 6 + dmg * 0.12), null); } finally { VEH.inBlast = false; } } };
+    window.triggerRocketDetonation = function (x, y, dmg, rad, owner) { _trd.apply(this, arguments); if (CITY.on && !VEH.inBlast) { VEH.inBlast = true; try { vehBlast(x, y, rad * 1.3, Math.min(40, 6 + dmg * 0.12), null, owner || "unknown"); } finally { VEH.inBlast = false; } } };
   }
   // [F] prompt names the vehicle and its fuel
   const _fit = window.findInteractTarget;
@@ -1474,7 +1640,7 @@ function vehPushOut(q, r) {
 function vehProjHit(i, x0, y0, x1, y1, tWall) {
   let best = null, bt = tWall;
   for (const v of VEH.list) {
-    if (v.far) continue;
+    if (v.far || (v.flyAir && (v.flyAlt || 0) > 60)) continue; // ground-plane projectiles pass below airborne craft
     const R = Math.max(v.L, v.D) * 0.5 + 4;
     if (Math.min(x0, x1) > v.x + R || Math.max(x0, x1) < v.x - R || Math.min(y0, y1) > v.y + R || Math.max(y0, y1) < v.y - R) continue;
     const [ax, ay] = vehToLocal(v, x0, y0), [bx, by] = vehToLocal(v, x1, y1), hw = v.L / 2, hd = v.D / 2;
@@ -1487,13 +1653,13 @@ function vehProjHit(i, x0, y0, x1, y1, tWall) {
   }
   if (!best) return false;
   const v = best.v, byHero = !pEnemy[i], [hx, hy] = vehToWorld(v, best.lx, best.ly);
-  if (pStyle[i] === 2) { pAct[i] = 0; triggerRocketDetonation(hx, hy, pDmg[i], pRad[i] * 4.8); return true; }
+  if (pStyle[i] === 2) { pAct[i] = 0; triggerRocketDetonation(hx, hy, pDmg[i], pRad[i] * 4.8, projectileOwner(i)); return true; }
   // your convoy ignores your own bullets (friendly vehicles), enemies' bullets hurt them
   if (byHero && (v.convoy || v === VEH.me)) return false;
   const wid = pWpnId[i], prof = typeof stHeroProfile === "function" ? stHeroProfile(wid) : [160, "g", 1];
   const energy = byHero ? prof[1] !== "g" : !(typeof enemyIsKinetic === "function" ? enemyIsKinetic(wid) : true);
   const dmg = pDmg[i] * (energy ? 1.4 : 1);
-  const pass = vehDamage(v, best.lx, best.ly, dmg, "bullet", 0, 0, byHero ? "player" : null);
+  const pass = vehDamage(v, best.lx, best.ly, dmg, "bullet", 0, 0, projectileOwner(i));
   for (let k = 0; k < 3; k++) spawnPt(hx, hy, (Math.random() - 0.5) * 110, (Math.random() - 0.5) * 110, 0.22, 1.5, energy ? 4 : 3, 4);
   if (Math.hypot(hx - player.x, hy - player.y) < 600 && typeof sfx === "function" && Math.random() < 0.6) sfx(energy ? 900 : 1500, energy ? 300 : 700, 0.03, "square", 0.04);
   // what gets through reaches whoever sits there

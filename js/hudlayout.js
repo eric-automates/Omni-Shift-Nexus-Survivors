@@ -74,6 +74,19 @@ function hudSolve() {
   // small screens start a little more compact (phones), then your HUD size multiplies on top
   const density = Math.max(0.78, Math.min(1, Math.min(Wd, Hd) / 640));
   const user = Math.max(0.55, Math.min(1.4, (H.scale || 1) * density));
+  // Wrap auto-fit touch strips at any chosen HUD size; do not change the
+  // player’s scale, protected elements or manual-layout settings. The larger
+  // default touch target floor still applies only at the default HUD size.
+  const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  const wrapTouchStrip = coarse && H.auto;
+  const largeTouchStrip = wrapTouchStrip && H.scale === 1;
+  const touchStrip = document.getElementById("mmCtl");
+  if (touchStrip) {
+    touchStrip.classList.toggle("mmTouchLarge", largeTouchStrip);
+    touchStrip.classList.toggle("mmTouchWrap", wrapTouchStrip);
+    touchStrip.style.maxWidth = wrapTouchStrip ? Math.max(1, Math.floor((Wd - 16) / user)) + "px" : "";
+  }
+  const hudFloor = d => (d.id === "mmctl" && largeTouchStrip ? 1 : d.min) * user;
   const sc = {}, hid = {};
   for (const d of HUDL_DEF) { sc[d.id] = user; hid[d.id] = !!H.hide[d.id]; }
   // natural (unscaled) sizes
@@ -106,7 +119,19 @@ function hudSolve() {
     // bottom-right: minimap → its buttons → district banner; squad radio sits beside the minimap
     let yR = Hd - m;
     if (nat.minimap && !hid.minimap) { const S = Math.round((nat.minimap.w - 8) * sc.minimap); R.minimap = { x: xR(S + 8), y: yR - S - 8, w: S + 8, h: S + 8, S }; yR = R.minimap.y - 4; }
-    if (nat.mmctl && !hid.mmctl) { const w = nat.mmctl.w * sc.mmctl, h = nat.mmctl.h * sc.mmctl; R.mmctl = { x: xR(w), y: yR - h, w, h }; yR = R.mmctl.y - 4; }
+    if (nat.mmctl && !hid.mmctl) {
+      const w = nat.mmctl.w * sc.mmctl, h = nat.mmctl.h * sc.mmctl;
+      const r = { x: xR(w), y: yR - h, w, h };
+      // On narrow phones the enlarged touch strip can extend into the other
+      // bottom stack. Place it above that stack rather than leaving the
+      // vehicle controls under the strip or making every hit target tiny.
+      for (let n = 0; n < 4; n++) {
+        const hit = [R.veh, R.toast, R.dev, R.perf].find(q => hudRectOverlap(q, r));
+        if (!hit) break;
+        r.y = hit.y - h - 4;
+      }
+      R.mmctl = r; yR = r.y - 4;
+    }
     if (nat.city && !hid.city) { const w = nat.city.w * sc.city, h = nat.city.h * sc.city; R.city = { x: xR(w), y: yR - h, w, h }; yR = R.city.y - 4; }
     if (nat.squad && !hid.squad) {
       const w = nat.squad.w * sc.squad, h = nat.squad.h * sc.squad, mm = R.minimap;
@@ -138,9 +163,13 @@ function hudSolve() {
     // nothing may leave the screen either
     for (const id of ids) { const r = R[id]; if (r && (r.y < (R.top && id !== "top" ? 0 : -1) || r.x < -1 || r.x + r.w > Wd + 1)) { overlaps++; inv.add(id); } }
     if (!overlaps || !H.auto) break;
-    const cand = [...inv].map(id => HUDL_DEF.find(d => d.id === id)).filter(d => d && !H.keep[d.id] && sc[d.id] > d.min * user + 1e-3).sort((a, b) => hudPrio(a.id) - hudPrio(b.id));
-    if (cand.length) { const d = cand[0]; sc[d.id] = Math.max(d.min * user, sc[d.id] - 0.05); continue; }
-    const hideC = [...inv].map(id => HUDL_DEF.find(d => d.id === id)).filter(d => d && d.hideable && !H.keep[d.id] && !hid[d.id]).sort((a, b) => hudPrio(a.id) - hudPrio(b.id));
+    const cand = [...inv].map(id => HUDL_DEF.find(d => d.id === id)).filter(d => d && !H.keep[d.id] && sc[d.id] > hudFloor(d) + 1e-3).sort((a, b) => hudPrio(a.id) - hudPrio(b.id));
+    const hideC = [...inv].map(id => HUDL_DEF.find(d => d.id === id)).filter(d => d && d.hideable && !H.keep[d.id] && !hid[d.id] && sc[d.id] <= hudFloor(d) + 1e-3).sort((a, b) => hudPrio(a.id) - hudPrio(b.id));
+    // Once an optional low-priority item reaches its minimum, hide it before
+    // shrinking a more important touch control. Otherwise a late telemetry
+    // pill can move the minimap strip under a finger attempting to tap it.
+    if (hideC.length && (!cand.length || hudPrio(hideC[0].id) < hudPrio(cand[0].id))) { hid[hideC[0].id] = true; continue; }
+    if (cand.length) { const d = cand[0]; sc[d.id] = Math.max(hudFloor(d), sc[d.id] - 0.05); continue; }
     if (hideC.length) { hid[hideC[0].id] = true; continue; }
     break;
   }

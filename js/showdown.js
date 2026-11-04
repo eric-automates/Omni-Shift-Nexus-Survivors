@@ -100,7 +100,21 @@ function sdFlagNewSpectators(force) {
     if (!sdEligibleSpectator(j)) continue;
     if (sdSpectUid[j] === eUid[j] && sdSpectUid[j] !== 0) continue;
     sdSpectUid[j] = eUid[j]; added++;
-    sdSlotA[j] = Math.atan2(eY[j] - S.cy, eX[j] - S.cx) + ((eSeed[j] % 13) - 6) * 0.01;
+    let a = Math.atan2(eY[j] - S.cy, eX[j] - S.cx) + ((eSeed[j] % 13) - 6) * 0.01;
+    // When the center-based slot would send a nearby spectator toward the
+    // player, pick the closest ring point that leads outward around them.
+    // Keep the original ring side otherwise, and keep positions continuous.
+    const px = eX[j] - player.x, py = eY[j] - player.y, dp = Math.hypot(px, py);
+    if (dp > 0.01 && dp < S.R * 0.7) {
+      const u = Math.atan2(py, px), ux = px / dp, uy = py / dp;
+      const need = (dp + S.R * 0.12 - (S.cx - player.x) * ux - (S.cy - player.y) * uy) / S.R;
+      const delta = Math.atan2(Math.sin(a - u), Math.cos(a - u));
+      if (need > -1 && need < 1 && Math.cos(delta) < need) {
+        const side = Math.abs(delta) < 1e-8 ? ((eSeed[j] & 1) ? 1 : -1) : Math.sign(delta);
+        a = u + side * Math.acos(need);
+      }
+    }
+    sdSlotA[j] = a;
   }
   if (added || force) sdAssignSlots();
 }

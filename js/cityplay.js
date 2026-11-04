@@ -145,7 +145,7 @@ function cityProjWall(i, dt) {
   if ((h.f & F_WIN) && !(h.f & F_SHOT)) { cityBreakWindow(h.tx, h.ty, byHero); pDmg[i] *= 0.85; return false; }
   const spd = Math.hypot(pVX[i], pVY[i]) || 1, ux = pVX[i] / spd, uy = pVY[i] / spd;
   const hx = h.x - ux * 2, hy = h.y - uy * 2;
-  if (st === 2) { pAct[i] = 0; triggerRocketDetonation(hx, hy, pDmg[i], pRad[i] * 4.8); if (typeof cityDecal === "function") cityDecal(hx, hy, "scorch", 0); return true; }
+  if (st === 2) { pAct[i] = 0; triggerRocketDetonation(hx, hy, pDmg[i], pRad[i] * 4.8, projectileOwner(i)); if (typeof cityDecal === "function") cityDecal(hx, hy, "scorch", 0); return true; }
   const wid = pWpnId[i], prof = typeof stHeroProfile === "function" ? stHeroProfile(wid) : [160, "g", 1];
   const kinetic = byHero ? prof[1] === "g" : (typeof enemyIsKinetic === "function" ? enemyIsKinetic(wid) : CITY.theme.era !== "future");
   const sinGraze = Math.abs(ux * h.nx + uy * h.ny);   // sin of the angle to the surface

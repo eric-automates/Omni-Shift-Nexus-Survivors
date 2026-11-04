@@ -638,10 +638,12 @@ async function discoverMusicFiles() {
     const raw = CUSTOM_TRACK_LIST[i].trim();
     if (!raw) continue;
     const url = raw.startsWith("music/") ? raw : ("music/" + raw);
+    // A listed slot remains reserved even if its file is temporarily missing.
+    // Otherwise one missing listed track prevents discovery of later additions.
+    const meta = parseTrackMetadata(url, i + 1);
+    highestListed = Math.max(highestListed, meta.num || 0);
     if (await checkFileExists(url)) {
-      const meta = parseTrackMetadata(url, i + 1);
       foundMap.set(meta.num + "_" + meta.fileName, meta);
-      highestListed = Math.max(highestListed, meta.num || 0);
     }
   }
 

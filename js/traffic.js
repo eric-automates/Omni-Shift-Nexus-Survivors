@@ -656,7 +656,7 @@ function trfLights(push) {
     const _trd = window.triggerRocketDetonation;
     window.triggerRocketDetonation = function (x, y, dmg, rad) {
       if (TRF.cars.length) for (const c of TRF.cars.slice()) { const b = trfBoxPx(c); if (Math.hypot(b.x - x, b.y - y) < (rad || 60) * 1.4 + 40) trfPromote(c, "blast"); }
-      return _trd(x, y, dmg, rad);
+      return _trd.apply(this, arguments);
     };
   }
 })();

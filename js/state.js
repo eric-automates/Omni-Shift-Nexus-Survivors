@@ -10,10 +10,11 @@ const DEFAULT_STARTERS = (typeof STARTER_HEROES_BY_FACTION !== "undefined")
   ? STARTER_HEROES_BY_FACTION
   : [0, 8, 13, 19, 22, 31, 34, 41, 45, 48, 56];
 
-let meta = {
-  dmEarned: 0, dmSpent: 0, chars: [...DEFAULT_STARTERS], stages: [1], cleared: [],
-  ranks: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], selChar: 0, selStage: 1, diff: 1, outfits: {}
-};
+function defaultMeta() {
+  return { dmEarned: 0, dmSpent: 0, chars: [...DEFAULT_STARTERS], stages: [1], cleared: [],
+    ranks: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], selChar: 0, selStage: 1, diff: 1, outfits: {} };
+}
+let meta = defaultMeta();
 
 const OPTS_KEY = "OMNISHIFT_OPTS_V1";
 let opts = {
@@ -22,8 +23,90 @@ let opts = {
   persistCount: 100, doubleTapDash: true, timeScale: 1.0,
   shake: true, perfHud: true, weather: true,   // v10 game-feel options
   hud: { auto: true, scale: 1, order: [], keep: {}, hide: {} },   // v14.1 HUD layout manager (js/hudlayout.js)
-  vehSteer: "point", vehUnits: "mph"                              // v14.1 vehicles (js/vehicles.js)
+  vehSteer: "point", vehUnits: "mph", traffic: true, police: true,
+  squadFireSafety: true,                                     // city squad checks civilian/ally backdrops
+  civilianConsequences: true,                               // crime for player-inflicted civilian injury
+  civilianWarning: true,                                    // locally visible off-screen civilian warnings
+  autoFireSafety: false                                      // optional known-civilian straight-shot assist
 };
+
+// Do not silently lose progress if browser storage is full or blocked.
+// Independent failure flags prevent an options save from hiding a progress
+// failure (and vice versa). Existing save keys and formats are unchanged.
+const SAVE_WARNING = { failed: new Set(), unreadable: new Map(), el: null };
+function saveWarningRefresh() {
+  if (!SAVE_WARNING.failed.size && !SAVE_WARNING.unreadable.size) {
+    if (SAVE_WARNING.el) SAVE_WARNING.el.remove();
+    SAVE_WARNING.el = null; return;
+  }
+  if (!document.body) return;
+  if (!SAVE_WARNING.el) {
+    const box = document.createElement("section"); box.id = "storageSaveWarning"; box.setAttribute("role", "alert");
+    box.style.cssText = "position:fixed;z-index:10000;left:50%;top:12px;transform:translateX(-50%);width:min(92vw,600px);box-sizing:border-box;padding:12px;background:#301318;color:#fff;border:2px solid #ff8a80;border-radius:10px;box-shadow:0 3px 18px #000b;font:600 14px/1.35 sans-serif";
+    const text = document.createElement("div"); text.className = "storage-warning-text"; box.appendChild(text);
+    const actions = document.createElement("div"); actions.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;margin-top:8px";
+    const retry = document.createElement("button"); retry.type = "button"; retry.textContent = "RETRY SAVE"; retry.className = "btn"; retry.style.minHeight = "44px";
+    retry.onclick = () => { if (SAVE_WARNING.failed.has("progress")) saveMeta(); if (SAVE_WARNING.failed.has("options")) saveOpts(); };
+    const dismiss = document.createElement("button"); dismiss.type = "button"; dismiss.textContent = "DISMISS"; dismiss.className = "btn"; dismiss.style.minHeight = "44px";
+    dismiss.onclick = () => { box.style.display = "none"; };
+    const reload = document.createElement("button"); reload.id = "storageRetryLoad"; reload.type = "button"; reload.textContent = "RESTORE STORED SAVE"; reload.className = "btn"; reload.style.minHeight = "44px";
+    reload.onclick = () => {
+      if (SAVE_WARNING.unreadable.has("progress")) loadMetaData(true);
+      if (SAVE_WARNING.unreadable.has("options")) loadOpts();
+      if (typeof updateMenuUI === "function") updateMenuUI();
+    };
+    const backup = document.createElement("button"); backup.id = "storageBackupRaw"; backup.type = "button"; backup.textContent = "DOWNLOAD UNREADABLE DATA"; backup.className = "btn"; backup.style.minHeight = "44px";
+    backup.onclick = () => {
+      try {
+        const data = {}; for (const [kind, raw] of SAVE_WARNING.unreadable) if (typeof raw === "string") data[kind] = raw;
+        if (!Object.keys(data).length) return;
+        const url = URL.createObjectURL(new Blob([JSON.stringify({ format: "omni-unreadable-storage-v1", data }, null, 2)], { type: "application/json" }));
+        const link = document.createElement("a"); link.href = url; link.download = "omni-unreadable-storage-backup.json"; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (err) { box.querySelector(".storage-warning-text").textContent += " Download failed; keep this tab open."; }
+    };
+    actions.appendChild(retry); actions.appendChild(dismiss); actions.appendChild(reload); actions.appendChild(backup); box.appendChild(actions); document.body.appendChild(box); SAVE_WARNING.el = box;
+  }
+  SAVE_WARNING.el.style.display = "";
+  const parts = [];
+  if (SAVE_WARNING.failed.size) parts.push("SAVE FAILED: " + [...SAVE_WARNING.failed].join(" and ") + " not written. Keep this tab open, free device space or allow this site's storage, then retry.");
+  if (SAVE_WARNING.unreadable.size) parts.push("LOAD FAILED: " + [...SAVE_WARNING.unreadable.keys()].join(" and ") + " could not be read. Saving that data is blocked to protect it. RESTORE STORED SAVE replaces current unsaved changes with stored data if it becomes readable.");
+  parts.push("Do not clear this game's data.");
+  SAVE_WARNING.el.querySelector(".storage-warning-text").textContent = parts.join(" ");
+  SAVE_WARNING.el.querySelector("#storageRetryLoad").style.display = SAVE_WARNING.unreadable.size ? "" : "none";
+  SAVE_WARNING.el.querySelector("#storageBackupRaw").style.display = [...SAVE_WARNING.unreadable.values()].some(raw => typeof raw === "string") ? "" : "none";
+  SAVE_WARNING.el.querySelector("button").style.display = SAVE_WARNING.failed.size ? "" : "none";
+}
+function saveWarningSet(kind, failed) {
+  const dismissed = SAVE_WARNING.el && SAVE_WARNING.el.style.display === "none";
+  if (failed) SAVE_WARNING.failed.add(kind); else SAVE_WARNING.failed.delete(kind);
+  saveWarningRefresh();
+  // A successful unrelated save must not reopen a deliberately dismissed
+  // warning; another failed write should always make the risk visible again.
+  if (!failed && dismissed && SAVE_WARNING.el) SAVE_WARNING.el.style.display = "none";
+}
+
+function saveReadWarningSet(kind, raw, failed) {
+  if (failed) SAVE_WARNING.unreadable.set(kind, raw); else SAVE_WARNING.unreadable.delete(kind);
+  saveWarningRefresh();
+}
+function readStoredObject(key, kind) {
+  let raw;
+  try {
+    raw = localStorage.getItem(key);
+    // Once a previously unreadable key is protected, absence is not proof
+    // that it was safe to discard. Keep the lock until valid data is readable.
+    if (raw === null) {
+      if (SAVE_WARNING.unreadable.has(kind)) throw new Error("saved data is still unavailable");
+      return { ok: true, value: null, raw: null };
+    }
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid save data");
+    return { ok: true, value, raw };
+  } catch (err) {
+    saveReadWarningSet(kind, typeof raw === "string" ? raw : (SAVE_WARNING.unreadable.get(kind) || null), true);
+    return { ok: false, value: null };
+  }
+}
 
 // v9.01 Temporal Nexus step ladder (HUD "-" / "1.0x" / "+" buttons and the Options menu share it).
 // Negative rungs stream BACKWARD through the rewind ring buffer (js/rewind.js); forward rungs run the
@@ -52,9 +135,9 @@ function fmtTimeScale(v) {
    instead of being wired into every core loop. A failing hook is reported once and skipped. */
 const V10 = { onRunStart: [], onRunReset: [], onStep: [], onKill: [], onRenderWorld: [], onRenderScreen: [], onFrame: [] };
 const v10ErrSeen = new Set();
-function v10Run(list, a, b, c, d) {
+function v10Run(list, a, b, c, d, e) {
   for (let i = 0; i < list.length; i++) {
-    try { list[i](a, b, c, d); } catch (e) {
+    try { list[i](a, b, c, d, e); } catch (e) {
       const msg = (list[i].name || "hook") + ": " + (e && e.message);
       if (!v10ErrSeen.has(msg)) { v10ErrSeen.add(msg); if (window.trackProgress) window.trackProgress("v10 hook error " + msg, true); }
     }
@@ -63,25 +146,34 @@ function v10Run(list, a, b, c, d) {
 
 // FIX: options were never written to storage although the Options screen says "SAVE & BACK".
 function loadOpts() {
+  const result = readStoredObject(OPTS_KEY, "options");
+  if (!result.ok) return false;
+  const previous = { ...opts }, oldTimeScale = timeScale;
   try {
-    const raw = localStorage.getItem(OPTS_KEY);
-    if (!raw) return;
-    const saved = JSON.parse(raw);
-    if (!saved || typeof saved !== "object") return;
-    Object.keys(opts).forEach(k => {
-      if (k in saved && typeof saved[k] === typeof opts[k]) opts[k] = saved[k];
-    });
-    opts.zoom = Math.max(0.5, Math.min(2.0, opts.zoom || 1.0));
-    opts.vol = Math.max(0, Math.min(1, opts.vol));
-    // never boot into rewind; snap old free-form values (e.g. 2.2x) onto the ladder
-    timeScale = snapToLadder(Math.max(TIME_FWD_MIN, Math.min(TIME_SCALE_MAX, opts.timeScale || 1.0)), true);
-    opts.timeScale = timeScale;
-  } catch (e) {}
+    const saved = result.value;
+    if (saved) {
+      Object.keys(opts).forEach(k => { if (k in saved && typeof saved[k] === typeof opts[k]) opts[k] = saved[k]; });
+      opts.zoom = Math.max(0.5, Math.min(2.0, opts.zoom || 1.0));
+      opts.vol = Math.max(0, Math.min(1, opts.vol));
+      // Never boot into rewind; snap old free-form values onto the ladder.
+      timeScale = snapToLadder(Math.max(TIME_FWD_MIN, Math.min(TIME_SCALE_MAX, opts.timeScale || 1.0)), true);
+      opts.timeScale = timeScale;
+    }
+  } catch (err) {
+    opts = previous; timeScale = oldTimeScale; saveReadWarningSet("options", result.raw, true); return false;
+  }
+  if (SAVE_WARNING.unreadable.has("options")) saveReadWarningSet("options", null, false);
+  if (SAVE_WARNING.failed.has("options")) saveWarningSet("options", false);
+  return true;
 }
 
 function saveOpts() {
+  if (SAVE_WARNING.unreadable.has("options")) { saveWarningSet("options", true); return false; }
   opts.timeScale = timeScale > 0 ? timeScale : 1.0;
-  try { localStorage.setItem(OPTS_KEY, JSON.stringify(opts)); } catch (e) {}
+  let saved = false;
+  try { localStorage.setItem(OPTS_KEY, JSON.stringify(opts)); saved = true; } catch (e) {}
+  try { saveWarningSet("options", !saved); } catch (e) { if (window.trackProgress) window.trackProgress("Storage warning: " + e.message, true); }
+  return saved;
 }
 
 function ensureStarterChars() {
@@ -114,7 +206,8 @@ const eX = new Float32Array(MAX_E), eY = new Float32Array(MAX_E),
 
 const eLegDmg = new Float32Array(MAX_E), eTailDmg = new Float32Array(MAX_E),
       eLegsLost = new Uint8Array(MAX_E), eArmsLost = new Uint8Array(MAX_E),
-      eBleed = new Uint8Array(MAX_E), eBleedRate = new Float32Array(MAX_E),
+      eBleed = new Uint8Array(MAX_E), eBleedRate = new Float32Array(MAX_E), eBleedSource = new Uint8Array(MAX_E),
+      eBleedOriginX = new Float32Array(MAX_E), eBleedOriginY = new Float32Array(MAX_E),
       eTurnAng = new Float32Array(MAX_E), eTurnTimer = new Float32Array(MAX_E);
 
 // Levitation / Wingardium Leviosa Float-Away State
@@ -181,10 +274,12 @@ function recordShotImpact(nx, ny, atkType, rawEnemyType, zone) {
 
 const pX = new Float32Array(MAX_P), pY = new Float32Array(MAX_P),
       pVX = new Float32Array(MAX_P), pVY = new Float32Array(MAX_P),
+      // Same precision as projectile positions; keeping both in rewind is bounded.
+      pOriginX = new Float32Array(MAX_P), pOriginY = new Float32Array(MAX_P),
       pDmg = new Float32Array(MAX_P), pLife = new Float32Array(MAX_P),
       pRad = new Float32Array(MAX_P), pPrc = new Int8Array(MAX_P),
       pStyle = new Uint8Array(MAX_P), pSup = new Uint8Array(MAX_P),
-      pEnemy = new Uint8Array(MAX_P), pHit = new Uint8Array(MAX_P),
+      pEnemy = new Uint8Array(MAX_P), pSource = new Uint8Array(MAX_P), pHit = new Uint8Array(MAX_P),
       pBounce = new Uint8Array(MAX_P), pWpnId = new Int16Array(MAX_P),
       pSnap = new Uint8Array(MAX_P), pAct = new Uint8Array(MAX_P);
 
@@ -281,6 +376,7 @@ function spawnMinion(x, y, kind = 0, hp = 120, dmg = 32, spd = 115, life = 24, c
       if (mKind[i] < mKind[slot] || mLife[i] < mLife[slot]) slot = i;
     }
   }
+  if (typeof squadNavReset === "function") squadNavReset(slot);
   mX[slot] = x + (Math.random() - 0.5) * 14;
   mY[slot] = y + (Math.random() - 0.5) * 14;
   mVX[slot] = 0; mVY[slot] = 0;
@@ -298,15 +394,17 @@ function spawnMinion(x, y, kind = 0, hp = 120, dmg = 32, spd = 115, life = 24, c
   return slot;
 }
 
-function loadMeta() {
+function loadMetaData(replaceSession = false) {
+  const result = readStoredObject(META_KEY, "progress");
+  if (!result.ok) return false;
+  const previous = meta;
   try {
-    const raw = localStorage.getItem(META_KEY);
-    if (raw) {
-      meta = { ...meta, ...JSON.parse(raw) };
-      if (typeof meta.diff !== "number") meta.diff = 1;
-      if (!meta.outfits || typeof meta.outfits !== "object") meta.outfits = {};
-    }
-  } catch (e) {}
+  meta = replaceSession ? defaultMeta() : { ...meta };
+  if (result.value) {
+    meta = { ...meta, ...result.value };
+    if (typeof meta.diff !== "number") meta.diff = 1;
+    if (!meta.outfits || typeof meta.outfits !== "object") meta.outfits = {};
+  }
   if (!Array.isArray(meta.stages) || meta.stages.length === 0) meta.stages = [1];
   if (!meta.stages.includes(1)) meta.stages.unshift(1);
   if (!Array.isArray(meta.cleared)) meta.cleared = [];
@@ -318,13 +416,26 @@ function loadMeta() {
   if (meta.custom && typeof customHeroSanitize === "function") meta.custom = customHeroSanitize(meta.custom);
   if (typeof customHeroRegister === "function") customHeroRegister();
   if (meta.selChar === 80 && !(meta.custom && meta.custom.created)) meta.selChar = 0;
-  loadOpts();
+  } catch (err) {
+    meta = previous; saveReadWarningSet("progress", result.raw, true); return false;
+  }
+  if (SAVE_WARNING.unreadable.has("progress")) saveReadWarningSet("progress", null, false);
+  if (SAVE_WARNING.failed.has("progress")) saveWarningSet("progress", false);
+  return true;
 }
+function loadMeta() { loadMetaData(); loadOpts(); }
 
 function saveMeta() {
+  if (SAVE_WARNING.unreadable.has("progress")) { saveWarningSet("progress", true); return false; }
   ensureStarterChars();
-  try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) {}
-  if (typeof updateMenuUI === "function") updateMenuUI();
+  let saved = false;
+  try { localStorage.setItem(META_KEY, JSON.stringify(meta)); saved = true; } catch (e) {}
+  // The persisted result must not be reported as a failed write merely
+  // because a later warning or menu refresh throws: callers use this result
+  // to commit or roll back a single-write incident/reward transaction.
+  try { saveWarningSet("progress", !saved); } catch (e) { if (window.trackProgress) window.trackProgress("Storage warning: " + e.message, true); }
+  try { if (typeof updateMenuUI === "function") updateMenuUI(); } catch (e) { if (window.trackProgress) window.trackProgress("Menu refresh: " + e.message, true); }
+  return saved;
 }
 
 /* === 4. CANONICAL BLADE & WEAPON COLOR REGISTRY === */
@@ -437,7 +548,7 @@ function updateTimeLabel() {
 
 function clearEnemyLimbState(idx, fadeDrips = true) {
   eLegDmg[idx] = 0; eTailDmg[idx] = 0; eLegsLost[idx] = 0; eArmsLost[idx] = 0;
-  eBleed[idx] = 0; eBleedRate[idx] = 0; eTurnAng[idx] = 0; eTurnTimer[idx] = 0;
+  eBleed[idx] = 0; eBleedRate[idx] = 0; eBleedSource[idx] = 3; eBleedOriginX[idx] = NaN; eBleedOriginY[idx] = NaN; eTurnAng[idx] = 0; eTurnTimer[idx] = 0;
   eFormType[idx] = 0; eFormLeader[idx] = -1;
   eLevitate[idx] = 0; eLevZ[idx] = 0; eLevVX[idx] = 0; eLevVY[idx] = 0;
   if (typeof eFLiftZ !== "undefined") eFLiftZ[idx] = 0;
@@ -528,7 +639,7 @@ function purgeRunMemory() {
   activeForts.length = 0; activeMines.length = 0; movedBarricades.length = 0;
   activeBarriers.length = 0; activeWeaponDrops.length = 0;
   eAct.fill(0); eLegDmg.fill(0); eTailDmg.fill(0); eLegsLost.fill(0); eArmsLost.fill(0);
-  eBleed.fill(0); eBleedRate.fill(0); eLevitate.fill(0); eLevZ.fill(0);
+  eBleed.fill(0); eBleedRate.fill(0); eBleedSource.fill(3); eLevitate.fill(0); eLevZ.fill(0);
   mAct.fill(0); drAct.fill(0); corpAct.fill(0); corpRivalCid.fill(-1); lmbAct.fill(0);
   pAct.fill(0); pHit.fill(0); pBounce.fill(0); pSnap.fill(0); oAct.fill(0); oHome.fill(0); dAct.fill(0); ptAct.fill(0);
   pHitIdx.fill(-1); pDeflRolled.fill(0);
@@ -625,7 +736,32 @@ function compressOffscreenOrbsToChest() {
   sfx(280, 960, 0.28, "triangle");
 }
 
-function spawnProj(x, y, vx, vy, dmg, life, rad, prc, style, sup, isEnemy = 0, wpnId = -1) {
+// Responsibility follows the source, not the current combat allegiance.  Deflection
+// may change pEnemy but must not silently credit the player for the original shot.
+function projectileOwner(i) {
+  const s = pSource[i];
+  return s === 0 ? "player" : s === 1 ? "enemy" : s === 2 ? "squad" : "unknown";
+}
+// pSource records who fired the round, even if its combat allegiance changes after a deflection:
+// 0 player, 1 hostile, 2 squad. More detailed actor ownership is planned for v15.
+// Attribution belongs to the injury that most recently established bleeding.
+function bleedSetOrigin(i, origin) {
+  eBleedOriginX[i] = origin && Number.isFinite(origin.x) ? origin.x : NaN;
+  eBleedOriginY[i] = origin && Number.isFinite(origin.y) ? origin.y : NaN;
+}
+function bleedShotOrigin(i) {
+  return Number.isFinite(eBleedOriginX[i]) && Number.isFinite(eBleedOriginY[i])
+    ? { x: eBleedOriginX[i], y: eBleedOriginY[i] } : null;
+}
+// Direct straight-projectile launch geometry, when known. This is not temporal witness memory.
+function projectileShotOrigin(i) {
+  return projectileOwner(i) === "player" && (pStyle[i] === 3 || pStyle[i] === 4 || pStyle[i] === 5) && Number.isFinite(pOriginX[i]) && Number.isFinite(pOriginY[i])
+    ? { x: pOriginX[i], y: pOriginY[i] } : null;
+}
+function spawnProj(x, y, vx, vy, dmg, life, rad, prc, style, sup, isEnemy = 0, wpnId = -1, sourceKind = null) {
+  // Only the player's current automatic-weapon invocation is eligible; squad,
+  // hostile, utility and area-effect projectiles retain their normal behavior.
+  if (typeof tfAutoFireAllowed === "function" && !tfAutoFireAllowed(x, y, vx, vy, life, rad, style, isEnemy, sourceKind)) return;
   for (let i = 0; i < MAX_P; i++) {
     if (!pAct[i]) {
       const spd = Math.hypot(vx, vy);
@@ -638,10 +774,16 @@ function spawnProj(x, y, vx, vy, dmg, life, rad, prc, style, sup, isEnemy = 0, w
       }
       pVX[i] = vx; pVY[i] = vy; pDmg[i] = dmg; pLife[i] = life;
       pRad[i] = rad; pPrc[i] = prc; pStyle[i] = style; pSup[i] = sup;
-      pEnemy[i] = isEnemy; pHit[i] = 0; pBounce[i] = 0; pSnap[i] = 0; pDeflRolled[i] = 0;
+      pEnemy[i] = isEnemy; pSource[i] = sourceKind == null ? (isEnemy ? 1 : 0) : sourceKind;
+      // Shooter location at launch is evidence for direct projectile impacts;
+      // do not use the hero's later position after the projectile travels.
+      pOriginX[i] = pSource[i] === 0 && player ? player.x : NaN; pOriginY[i] = pSource[i] === 0 && player ? player.y : NaN;
+      pHit[i] = 0; pBounce[i] = 0; pSnap[i] = 0; pDeflRolled[i] = 0;
       pHitIdx.fill(-1, i * PROJ_HIT_SLOTS, (i + 1) * PROJ_HIT_SLOTS);
       pWpnId[i] = wpnId >= 0 ? wpnId : (player ? player.cid : 0);
-      pAct[i] = 1; return;
+      pAct[i] = 1;
+      if (typeof tfAutoFireSpawned === "function") tfAutoFireSpawned(isEnemy, sourceKind);
+      return;
     }
   }
 }

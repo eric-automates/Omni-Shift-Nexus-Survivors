@@ -206,7 +206,7 @@ function cityBuildChunk(cx, cy) {
     }
   }
   // dynamic props (vehicles left behind)
-  for (const d of cityRT.dyn) if (inC(d.x, d.y, d.w, d.h)) { C.props.push(d); stamp(d.x, d.y, d.w, d.h, F_MOVE | F_SHOT, K_CAR, true); }
+  for (const d of cityRT.dyn) if (inC(d.x, d.y, d.w, d.h)) { C.props.push(d); stamp(d.x, d.y, d.w, d.h, (d.t === "haybale" || d.t === "busstop") ? F_MOVE | F_LOW : F_MOVE | F_SHOT, (d.t === "haybale" || d.t === "busstop") ? K_POLE : K_CAR, true); }
   cityRT.built++;
   if (t0) cityRT.buildMs = performance.now() - t0;
   return C;

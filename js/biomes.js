@@ -496,7 +496,7 @@ function biomeStep(simDt) {
           if (!eAct[i] || eDummy[i]) continue;
           const ex = eX[i] - o.x, ey = eY[i] - o.y;
           if (ex * ex + ey * ey > rr) continue;
-          if (H0.dps) { eHP[i] -= H0.dps * (H0.enemyMul || 2.5) * (player.hazardEnemyMul || 1) * simDt; if (eHP[i] <= 0) { killEnemy(i, false); continue; } }
+          if (H0.dps) { eHP[i] -= H0.dps * (H0.enemyMul || 2.5) * (player.hazardEnemyMul || 1) * simDt; if (eHP[i] <= 0) { killEnemy(i, false, null, "#00f0ff", "unknown"); continue; } }
           if (H0.slow) eSlow[i] = Math.max(eSlow[i], 0.25);
           if (H0.pull) { const d = Math.sqrt(ex * ex + ey * ey) || 1; eX[i] -= ex / d * H0.pull * 0.8 * simDt; eY[i] -= ey / d * H0.pull * 0.8 * simDt; }
         }

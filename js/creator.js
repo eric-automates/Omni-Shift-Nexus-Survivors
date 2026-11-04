@@ -188,8 +188,14 @@ const CUSTOM_SETUPS = {
   dual:   { name: "Dual Sabers", desc: "Two separate sabers - own hilt, colour, level & Form stage" },
   staff:  { name: "Saberstaff", desc: "Double-bladed staff, cuts front & back" }
 };
+// A preference opens the real, optional short dispatch; it is not a career
+// assignment, does not change gear, and never accepts a call automatically.
+const CUSTOM_WORLD_JOBS = {
+  none: { name: "None · decide later", desc: "Keep your current gear. No job prompt or automatic assignment; open Local Dispatch on the map whenever you want." },
+  courier: { name: "Supply courier", desc: "At city deployment, open an optional short supply call. No gear is replaced and no call is accepted until you choose it. This is not a full career arc." }
+};
 const CUSTOM_DEFAULT = {
-  v: 2, created: false, name: "Nexus Wanderer", align: "light", force: "strong", talent: "swift", universe: "auto", hails: "auto",
+  v: 2, created: false, name: "Nexus Wanderer", align: "light", force: "strong", talent: "swift", universe: "auto", hails: "auto", simJob: "none",
   weapons: [{ k: "saber", hilt: 0, col: 0 }, { k: "saber", hilt: 6, col: 2 }], path: "jarkai",
   skills: ["saberThrow", "forcePush"], gear: "forcePush", dash: "forceDash", armor: "robes",
   species: 0, body: 0, skin: 0, hair: 0, head: "none", robe: 0, legs: 0, cloak: 0
@@ -283,6 +289,7 @@ function customHeroSanitize(d) {
   if (!CUSTOM_ARMOR[o.armor]) o.armor = "robes";
   if (typeof CITY_UNIVERSES !== "undefined" ? !CITY_UNIVERSES[o.universe] : typeof o.universe !== "string") o.universe = "auto";   // v14 Nexus City universe
   if (typeof RG_HAILS !== "undefined" ? !RG_HAILS[o.hails] : typeof o.hails !== "string") o.hails = "auto";   // v14.2 homeworld
+  if (!Object.prototype.hasOwnProperty.call(CUSTOM_WORLD_JOBS, o.simJob)) o.simJob = "none";
   o.species = crClampI(o.species, CUSTOM_SPECIES.length); o.body = crClampI(o.body, 2); o.skin = crClampI(o.skin, CUSTOM_SKINS.length);
   o.hair = crClampI(o.hair, CUSTOM_HAIR.length); o.robe = crClampI(o.robe, CUSTOM_ROBES.length);
   o.legs = crClampI(o.legs, CUSTOM_LEGS.length); o.cloak = crClampI(o.cloak, CUSTOM_CLOAKS.length);
@@ -700,7 +707,7 @@ function crKitStep(simDt) {
       if (g.beep <= 0) { g.beep = 0.16; if (opts.vol > 0) sfxTone(1500, 1500, 0.03, "square", 0.05, 0); }
       if (g.t >= g.fly + g.fuse) {
         const lvl = player.weapons[0] ? player.weapons[0].lvl : 1;
-        triggerRocketDetonation(g.x1, g.y1, (240 + 30 * lvl + 1.6 * runTime) * (player.might || 1), 95 * (player.area || 1));
+        triggerRocketDetonation(g.x1, g.y1, (240 + 30 * lvl + 1.6 * runTime) * (player.might || 1), 95 * (player.area || 1), "player");
         if (typeof fxShake === "function") fxShake(4, 0.3);
         crKit.nades.splice(k, 1);
       }
@@ -923,6 +930,7 @@ function renderCreator() {
     <div class="cr-row"><div class="cr-lbl">TALENT</div><div class="cr-chips">${chips("talent", CUSTOM_TALENTS, d.talent)}</div><small>${CUSTOM_TALENTS[d.talent].desc}</small></div>
     ${typeof CITY_UNIVERSES !== "undefined" ? `<div class="cr-row"><div class="cr-lbl">UNIVERSE · NEXUS CITY</div><div class="cr-chips">${chips("universe", CITY_UNIVERSES, d.universe || "auto")}</div><small>${(CITY_UNIVERSES[d.universe] || CITY_UNIVERSES.auto).desc}</small></div>` : ""}
     ${typeof RG_HAILS !== "undefined" ? `<div class="cr-row"><div class="cr-lbl">HAILS FROM · HOMEWORLD</div><div class="cr-chips">${chips("hails", RG_HAILS, d.hails || "auto")}</div><small>${(RG_HAILS[d.hails] || RG_HAILS.auto).desc}</small></div>` : ""}
+    ${v15ContractEnabled("community_supply") ? `<div class="cr-row"><div class="cr-lbl">SIMULATED WORLD JOB</div><div class="cr-chips">${chips("simJob", CUSTOM_WORLD_JOBS, d.simJob)}</div><small>${CUSTOM_WORLD_JOBS[d.simJob].desc}</small></div>` : `<div class="cr-row"><div class="cr-lbl">SIMULATED WORLD JOB</div><small>Jobs are unavailable in this revision. Existing job preferences remain saved.</small></div>`}
     <div class="cr-cap">LOADOUT ${cap}</div>
     ${wRows}
     <div class="cr-row"><div class="cr-chips">${d.weapons.length < 3 ? `<button class="btn gold cr-chip" id="crAdd">＋ ADD WEAPON (${d.weapons.length}/3)</button>` : ""}

@@ -232,7 +232,7 @@ function updateWorldObjects(simDt) {
   if (!player) return;
   // 1. Update Hazard Zones (FIX: neighbouring chunks too - a hazard near a border used to be ignored
   //    as soon as the player stepped into the next chunk). At most one hazard ticks per frame.
-  if (!player.hazImmune && player.inVehicle === 0 && !player.hover) {
+  if (!player.hazImmune && player.inVehicle === 0 && !player.hover && (player.flyAlt || 0) <= 3) { // ground hazards stay below an airborne hero
     const cx = Math.floor(player.x / CHUNK_SIZE), cy = Math.floor(player.y / CHUNK_SIZE);
     let inHazard = false, hz = null;
     for (let dy = -1; dy <= 1 && !inHazard; dy++) {
@@ -308,7 +308,7 @@ function updateWorldObjects(simDt) {
       }
       if (triggered) {
         if (typeof triggerRocketDetonation === "function") {
-          triggerRocketDetonation(mn.x, mn.y, mn.dmg || 160, 72);
+          triggerRocketDetonation(mn.x, mn.y, mn.dmg || 160, 72, "player");
         }
         activeMines.splice(m, 1);
       }

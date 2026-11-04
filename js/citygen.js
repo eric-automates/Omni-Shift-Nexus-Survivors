@@ -372,6 +372,7 @@ function icAdd(G, t, x, y, w, h, o, s, v = 0) { const f = { t, x, y, w, h, o, s,
 // against a wall: w = length along the wall, d = depth into the room. sides: 0 top,1 right,2 bottom,3 left
 function icWall(G, room, r, t, w, d, s, sides = [0, 1, 2, 3], opt = {}) {
   const order = opt.keep ? sides : cShuffle(r, sides.slice());
+  let driveFallback = null, driveBest = null, driveBestDist = Infinity;
   for (const side of order) {
     const L = side % 2 === 0 ? room.w : room.h, ww = w, dd = d;
     if (ww > L) continue;
@@ -379,7 +380,9 @@ function icWall(G, room, r, t, w, d, s, sides = [0, 1, 2, 3], opt = {}) {
     for (let p = 0; p <= L - ww; p++) pos.push(p);
     if (opt.center) pos.sort((a, b) => Math.abs(a - (L - ww) / 2) - Math.abs(b - (L - ww) / 2));
     else if (opt.corner) pos.sort((a, b) => Math.min(a, L - ww - a) - Math.min(b, L - ww - b));
-    else cShuffle(r, pos);
+    // After finding the original fallback, inspect further sides without
+    // consuming extra random draws that would change unrelated furnishings.
+    else if (!driveFallback) cShuffle(r, pos);
     for (const p of pos) {
       let x, y, fw, fh, o;
       if (side === 0) { x = room.x + p; y = room.y; fw = ww; fh = dd; o = 0; }
@@ -387,11 +390,31 @@ function icWall(G, room, r, t, w, d, s, sides = [0, 1, 2, 3], opt = {}) {
       else if (side === 3) { x = room.x; y = room.y + p; fw = dd; fh = ww; o = 3; }
       else { x = room.x + room.w - dd; y = room.y + p; fw = dd; fh = ww; o = 1; }
       if (icFree(G, x, y, fw, fh)) {
+        if (opt.driveClear) {
+          // Keep an unobstructed, slightly wider exit strip toward the room.
+          const p = opt.driveClear;
+          const strip = side === 0 ? [x-1, y + fh, fw+2, p] : side === 2 ? [x-1, y - p, fw+2, p] : side === 3 ? [x + fw, y-1, p, fh+2] : [x - p, y-1, p, fh+2];
+          if (!icFree(G, ...strip)) { if (!driveFallback) driveFallback = { x, y, fw, fh, o }; continue; }
+          if (driveFallback) {
+            const dx = x + fw/2 - driveFallback.x - driveFallback.fw/2, dy = y + fh/2 - driveFallback.y - driveFallback.fh/2;
+            const dist = dx*dx + dy*dy;
+            if (dist < driveBestDist) { driveBestDist = dist; driveBest = { x, y, fw, fh, o }; }
+            continue;
+          }
+        }
         icMark(G, x, y, fw, fh, s === FS_NONE ? 0 : 3);
         if (opt.pad) icMarkPad(G, x, y, fw, fh, side, opt.pad);
         return icAdd(G, t, x, y, fw, fh, o, s, opt.v || 0);
       }
     }
+  }
+  if (driveFallback) {
+    // Prefer the closest usable spot; otherwise retain the original forklift
+    // and furniture index when no clear exit exists.
+    const { x, y, fw, fh, o } = driveBest || driveFallback;
+    icMark(G, x, y, fw, fh, s === FS_NONE ? 0 : 3);
+    if (opt.pad) icMarkPad(G, x, y, fw, fh, o, opt.pad);
+    return icAdd(G, t, x, y, fw, fh, o, s, opt.v || 0);
   }
   return null;
 }
@@ -626,7 +649,7 @@ function icFurnish(G, room, r, theme) {
     case "warehouse": {
       icRows(G, room, "rack", Math.max(4, Math.min(16, room.w - 8)), 2, 4, FS_TALL, room.w >= room.h ? 0 : 1, { margin: 3, split: 4, m0: 4 });
       icScatterSmall(G, room, r, "pallet", 5, FS_LOW); icScatterSmall(G, room, r, "box", 4, FS_LOW);
-      icWall(G, room, r, "forklift", 2, 4, FS_COVER, [0, 1, 2, 3]);
+      icWall(G, room, r, "forklift", 2, 4, FS_COVER, [0, 1, 2, 3], { driveClear: 4 });
       break;
     }
     case "barn": {

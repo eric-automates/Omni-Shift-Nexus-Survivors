@@ -11,6 +11,14 @@
 const mBurst = new Uint8Array(MAX_MINION), mAim = new Float32Array(MAX_MINION), mTeam = new Uint8Array(MAX_MINION),
       mSlot = new Uint8Array(MAX_MINION), mTag = new Float32Array(MAX_MINION);
 const mName = new Array(MAX_MINION).fill("");
+// Paths are disposable navigation hints, not save state.  A maximum of two
+// searches per simulation step keeps a large fireteam from stalling a phone.
+const squadNav = Array.from({ length: MAX_MINION }, () => ({ path: null, retry: 0, stuck: 0, lineT: 0, lineOK: true }));
+let squadPathBudget = 0;
+function squadNavReset(m) {
+  const N = squadNav[m]; if (!N) return;
+  N.path = null; N.retry = N.stuck = N.lineT = 0; N.warnT = -999;
+}
 function squadRewindArrays() { return [mBurst, mAim, mTeam, mSlot, mTag]; }
 
 // Soldier kinds 5-8 (0-4 are the original necro / transfiguration minions).
@@ -46,7 +54,7 @@ const SQUAD_ORDERS = [
   { id: 3, label: "ADVANCE", icon: "⬆", call: "MOVE UP! ADVANCE!", reply: ["Moving up!", "Pushing forward!", "Oorah!"] }
 ];
 const squadState = { order: 0, ax: 0, ay: 0, focusIdx: -1, focusUid: 0, orderT: 0, wheelOpen: false, theme: "marine",
-                     innateN: 0, reinforceT: 40, gunSfxT: 0, uiT: 0, alive: 0, soldiers: 0, coGunner: -1, hl: -1 };
+                     innateN: 0, reinforceT: 40, gunSfxT: 0, uiT: 0, alive: 0, soldiers: 0, coGunner: -1, hl: -1, formHeading: 0 };
 
 /* === 2. CALL-INS === */
 function squadThemeKey() {
@@ -58,6 +66,7 @@ function squadSpawnSoldier(x, y, kind, k, life, th) {
   const hp = 150 + waveNum * 14, dmg = (13 + waveNum * 2.4) * (player.might || 1);
   const slot = spawnMinion(x, y, kind, hp, dmg, 128, life, th.uni);
   mTeam[slot] = 1; mSlot[slot] = k; mBurst[slot] = 0; mAim[slot] = player.aim || 0; mTag[slot] = 3.0;
+  squadNavReset(slot);
   mName[slot] = th.names[k % th.names.length];
   return slot;
 }
@@ -95,7 +104,7 @@ function squadPickFocus() {
 function squadIssueOrder(id) {
   if (!player) return;
   const S = squadState;
-  S.order = id; S.orderT = 0;
+  S.order = id; S.orderT = 0; S.regroupT = id === 0 ? 2 : 0;
   if (id === 1) { S.ax = player.x; S.ay = player.y; }
   if (id === 2) squadPickFocus();
   const o = SQUAD_ORDERS[id];
@@ -114,26 +123,106 @@ function squadIssueOrder(id) {
 
 /* === 4. AI (replaces js/sim.js updateMinionsSim) === */
 function squadMove(m, dx, dy, simDt, mul) {
-  if (!dx && !dy) return;
-  mVX[m] = dx * mSpd[m] * mul; mVY[m] = dy * mSpd[m] * mul;
-  mX[m] += mVX[m] * simDt; mY[m] += mVY[m] * simDt;
-  mWalk[m] += simDt * (mKind[m] === 1 ? 11 : 7.5);
+  if (!dx && !dy) { mVX[m] = 0; mVY[m] = 0; return; }
+  const vx = dx * mSpd[m] * mul, vy = dy * mSpd[m] * mul;
+  const ox = mX[m], oy = mY[m];
+  if (typeof CITY !== "undefined" && CITY.on && typeof cityResolve === "function") {
+    // Small substeps prevent a fast follower crossing a thin wall between frames.
+    const n = Math.max(1, Math.min(16, Math.ceil(Math.hypot(vx, vy) * simDt / 6)));
+    for (let k = 0; k < n; k++) {
+      const nx = mX[m] + vx * simDt / n, ny = mY[m] + vy * simDt / n;
+      if (typeof cityFlagsAt === "function" && typeof cityDoorRequest === "function" &&
+          (cityFlagsAt(nx + dx * 10, ny + dy * 10) & F_DOOR)) cityDoorRequest(nx + dx * 10, ny + dy * 10);
+      const q = cityResolve(nx, ny, mKind[m] === 4 ? 10 : 7, false);
+      mX[m] = q[0]; mY[m] = q[1];
+    }
+  } else { mX[m] += vx * simDt; mY[m] += vy * simDt; }
+  const moved = Math.hypot(mX[m] - ox, mY[m] - oy), planned = Math.hypot(vx, vy) * simDt;
+  const N = squadNav[m];
+  N.stuck = planned > .5 && moved < planned * .25 ? N.stuck + simDt : Math.max(0, N.stuck - simDt);
+  mVX[m] = (mX[m] - ox) / Math.max(.0001, simDt); mVY[m] = (mY[m] - oy) / Math.max(.0001, simDt);
+  if (moved > .1) mWalk[m] += simDt * (mKind[m] === 1 ? 11 : 7.5);
 }
 function squadMoveTo(m, tx, ty, simDt, mul, stopR) {
-  const dx = tx - mX[m], dy = ty - mY[m], d = Math.hypot(dx, dy);
-  if (d > stopR) squadMove(m, dx / d, dy / d, simDt, mul);
+  const dx = tx - mX[m], dy = ty - mY[m], d = Math.hypot(dx, dy), N = squadNav[m];
+  N.retry = Math.max(0, N.retry - simDt);
+  N.lineT = Math.max(0, (N.lineT || 0) - simDt);
+  if (d <= stopR) { N.path = null; mVX[m] = mVY[m] = 0; return d; }
+  let gx = tx, gy = ty;
+  let blocked = false;
+  if (typeof CITY !== "undefined" && CITY.on && typeof stClearLine === "function" && typeof stFindPath === "function" && d > 25) {
+    // Cache a clear-line query briefly; actual movement still checks collision.
+    if (!N.lineT || Math.hypot(tx - N.lineTX, ty - N.lineTY) > 50 || Math.hypot(mX[m] - N.lineX, mY[m] - N.lineY) > 48) {
+      N.lineOK = stClearLine(mX[m], mY[m], tx, ty, 7); N.lineT = .25;
+      N.lineX = mX[m]; N.lineY = mY[m]; N.lineTX = tx; N.lineTY = ty;
+    }
+    blocked = !N.lineOK;
+  }
+  if (blocked) {
+    let P = N.path;
+    const changed = P && Math.hypot(P.tx - tx, P.ty - ty) > 70;
+    if ((!P || changed || P.k >= P.pts.length || N.stuck > 1) && !N.retry && squadPathBudget > 0) {
+      squadPathBudget--; P = N.path = stFindPath(mX[m], mY[m], tx, ty); N.retry = 1.2; N.stuck = 0;
+    }
+    if (P && P.k < P.pts.length) {
+      while (P.k < P.pts.length && Math.hypot(P.pts[P.k][0] - mX[m], P.pts[P.k][1] - mY[m]) < 12) P.k++;
+      if (P.k < P.pts.length) { gx = P.pts[P.k][0]; gy = P.pts[P.k][1]; }
+    }
+  } else N.path = null;
+  const mx = gx - mX[m], my = gy - mY[m], md = Math.hypot(mx, my);
+  if (md > .1) squadMove(m, mx / md, my / md, simDt, mul);
   return d;
 }
 
+// Friendly shooters check the full projectile lane, not just the target.
+// Only locally simulated people the shooter can see count as known risks.
+function squadSafeShotAt(m, x, y, ang, range, spread) {
+  if (typeof CITY === "undefined" || !CITY.on || opts.squadFireSafety === false) return true;
+  const c = Math.cos(ang), s = Math.sin(ang), margin = Math.tan(Math.min(.4, spread || 0));
+  function risky(px, py, radius) {
+    const dx = px - x, dy = py - y, along = dx * c + dy * s;
+    if (along < 8 || along > range || Math.abs(-dx * s + dy * c) > radius + 4 + along * margin) return false;
+    return typeof cityLOS !== "function" || cityLOS(x, y, px, py);
+  }
+  if (player && risky(player.x, player.y, 9)) return false;
+  for (let j = 0; j < MAX_MINION; j++) if (j !== m && mAct[j] && risky(mX[j], mY[j], Math.min(12, mRad[j] || 7))) return false;
+  if (typeof TF !== "undefined" && TF.on && TF.walk) for (const p of TF.walk) {
+    if (p && p.alive && p.w && p.w.hp > 0 && risky(p.w.x, p.w.y, 7)) return false;
+  }
+  return true;
+}
+function squadFindSafeFlank(m, targetX, targetY, spec, homeD, order) {
+  // Hold-position teams do not abandon their post for a cleaner shot.
+  if (order === 1 && homeD > 40) return null;
+  const a = Math.atan2(targetY - mY[m], targetX - mX[m]), side = (mSlot[m] & 1) ? 1 : -1;
+  const range = spec.max * 1.35 + spec.spd * .1;
+  for (const sign of [side, -side]) {
+    const x = mX[m] - Math.sin(a) * 55 * sign, y = mY[m] + Math.cos(a) * 55 * sign;
+    if (typeof cityCircleBlocked === "function" && cityCircleBlocked(x, y, 8, false)) continue;
+    if (typeof stClearLine === "function" && !stClearLine(mX[m], mY[m], x, y, 7)) continue;
+    if (squadSafeShotAt(m, x, y, Math.atan2(targetY - y, targetX - x), range, spec.spread)) return [x, y];
+  }
+  return null;
+}
+function squadHoldFire(m) {
+  mAtkCD[m] = .12;
+  const N = squadNav[m];
+  if (runTime - (N.warnT == null ? -999 : N.warnT) > 3 && typeof spawnSpeech === "function") {
+    N.warnT = runTime; spawnSpeech(mX[m], mY[m] - 16, "HOLD FIRE!", "#ffd166", 1.0);
+  }
+}
 function squadFireSoldier(m, kind, ang, simDt, rateMul) {
-  if (mAtkCD[m] > 0) return;
+  if (mAtkCD[m] > 0) return null;
   const sp = SOLDIER_SPECS[kind], th = FIRETEAM_THEMES[squadState.theme] || FIRETEAM_THEMES.marine;
+  if (!squadSafeShotAt(m, mX[m], mY[m], ang, sp.max * 1.35 + sp.spd * .1, sp.spread)) {
+    squadHoldFire(m); return false;
+  }
   if (mBurst[m] === 0) mBurst[m] = sp.burst;
   const pellets = sp.pellets || 1;
   for (let k = 0; k < pellets; k++) {
     const a = ang + (Math.random() - 0.5) * sp.spread * 2;
     spawnProj(mX[m], mY[m], Math.cos(a) * sp.spd, Math.sin(a) * sp.spd, mDmg[m] * sp.dmg, (sp.max / sp.spd) * 1.35 + 0.1,
-              kind === 7 ? 4 : 3, sp.prc, th.bolt ? 4 : 9, 0, 0, 200);
+              kind === 7 ? 4 : 3, sp.prc, th.bolt ? 4 : 9, 0, 0, 200, 2);
   }
   const mx = mX[m] + Math.cos(ang) * 11, my = mY[m] + Math.sin(ang) * 11;
   spawnPt(mx, my, Math.cos(ang) * 30, Math.sin(ang) * 30, 0.06, 3.2, th.bolt ? 9 : 2, 0);                        // muzzle flash
@@ -142,13 +231,21 @@ function squadFireSoldier(m, kind, ang, simDt, rateMul) {
   if (now - squadState.gunSfxT > 70) { squadState.gunSfxT = now; sfx(kind === 7 ? 260 : 420, 90, kind === 7 ? 0.09 : 0.035, "sawtooth", kind === 7 ? 0.09 : 0.05); }
   mBurst[m]--;
   mAtkCD[m] = (mBurst[m] > 0 ? sp.gap : sp.cd * (0.9 + Math.random() * 0.2)) / (rateMul || 1);
+  return true;
 }
 
 function squadMinionsSim(simDt) {
   const S = squadState;
+  squadPathBudget = 2;
   S.orderT += simDt;
+  if (S.regroupT > 0) S.regroupT = Math.max(0, S.regroupT - simDt);
   if (S.order === 2 && (S.focusIdx < 0 || !eAct[S.focusIdx] || eUid[S.focusIdx] !== S.focusUid)) squadPickFocus();
   const aimX = Math.cos(player.aim || 0), aimY = Math.sin(player.aim || 0);
+  // Remember the direction of travel at a halt; do not orbit the leader.
+  if (Math.hypot(player.vx || 0, player.vy || 0) > 8 && !player.inVehicle) {
+    const heading = Math.atan2(player.vy, player.vx);
+    S.formHeading = lerpAng(S.formHeading, heading, Math.min(1, simDt * 4));
+  }
   let alive = 0, soldiers = 0, coGunner = -1;
   if (player.inVehicle > 0 && !(typeof CITY !== "undefined" && CITY.on)) {   // v14.1: in Nexus City riders take real seats (js/convoy.js)
     for (let m = 0; m < MAX_MINION; m++) if (mAct[m] && mKind[m] >= 5 && mKind[m] <= 7) { coGunner = m; break; }
@@ -161,7 +258,7 @@ function squadMinionsSim(simDt) {
     if (mTag[m] > 0) mTag[m] -= simDt;
     if (mLife[m] <= 0 || mHP[m] <= 0) {
       if (mTeam[m] && mHP[m] <= 0) spawnSpeech(mX[m], mY[m] - 12, "MAN DOWN! " + (mName[m] || ""), "#ff5252", 1.4);
-      mAct[m] = 0; mTeam[m] = 0; spawnParticles(mX[m], mY[m], 4);
+      mAct[m] = 0; mTeam[m] = 0; squadNav[m].path = null; squadNav[m].retry = squadNav[m].stuck = 0; spawnParticles(mX[m], mY[m], 4);
       continue;
     }
     alive++;
@@ -184,19 +281,26 @@ function squadMinionsSim(simDt) {
     }
 
     // --- home point & engagement envelope from the current order
-    const formAng = m * 1.15 + (S.order === 0 ? runTime * 0.8 : 0);
+    const formAng = m * 1.15;
     let hx, hy, engageR, leashR;
     if (S.order === 1) { hx = S.ax + Math.cos(formAng) * 34; hy = S.ay + Math.sin(formAng) * 34; engageR = 240; leashR = 95; }
     else if (S.order === 3) {
       const rx = player.x + aimX * 230, ry = player.y + aimY * 230;
       hx = rx + Math.cos(formAng) * 40; hy = ry + Math.sin(formAng) * 40; engageR = 430; leashR = 1e9;
+    } else if (S.order === 0 && soldier && mTeam[m]) {
+      // Compact wedge behind the leader. Different slots remain separate as the team turns.
+      const slot = mSlot[m] % 8, row = Math.floor(slot / 2) + 1, side = slot % 2 ? 1 : -1;
+      const forward = -40 - (row - 1) * 45, lateral = side * (38 + (row - 1) * 22);
+      const c = Math.cos(S.formHeading), s = Math.sin(S.formHeading);
+      hx = player.x + c * forward - s * lateral; hy = player.y + s * forward + c * lateral;
+      engageR = 360; leashR = 270;
     } else { hx = player.x + Math.cos(formAng) * 44; hy = player.y + Math.sin(formAng) * 44; engageR = 360; leashR = 270; }
     const holdP = typeof convoyHoldPoint === "function" ? convoyHoldPoint(m) : null;   // v14.1: no seat left - hold the spot
     if (holdP) { hx = holdP.x + Math.cos(formAng) * 26; hy = holdP.y + Math.sin(formAng) * 26; engageR = 300; leashR = 140; }
 
     let bestE = -1, bestD = engageR;
     if (S.order === 2 && S.focusIdx >= 0) { bestE = S.focusIdx; bestD = Math.hypot(eX[bestE] - mX[m], eY[bestE] - mY[m]); }
-    else {
+    else if (!(S.order === 0 && S.regroupT > 0)) {
       const cx = S.order === 1 ? S.ax : mX[m], cy = S.order === 1 ? S.ay : mY[m];
       for (let j = 0; j < MAX_E; j++) {
         if (!eAct[j] || eLevitate[j] > 0 || (typeof sdIgnore === "function" && sdIgnore(j))) continue;   // v12: not the crowd
@@ -224,10 +328,19 @@ function squadMinionsSim(simDt) {
           if (homeD > 60) { mvx = (hx - mX[m]) / homeD; mvy = (hy - mY[m]) / homeD; }
           else if (d > sp.max) { mvx = 0; mvy = 0; }
         }
-        squadMove(m, mvx, mvy, simDt, 1);
-        if (d <= sp.max * 1.15) squadFireSoldier(m, kind, mAim[m], simDt, 1);
+        if (d > sp.max && S.order !== 1) squadMoveTo(m, eX[bestE], eY[bestE], simDt, 1, sp.max);
+        else squadMove(m, mvx, mvy, simDt, 1);
+        if (d <= sp.max * 1.15) {
+          const fired = squadFireSoldier(m, kind, mAim[m], simDt, 1);
+          if (fired === false) {
+            const flank = squadFindSafeFlank(m, eX[bestE], eY[bestE], sp, homeD, S.order);
+            if (flank) squadMoveTo(m, flank[0], flank[1], simDt, .6, 5);
+          }
+        }
       } else {
-        squadMoveTo(m, hx, hy, simDt, leashBreak ? 1.15 : 0.85, 8);
+        const leaderSpeed = Math.hypot(player.vx || 0, player.vy || 0);
+        const followMul = S.order === 0 && !holdP && !player.inVehicle ? Math.min(2.2, Math.max(0.85, leaderSpeed / Math.max(1, mSpd[m]) * 1.15)) : (leashBreak ? 1.15 : 0.85);
+        squadMoveTo(m, hx, hy, simDt, followMul, 8);
         mAim[m] = lerpAng(mAim[m], S.order === 3 ? (player.aim || 0) : Math.atan2(mY[m] - player.y, mX[m] - player.x), Math.min(1, simDt * 6));
       }
       continue;
@@ -238,46 +351,52 @@ function squadMinionsSim(simDt) {
       const dx = eX[bestE] - mX[m], dy = eY[bestE] - mY[m], d = Math.hypot(dx, dy) || 1, ang = Math.atan2(dy, dx);
       mAim[m] = ang;
       if (kind === 2) {
-        if (d > 135 && !(S.order === 1 && homeD > 60)) squadMove(m, dx / d, dy / d, simDt, 1);
+        if (d > 135 && !(S.order === 1 && homeD > 60)) squadMoveTo(m, eX[bestE], eY[bestE], simDt, 1, 135);
         else if (d < 75) squadMove(m, -dx / d, -dy / d, simDt, 0.65);
         else if (S.order === 1 && homeD > 60) squadMoveTo(m, hx, hy, simDt, 1, 8);
         if (mAtkCD[m] <= 0 && d < 300) {
-          mAtkCD[m] = 0.82;
-          spawnProj(mX[m], mY[m], Math.cos(ang) * 380, Math.sin(ang) * 380, mDmg[m], 0.85, 5, 1, 4, 0, 0, 75);
-          sfx(640, 280, 0.04, "triangle", 0.09);
+          if (squadSafeShotAt(m, mX[m], mY[m], ang, 323, 0)) {
+            mAtkCD[m] = 0.82;
+            spawnProj(mX[m], mY[m], Math.cos(ang) * 380, Math.sin(ang) * 380, mDmg[m], 0.85, 5, 1, 4, 0, 0, 75, 2);
+            sfx(640, 280, 0.04, "triangle", 0.09);
+          } else {
+            squadHoldFire(m);
+            const flank = squadFindSafeFlank(m, eX[bestE], eY[bestE], { max: 211, spd: 380, spread: 0 }, homeD, S.order);
+            if (flank) squadMoveTo(m, flank[0], flank[1], simDt, .6, 5);
+          }
         }
       } else {
         const eRad = eType[bestE] === 99 ? 22 : 12;
         const reach = mRad[m] + eRad + 6;
         const mayChase = S.order !== 1 || Math.hypot(eX[bestE] - S.ax, eY[bestE] - S.ay) < leashR + 40;
         if (d > reach * 0.85) {
-          if (mayChase) squadMove(m, dx / d, dy / d, simDt, 1);
+          if (mayChase) squadMoveTo(m, eX[bestE], eY[bestE], simDt, 1, reach * 0.85);
           else squadMoveTo(m, hx, hy, simDt, 1, 8);
         }
         if (d <= reach && mAtkCD[m] <= 0) {
           mAtkCD[m] = kind === 1 ? 0.34 : (kind === 4 ? 0.92 : 0.52);
           if (kind === 4) {
-            spawnBlastWave(mX[m], mY[m], 62, mCol[m]);
+            spawnBlastWave(mX[m], mY[m], 62, mCol[m], "squad");
             sfx(110, 42, 0.18, "sawtooth", 0.24);
             for (let k = 0; k < MAX_E; k++) {
               if (!eAct[k]) continue;
               if (Math.hypot(eX[k] - mX[m], eY[k] - mY[m]) <= 64) {
                 eHP[k] -= mDmg[m]; eStun[k] = Math.max(eStun[k], 0.85);
                 spawnDmg(eX[k], eY[k], mDmg[m], true);
-                if (eHP[k] <= 0) killEnemy(k, false);
+                if (eHP[k] <= 0) killEnemy(k, false, null, "#00f0ff", "squad");
               }
             }
           } else {
             eHP[bestE] -= mDmg[m];
             eScarAng[bestE] = ang + 0.4; eScarHeat[bestE] = 0.85;
-            if (kind === 1) { eBleed[bestE] = 1; eBleedRate[bestE] = eMax[bestE] * 0.08; eSlow[bestE] = 1.5; }
+            if (kind === 1) { eBleed[bestE] = 1; eBleedRate[bestE] = eMax[bestE] * 0.08; eBleedSource[bestE] = 2; bleedSetOrigin(bestE, null); eSlow[bestE] = 1.5; }
             if ((kind === 0 || kind === 3) && Math.random() < 0.28 && eArmsLost[bestE] < 2) {
               eArmsLost[bestE]++;
               spawnGroundLimb(eX[bestE], eY[bestE], "#ff5252", 1);
             }
             spawnDmg(eX[bestE], eY[bestE], mDmg[m], kind === 3);
             sfx(260, 110, 0.045, "triangle", 0.11);
-            if (eHP[bestE] <= 0) killEnemy(bestE, false, (kind === 0 || kind === 3) ? ang : null, mCol[m]);
+            if (eHP[bestE] <= 0) killEnemy(bestE, false, (kind === 0 || kind === 3) ? ang : null, mCol[m], "squad");
           }
           mHP[m] -= (eType[bestE] >= 98 ? 14 : 5);
         }
@@ -493,8 +612,9 @@ function squadFrame(rawDt) {
 
 function squadReset() {
   const S = squadState;
-  S.order = 0; S.focusIdx = -1; S.focusUid = 0; S.orderT = 0; S.innateN = 0; S.reinforceT = 40; S.alive = 0; S.soldiers = 0; S.coGunner = -1;
+  S.order = 0; S.focusIdx = -1; S.focusUid = 0; S.orderT = 0; S.innateN = 0; S.reinforceT = 40; S.alive = 0; S.soldiers = 0; S.coGunner = -1; S.regroupT = 0; S.formHeading = player ? (player.aim || 0) : 0;
   mTeam.fill(0); mTag.fill(0); mBurst.fill(0);
+  for (let m = 0; m < MAX_MINION; m++) squadNavReset(m);
   squadWheelClose();
 }
 

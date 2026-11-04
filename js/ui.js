@@ -64,7 +64,7 @@ function checkLoadedScripts() {
   const checks = [
     ["chaos.js", typeof ChaosMath !== "undefined"], ["data-factions.js", typeof FACTIONS !== "undefined"],
     ["data-heroes.js", typeof CHAR_RAW !== "undefined"], ["data-relics.js", typeof RELICS_DB !== "undefined"],
-    ["state.js", typeof loadMeta === "function"], ["world.js", typeof getDistBiome === "function"],
+    ["state.js", typeof loadMeta === "function"], ["savebackup.js", typeof backupValidate === "function"], ["world.js", typeof getDistBiome === "function"],
     ["combat.js", typeof startRun === "function"], ["sim.js", typeof updateSim === "function"],
     ["render.js", typeof renderScene === "function"],
     ["fx.js", typeof fxTimeMul === "function"], ["rewind.js", typeof rewindPlayback === "function"],
@@ -79,11 +79,12 @@ function checkLoadedScripts() {
     ["minimap.js", typeof mapOpen === "function"],
     ["sense.js", typeof senseRenderScreen === "function"], ["force.js", typeof forceReset === "function"],
     ["vehicles.js", typeof vehStepAll === "function"], ["convoy.js", typeof convoyReset === "function"],
+    ["releaseprofile.js", typeof v15FeatureEnabled === "function"], ["jobcareer.js", typeof jcOffer === "function"], ["jobvehicle.js", typeof jcLoanRequest === "function"],
     ["cityaccess.js", typeof accReset === "function"], ["hudlayout.js", typeof hudPreview === "function"],
     ["sheathe.js", typeof sheatheDraw === "function"], ["heroreg.js", typeof heroRegister === "function"], ["saga.js", typeof sagaLitStep === "function"], ["weaponart.js", typeof waWand === "function"],
     ["regiongen.js", typeof regionGenerate === "function"], ["regionsites.js", typeof rgTownBays === "function"], ["regionart.js", typeof rgBake === "function"], ["regionworlds.js", typeof rgWater === "function"], ["location.js", typeof locOpen === "function"], ["locals.js", typeof enemySpecJ === "function"],
     ["realdata.js", typeof rmMvt === "function"], ["realgen.js", typeof rmGenBlock === "function"], ["realart.js", typeof rmBake === "function"], ["realui.js", typeof rmPreload === "function"],
-    ["agefilter.js", typeof ageInfoHTML === "function"], ["items.js", typeof itSearch === "function"], ["scenario.js", typeof scnRunStart === "function"], ["traffic.js", typeof trfStep === "function"], ["police.js", typeof pdStep === "function"], ["gunart.js", typeof gaDraw === "function"], ["gunaudio.js", typeof gauShot === "function"], ["dualaim.js", typeof dualAimTarget === "function"], ["actionui.js", typeof actFire === "function"], ["townsfolk.js", typeof tfStep === "function"], ["economy.js", typeof ecoHourTick === "function"], ["apoc.js", typeof apocTag === "function"], ["flight.js", typeof flyStep === "function"], ["kisurge.js", typeof kiITOpen === "function"], ["rivalchase.js", typeof rvcStep === "function"]
+    ["agefilter.js", typeof ageInfoHTML === "function"], ["items.js", typeof itSearch === "function"], ["scenario.js", typeof scnRunStart === "function"], ["traffic.js", typeof trfStep === "function"], ["police.js", typeof pdStep === "function"], ["gunart.js", typeof gaDraw === "function"], ["gunaudio.js", typeof gauShot === "function"], ["dualaim.js", typeof dualAimTarget === "function"], ["actionui.js", typeof actFire === "function"], ["jobcore.js", typeof jobOffer === "function"], ["jobroute.js", typeof jobFindSite === "function"], ["jobdispatch.js", typeof jdOpen === "function"], ["townsfolk.js", typeof tfStep === "function"], ["economy.js", typeof ecoHourTick === "function"], ["apoc.js", typeof apocTag === "function"], ["flight.js", typeof flyStep === "function"], ["kisurge.js", typeof kiITOpen === "function"], ["rivalchase.js", typeof rvcStep === "function"]
   ];
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
   if (failed.length > 0) {
@@ -989,7 +990,11 @@ function renderOpts() {
     ["Vehicle Steering", opts.vehSteer === "classic" ? "CLASSIC (W/S THROTTLE · A/D STEER)" : "POINT-TO-STEER (PUSH WHERE YOU WANT TO GO)", () => { opts.vehSteer = opts.vehSteer === "classic" ? "point" : "classic"; }],
     ["Vehicle Speed Units", opts.vehUnits === "kmh" ? "KM/H" : "MPH", () => { opts.vehUnits = opts.vehUnits === "kmh" ? "mph" : "kmh"; }],
     ["🚗 City Traffic", opts.traffic !== false ? "ON (CARS, SIGNALS, STOP SIGNS)" : "OFF", () => { opts.traffic = opts.traffic === false; }],
-    ["🚔 Traffic Police", opts.police !== false ? "ON (SPEEDING & RED LIGHTS GET TICKETS)" : "OFF", () => { opts.police = opts.police === false; }]
+    ["🚔 Traffic Police", opts.police !== false ? "ON (SPEEDING & RED LIGHTS GET TICKETS)" : "OFF", () => { opts.police = opts.police === false; }],
+    ["👥 Squad Fire Discipline", opts.squadFireSafety !== false ? "ON (AVOID CIVILIANS & ALLIES)" : "OFF (CLASSIC FIRE)", () => { opts.squadFireSafety = opts.squadFireSafety === false; }],
+    ["👥 Civilian Injury Consequences", opts.civilianConsequences !== false ? "ON (PLAYER INJURIES CAN ADD HEAT)" : "OFF (CIVILIANS STILL TAKE DAMAGE)", () => { opts.civilianConsequences = opts.civilianConsequences === false; }],
+    ["⚠ Off-screen Civilian Warning", opts.civilianWarning !== false ? "ON (VISIBLE PEOPLE ONLY · NOT ALL-CLEAR)" : "OFF", () => { opts.civilianWarning = opts.civilianWarning === false; }],
+    ["🛑 Auto-fire Safety Assist", opts.autoFireSafety === true ? "ON (STRAIGHT SHOTS · KNOWN CIVILIANS · NOT BLASTS)" : "OFF", () => { opts.autoFireSafety = opts.autoFireSafety !== true; }]
   ];
   rows.forEach(r => {
     const btn = document.createElement("button"); btn.className = "btn"; btn.textContent = `${r[0]}: ${r[1]}`;
@@ -1081,6 +1086,35 @@ document.getElementById("btnPause").onclick = (e) => {
   document.getElementById("pauseBar").style.display = "flex";
   renderWeaponToggler(); drawRangeTarget(selRangeTab); showScreen("scrLevel");
 };
+// A browser can lose pointer-up/keyup when a call, app switch, file picker or
+// tab change interrupts play. Never leave those transient controls latched.
+// This does not pretend to save or restore the live run after a process kill.
+function uiReleaseInterruptedControls() {
+  for (const k of Object.keys(keys)) keys[k] = false;
+  joy.act = false; joy.id = -1; joy.dx = 0; joy.dy = 0; pinchDist = 0;
+  if (typeof FLY !== "undefined") FLY.touchUp = FLY.touchDn = FLY.touchBrake = 0;
+  if (typeof KI !== "undefined") KI.touch = 0;
+  if (typeof VEH !== "undefined") {
+    VEH.touchHB = false;
+    if (VEH.me) VEH.me.cruise = 0;
+    const hb = document.querySelector("#vehHud .vh-hb"); if (hb) hb.classList.remove("gold");
+  }
+  if (typeof ACT !== "undefined") {
+    if (ACT.holdT) clearTimeout(ACT.holdT);
+    ACT.holdT = 0;
+    if (ACT.el) ACT.el.classList.remove("down", "hold");
+  }
+  if (typeof MAPV !== "undefined") MAPV.drag = null;
+}
+function uiPauseInterruptedRun() {
+  uiReleaseInterruptedControls();
+  // Existing panels already pause and own their resume behavior. Do not
+  // replace them, and never silently resume after the tab becomes visible.
+  if (runActive && !runPaused) document.getElementById("btnPause").click();
+}
+window.addEventListener("blur", uiReleaseInterruptedControls);
+document.addEventListener("visibilitychange", () => { if (document.hidden) uiPauseInterruptedRun(); });
+window.addEventListener("pagehide", uiPauseInterruptedRun);
 document.getElementById("btnResume").onclick = (e) => {
   e.stopPropagation();
   runPaused = false;

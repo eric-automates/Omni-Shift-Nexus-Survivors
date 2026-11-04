@@ -197,32 +197,49 @@ function ecoSetLevel() {
   if (l === 0 && old > 0 && player) itToast("✔ The heat is off", "#69f0ae");
   ecoHud();
 }
-// who saw it? people awake with a clear line of sight, police on shift; the victim always knows
-function ecoWitnesses(x, y, victim) {
-  let n = 0, cops = 0;
+// Event witnesses can react without necessarily identifying the shooter.
+// For direct shots, the optional launch position gives an additional geometric
+// identification check. It is not a memory of exactly what each actor saw at
+// firing time; explosions and other crimes still use the legacy model.
+function ecoWitnesses(x, y, victim, origin) {
+  let n = 0, cops = 0, identified = 0, idCops = 0;
+  const canIdentify = (wx, wy) => !origin || (Math.hypot(wx - origin.x, wy - origin.y) <= 900 && cityLOS(wx, wy, origin.x, origin.y));
   if (typeof TF !== "undefined") for (const p of TF.walk) {
     const W = p.w; if (!W || !p.alive || W.sleep || p === victim) continue;
     const d = Math.hypot(W.x - x, W.y - y); if (d > 900) continue;
-    if (d > 60 && !cityLOS(W.x, W.y, x, y)) continue;
-    n++; const job = p.job && TF.bld.get(p.job.uid); if (job && job.kind === "police") cops++;
+    // Direct-shot identification requires sight of the incident as well as
+    // the launch point; the legacy near-event shortcut cannot prove either.
+    if ((origin || d > 60) && !cityLOS(W.x, W.y, x, y)) continue;
+    n++; const job = p.job && TF.bld.get(p.job.uid), isCop = job && job.kind === "police"; if (isCop) cops++;
+    if (canIdentify(W.x, W.y)) { identified++; if (isCop) idCops++; }
     W.flee = 5; W.fleeX = x; W.fleeY = y;
   }
-  for (let j = 0; j < MAX_E; j++) if (eAct[j] && ECO.law[j] && Math.hypot(eX[j] - x, eY[j] - y) < 900 && cityLOS(eX[j], eY[j], x, y)) { n++; cops++; }
-  return { n, cops };
+  for (let j = 0; j < MAX_E; j++) if (eAct[j] && ECO.law[j] && Math.hypot(eX[j] - x, eY[j] - y) < 900 && cityLOS(eX[j], eY[j], x, y)) { n++; cops++; if (canIdentify(eX[j], eY[j])) { identified++; idCops++; } }
+  return { n, cops, identified, idCops };
 }
-function ecoOnCrime(kind, x, y, victim, how) {
+function ecoOnCrime(kind, x, y, victim, how, origin) {
   if (!ECO.on) return;
   // self-defence: hurting someone who attacked you first isn't a crime
   if (victim && victim.aggr && runTime - victim.aggr < 20) return;
-  const w = ecoWitnesses(x, y, victim), seenByVictim = victim && victim.alive && (kind === "robbery" || kind === "assault");
+  const w = ecoWitnesses(x, y, victim, origin), v = victim && victim.w;
+  const seenByVictim = victim && victim.alive && (kind === "robbery" || kind === "assault") && (!origin || (v && Math.hypot(v.x - origin.x, v.y - origin.y) <= 900 && cityLOS(v.x, v.y, origin.x, origin.y)));
+  const witnesses = origin ? w.identified : w.n, identifiedCops = origin ? w.idCops : w.cops;
   let heat = ECO_HEAT[kind] || 20;
-  if (!w.n && !seenByVictim) { heat *= 0.15; if (kind === "murder" && typeof tfNews === "function") tfNews("A body was found" + (victim ? " — " + victim.name : "") + ". Police are asking for witnesses."); }
-  else if (w.cops) heat *= 1.3;
+  // A discovered body or an unseen event is not evidence against the hero.
+  // Keep the world news, but do not invent player heat without a witness.
+  if (!witnesses && !seenByVictim) {
+    if (kind === "murder" && typeof tfNews === "function") {
+      if (w.n) tfNews((victim ? victim.name : "A person") + " was killed. Witnesses could not identify the attacker.");
+      else tfNews("A body was found" + (victim ? " — " + victim.name : "") + ". Police are asking for witnesses.");
+    }
+    return;
+  }
+  if (identifiedCops) heat *= 1.3;
   ECO.W.heat += heat; ECO.W.crimes++;
-  if (w.n || seenByVictim) ECO.W.lastSeen = runTime;
+  if (witnesses || seenByVictim) ECO.W.lastSeen = runTime;
   ECO.W.unseen = runTime - ECO.W.lastSeen;
   ecoSetLevel();
-  if (kind === "murder" && victim && typeof tfNews === "function" && (w.n || seenByVictim)) tfNews(victim.name + " was killed in broad view. The suspect is still at large.");
+  if (kind === "murder" && victim && typeof tfNews === "function" && (witnesses || seenByVictim)) tfNews(victim.name + " was killed in broad view. The suspect is still at large.");
 }
 function ecoOnAlarm(x, y, R, why) { /* reserved: the law hears about big noise only through witnesses (above) */ }
 function ecoWitnessTheft(b, n) {
@@ -240,7 +257,7 @@ function ecoRob(p) {
 }
 function ecoAttackCivilian(p) {
   if (!p || !p.alive || !p.w) return;
-  tfHurt(p, 12 + Math.random() * 8, "punch", "player");
+  tfHurt(p, 12 + Math.random() * 8, "punch", "player", null, {x:player.x,y:player.y});
   if (p.alive) tfSay(p, ["Hey! What the—", "Stop! Help!", "Are you crazy?!"][Math.floor(Math.random() * 3)], 2);
 }
 // a townsperson goes bad: they become a real threat (lawless street crew); fighting them is self-defence
@@ -347,15 +364,18 @@ function ecoNeedsStep(dt) {
   if (typeof fireWeapon === "function") {
     const _fw = fireWeapon;
     window.fireWeapon = function (w) {
+      let spentRound = false;
       if (ECO.needs && ecoIsGun(w)) {
         if (ECO.rounds <= 0) {
           const B = itBag();
           if (B.ammo > 0) { B.ammo--; ECO.rounds = 30; itToast("🔋 RELOAD — " + itName("ammo").toLowerCase() + " (" + B.ammo + " left)", "#b3e5fc"); }
           else { w.dryN = (w.dryN || 0) + 1; if (runTime - ECO.ammoMsgT > 10) { ECO.ammoMsgT = runTime; itToast("🔋 OUT OF AMMO — buy or loot some", "#ff8a80"); } if (w.dryN % 4) return; }
         }
-        if (ECO.rounds > 0) ECO.rounds--;
+        if (ECO.rounds > 0) { ECO.rounds--; spentRound = true; }
       }
-      return _fw.apply(this, arguments);
+      const result = _fw.apply(this, arguments);
+      if (result === false && spentRound) ECO.rounds++;
+      return result;
     };
   }
   // the city's own spawners: calm in a working town — gangs at night, a bounty hunter now and then, the law when wanted
@@ -404,9 +424,16 @@ function ecoNeedsStep(dt) {
         }
       }
     });
-    V10.onKill.push((idx, x, y) => {
+    V10.onKill.push((idx, x, y, et, isEcho) => {
       if (!ECO.on) return;
-      if (ECO.law[idx]) { ECO.law[idx] = 0; ecoOnCrime("copkill", x, y, null, "kill"); }
+      if (ECO.law[idx]) {
+        ECO.law[idx] = 0;
+        // Never blame the hero for a known hostile, squad or unknown cause.
+        // Unconverted legacy kill paths retain previous handling until the
+        // remaining actor/command provenance audit is complete.
+        const cause = typeof currentKillSource === "string" ? currentKillSource : "legacy";
+        if (!isEcho && (cause === "player" || cause === "legacy")) ecoOnCrime("copkill", x, y, null, "kill", typeof currentKillOrigin !== "undefined" ? currentKillOrigin : null);
+      }
       ECO.bad[idx] = -1;
     });
     V10.onRunReset.push(() => { ECO.on = false; ecoKioskClose(); ecoHud(); });

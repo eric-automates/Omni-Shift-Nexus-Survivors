@@ -18,13 +18,19 @@
    ========================================================================= */
 "use strict";
 
-// v14.3 MAP SCALE: world metres per real metre (RM.S). Real places are drawn at 1:3 by default — roads, houses and cars
-// sized to the hero (his sprite is ~0.75 m tall at 32 px/m) — and the player can pick 1:2 or true size (1:1) in the menu.
-// Everything real lands scaled at the projection; real-size constants elsewhere multiply by RM.S (rmZ).
+// v15 MAP SIZE: the baseline is one half of geographic size. Menu percentages are relative to this baseline.
+// Existing stored scales remain available and keep their original save keys. The projection scales roads, buildings and vehicles together.
 const RM_HALF0 = 24000;               // REAL metres from the centre to the border highway (48 km across)
-let RM_HALF = RM_HALF0 / 3;           // world metres (set by rmScaleSet)
+let RM_HALF = RM_HALF0 / 2;           // world metres (set by rmScaleSet)
 let RM_LO = 32000 - RM_HALF, RM_HI = 32000 + RM_HALF;
-const RM_SCALES = [[1 / 3, "1:3", "Hero-sized (default)"], [1 / 2, "1:2", "Roomier"], [1, "1:1", "True size"]];
+const RM_BASE_SCALE = 1 / 2;
+const RM_SCALES = [
+  [1 / 2, "DEFAULT", "Standard map size"],
+  [3 / 8, "25% SMALLER", "Smaller than standard"],
+  [5 / 8, "25% BIGGER", "Bigger than standard"],
+  [1 / 3, "ABOUT 33% SMALLER", "Previous small size"],
+  [1, "100% BIGGER", "Full geographic size"]
+];
 // attribution the map data needs wherever it shows (OpenFreeMap's required wording + the OSM copyright link)
 const RM_ATTR = "OpenFreeMap © OpenMapTiles · Data from OpenStreetMap";
 const RM_ATTR_HTML = 'OpenFreeMap © OpenMapTiles · Data from <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" style="color:inherit">OpenStreetMap</a> (ODbL)';
@@ -46,14 +52,22 @@ const RM = {
   tpl: "", tplP: null, index: null, indexP: null, packs: new Map(),
   tiles: new Map(), cells: new Map(), q: [], active: 0, conc: 6, gen: 0,
   ovw: null, stats: { req: 0, ok: 0, fail: 0, bytes: 0, decodeMs: 0, cacheHits: 0 },
-  readyCb: [], lastStream: 0, err: "", worldId: "", viaOnline: 0, offlineErr: "", noOnline: false, S: 1 / 3
+  readyCb: [], lastStream: 0, err: "", worldId: "", viaOnline: 0, offlineErr: "", noOnline: false, S: RM_BASE_SCALE
 };
 // real metres → world metres
 function rmZ(v) { return v * RM.S; }
 // world m² → real m² (classification thresholds are real sizes)
 function rmRealA(a) { return a / (RM.S * RM.S); }
-function rmScaleNorm(S) { S = +S; for (const q of RM_SCALES) if (Math.abs(q[0] - S) < 1e-3) return q[0]; return RM_SCALES[0][0]; }
-function rmScaleLabel(S) { const q = RM_SCALES.find(q => Math.abs(q[0] - S) < 1e-3); return q ? q[1] : "1:3"; }
+function rmScaleNorm(S) { S = +S; for (const q of RM_SCALES) if (Math.abs(q[0] - S) < 1e-3) return q[0]; return RM_BASE_SCALE; }
+function rmScaleLabel(S) { const q = RM_SCALES.find(q => Math.abs(q[0] - S) < 1e-3); return q ? q[1] : "DEFAULT"; }
+// Save identity must not depend on menu labels. Preserve v14.3 world/drop/cache keys exactly.
+function rmScaleKey(S) {
+  S = rmScaleNorm(S);
+  if (Math.abs(S - 1 / 3) < 1e-6) return "1:3";
+  if (Math.abs(S - 1 / 2) < 1e-6) return "1:2";
+  if (Math.abs(S - 1) < 1e-6) return "1:1";
+  return "s" + S.toFixed(3);
+}
 // set the scale before a place is built; a different scale forgets the decoded tiles (they are stored scaled)
 function rmScaleSet(S) {
   S = rmScaleNorm(S);
@@ -461,7 +475,7 @@ function rmTrim(xm, ym) {
 // EOF part 5 (realdata.js continues)
 
 /* --- 7. KM CELLS: everything under one 1 km cell, buildings stitched across seams ----- */
-let RM_PAD = 260;   // world metres of neighbouring tiles a cell waits for (big buildings, roads crossing the edge) — 260 real m × scale
+let RM_PAD = Math.round(260 * RM_BASE_SCALE);   // world metres of neighbouring tiles a cell waits for (big buildings, roads crossing the edge) — 260 real m × scale
 function rmCellKeys(mx, my) { return rmTilesIn(mx * 1000 - RM_PAD, my * 1000 - RM_PAD, (mx + 1) * 1000 + RM_PAD, (my + 1) * 1000 + RM_PAD); }
 function rmCellReady(mx, my) { for (const k of rmCellKeys(mx, my)) if (rmTileState(k) < 2) return false; return true; }
 function rmCellData(mx, my) {
