@@ -1,188 +1,215 @@
-# OMNI-SHIFT v15: CHRONO-LATTICE RATCHET LEDGER
-**Directive Code:** `VERDIKA-LOCKSTEP-15`
-**Anchor Date:** 2026-11-04
-**Base Snapshot:** Commit `c0c11dd` (Cache `15.0.69`, Branch `v15`)
+# VERDIKA-LOCKSTEP-15 — ZERO-FLUFF STATUS & AUTO-ESCALATION
+
+**Directive:** Install this protocol as persistent operating guidance.
+
+## 1. ZERO-FLUFF OUTPUT LAW
+
+- Never output long prose or code dumps in chat.
+- Every reply starts with a status icon: 🟢, 🟡, or 🔴.
+- Keep every chat line within 30 characters.
+- End with exactly one explicit `YOUR NEXT ACTION` line for the user.
+
+## 2. AUTONOMOUS STATUS BRANCHING
+
+At the end of every turn, evaluate state and choose exactly one branch.
+
+### Branch A — 🟢 GREEN
+
+**Trigger:** A step reached `-LOCKED`, or `-partK` moved the target metric closer to green on Strike 1.
+
+Output only:
+
+```text
+🟢 STATUS: IN PLACE & MOVING
+WATERMARK: CHRONO-LATTICE-V2
+STEP : <e.g. 15.1.3-LOCKED>
+DELTA: <e.g. A10 d=191->14>
+SCORE: <50% +7%/locked ser.>
+BUNDL: <8-char SHA> (<MB>MB)
+YOUR NEXT ACTION:
+-> Reply "GO" to run <next>
+```
+
+### Branch B — 🟡 YELLOW
+
+**Trigger:** Cutoff recovery, or Strike 2 of 3 on a `-partK` where the metric moved but the gate is not green.
+
+Output only:
+
+```text
+🟡 STATUS: WORKING (STRIKE 2)
+WATERMARK: CHRONO-LATTICE-V2
+STEP : <e.g. 15.1.3-part16>
+STRIK: [2/3] (Cap: 3 parts)
+DELTA: <metric prev -> now>
+BUNDL: <8-char SHA> (<MB>MB)
+YOUR NEXT ACTION:
+-> Reply "GO" for final try
+```
+
+### Branch C — 🔴 RED
+
+**Trigger if any occur:**
+
+- Two consecutive identical red
+  canonical test traces.
+- Strike 3 (`-part3` / `part16`)
+  without a green gate.
+- Any gauntlet regression.
+- Hash, bundle, or git mismatch.
+- Disk usage exceeds 118 MB.
+
+**Mandatory auto-action:** Do not try another code fix. Immediately:
+
+1. Revert uncommitted broken edits
+   so the working tree is clean.
+2. Rebuild
+   `qa/v15_recent_commits_recovery.bundle`.
+3. Generate
+   `/home/user/MANAGER_ESCALATION_PACK.zip`
+   under 20 MB, excluding the 30 MB
+   map/music archive. Include:
+   - `AI_MANAGER_BRIEF.md` with the
+     exact failure trace, `git log -5`,
+     diff, and what failed twice.
+   - `ESTIMATE_TRAJECTORY.*`.
+   - Latest failing
+     `qa/evidence/*.json` and `.log`.
+   - Modified `js/` files and
+     `qa/v15_recent_commits_recovery.bundle`.
+4. Output only:
+
+```text
+🔴 STATUS: OUT OF PLACE /
+   PLATEAU DETECTED
+WATERMARK: CHRONO-LATTICE-V2
+REASON: <1-line root cause>
+STEP  : <current tag>
+PACK  : /home/user/MANAGER_
+        ESCALATION_PACK.zip
+        (<size MB>, READY)
+YOUR NEXT ACTION:
+-> Download MANAGER_
+   ESCALATION_PACK.zip and
+   hand to your AI Manager,
+   OR reply "SHELVE" to skip
+   to next revision series.
+```
+
+## 3. SHORTCUT COMMANDS
+
+- **GO:** Advance one ratchet step and
+  reply with 🟢, 🟡, or 🔴.
+- **STATUS:** Run the Confidence-Restore
+  Visual Graph & Audit check and reply
+  with 🟢 or 🔴.
+- **SHELVE:** Trigger the Plateau Circuit
+  Breaker: turn the feature off in
+  `releaseprofile.js`, log it in
+  `DEFERRED_LEDGER`, tag
+  `-DEFERRED-LOCK`, and start the
+  next `15.X.1` series.
 
 ---
 
-## 0. MANDATORY WATERMARK & LOOP-BREAKER DIRECTIVE
-
-1. **Temporal Watermark:** Every status update, test log summary, and Git commit message produced after reading this file MUST include the exact phrase **`CHRONO-LATTICE RATCHET LEDGER`**. This phrase is a unique temporal marker establishing that work is operating under the post-`c0c11dd` micro-revision architecture rather than the old 31-item monolithic loop.
-2. **Why Development Stalled Between v14.3 and v15:**
-   - Up through `v14.3` (`89d6b21`), features were built and verified in focused 1-to-2 hour commits.
-   - Between `v14.3` and `c0c11dd`, 31 massive parent items (`J01`–`J15` and `T16`–`T31`) plus a 10-pass whole-game audit were coupled into a single fail-closed release gate (`qa/v15_release_gate.py` + `qa/v15_item_gate.py`).
-   - Because `qa/v15_release_gate.py` blocks any final v15 build until all 31 items are 100% complete, telling the agent to *"shelve what isn't working and finish what is working"* caused a contradiction: the code in `js/releaseprofile.js` shelved unfinished features, but the gate scripts still rejected the build because shelved items were <100%.
-3. **The New Law (Strict Decoupling):**
-   - **Stop trying to complete all 31 items for `v15.0`.**
-   - **Stop running 10-pack whole-game regressions after every tiny edit.** Run only the single targeted test for the active micro-revision, and run the full serial suite ONLY at the Midpoint Seal (`v15.0.99-OMEGA`).
-   - **Work is now split into three distinct tiers:**
-     - **Tier 1 (`15.0.1` to `15.0.8` — Micro-Revisions):** 1-to-2 hour locked chunks that finish, polish, and verify **ONLY the systems and job flavors that already work** in `c0c11dd`. Anything broken or unbuilt is explicitly shelved—never debugged or expanded during `15.0.x`.
-     - **Tier 2 (`v15.0.99-OMEGA` — The Midpoint Seal):** The hard breakpoint between `15.0.x` and `15.1.x`. At `v15.0.99-OMEGA`, 100% of enabled features work, all shelved features are cleanly gated off, the release gate is scoped strictly to enabled `15.0` features, and the working **v15.0 Final Overlay ZIP** is produced.
-     - **Tier 3 (`15.1.x`, `15.2.x`, `15.3.x` ... — Shelved Feature Rollouts):** Every feature, career flavor, or subsystem that was shelved because it was broken or unbuilt is moved to planned post-baseline versions (`15.1` through `15.7`), built in small modular increments after `v15.0.99-OMEGA` is locked.
+# CHRONO-LATTICE RATCHET LEDGER — INDEPENDENT REVIEW & RATCHET v2.0 DIRECTIVE
+**Directive Code:** `VERDIKA-LOCKSTEP-15-R2`
+**Reviewed Snapshot:** Branch `v15` @ `8fab687` (`15.1.3-part14`)
+**Supersedes:** `CHRONO_LATTICE_RATCHET_LEDGER_v15.md` (v1.0)
 
 ---
 
-## 1. WORKSPACE TIMESTAMP & PARALLEL-PATH AUDIT
+## 1. ANSWERS TO §7 QUESTIONS (`verdict → minimal concrete change → observable/test → risk → unverified`)
 
-Before executing `15.0.1`, align your context with the actual chronological ground truth found in `.git/logs/HEAD` and the workspace files—do not resurrect superseded paths:
-
-- **2026-10-31 21:30 to 2026-11-01 13:25 UTC (`v14.2`, ends at `6876ce3`):** Built Star Wars saber choreography, world profiles, 14 Indiana real-map packs, economy/apocalypse, soft-Newtonian flight, and Ki-Surge. **Status:** Locked legacy baseline.
-- **2026-11-01 14:51 to 17:29 UTC (`v14.3`, ends at `89d6b21`):** Built 1:3 real-map scaling, `js/traffic.js`, `js/police.js`, `js/actionui.js`, `js/gunart.js`, `js/dualaim.js`. **Status:** Locked legacy baseline.
-- **2026-11-02 (`uploads/ARCHITECTURE-DOCTRINE.md` — Codename `KM45`):** A 254 KB normative open-world spec uploaded mid-stream. **Parallel-Path Warning:** As noted in `V15_STABLE_TASK_TRACKER.md`, further `ARCHITECTURE-DOCTRINE.md` overhaul work is **DEFERRED**. Do NOT use `KM45` to rewrite existing v15 modules.
-- **2026-11-03 18:10 UTC (`95e62d4`, Cache `15.0.46`) vs. 20:19 UTC (`3ed123d`, Cache `15.0.48`):**
-  - *Superseded Path:* At `15.0.46` (still reflected in the stale header of `V15_REVISED_PLAN.md` "report 16" and `CHANGELOG_v15.md`), all `J02` and `J09` dispatch offers were turned off, and at `15.0.48` only `J09.SUPPLY` was exposed.
-  - *Current Active Truth (`2cccfea` & `c0c11dd`, 2026-11-04 13:07–13:22 UTC, Cache `15.0.69`):* After recovering from the host `.git` reset to `9781081` via `qa/v15_recent_commits_recovery.bundle` (`0c0e572`) and purging 1,913 obsolete QA/evidence files (`0a0906b`), `js/releaseprofile.js` now enables **6 working dispatch contracts** (`J09.SUPPLY`, `J09.PRIORITY`, `J09.MEDICAL`, `J09.MEDICAL_CONTACT`, `J09.SHIFT`, and `J02.WITNESS`) while keeping `T22.MULTI_VEHICLE_CONVOY: false`.
-  - **Action Required:** Trust `js/releaseprofile.js` and `V15_STABLE_TASK_TRACKER.md` (Report 33, `c0c11dd`) over the stale "Report 16" text at the top of `V15_REVISED_PLAN.md`.
-
----
-
-## 2. PHASE A: MICRO-REVISIONS (`15.0.1` – `15.0.8`)
-**Goal:** Lock in what already works, shelve every non-working sub-flavor, synchronize stale docs/gates, and reach a 100% working `v15.0` without writing new speculative features.
-
-### Micro-Revision `15.0.1` — Release Profile & Doc Synchronization
-- **Scope:**
-  - Keep `js/releaseprofile.js` locked to the 6 working contracts (`J09.SUPPLY`, `J09.PRIORITY`, `J09.MEDICAL`, `J09.MEDICAL_CONTACT`, `J09.SHIFT`, `J02.WITNESS`) and `T22.MULTI_VEHICLE_CONVOY: false`.
-  - Ensure any unmapped/unknown contract ID in `v15ContractEnabled(id)` only passes when an explicit `V15_INTERNAL_TEST_MODE` flag is set by QA fixtures, closing the loophole where unauthored contract aliases bypass `V15_CAREER_CONTRACTS`.
-  - Update `Omni-Shift-Nexus-Survivors/CHANGELOG_v15.md` and `RELEASE_SCOPE_v15.md` so they match `15.0.69` (`c0c11dd`) instead of stopping at `15.0.52`.
-- **Shelved to `15.1+`:** Full 5-stage careers for `J02`/`J09`, all unbuilt careers (`J01`, `J03`–`J08`, `J10`–`J15`), and `T22.MULTI_VEHICLE_CONVOY`.
-- **Verification:** Run `qa/run31_staging_boot_module_checks.py` (fast boot + module probe).
-
-### Micro-Revision `15.0.2` — Courier System Lock-In (`J09` Working Flavors)
-- **Scope:**
-  - Verify and freeze the 5 working Courier contracts (`community_supply`, `priority_supply`, `medical_supply`, `medical_supply` with `recipientMode`, and 3-stop `courier_shift` with on-foot assistant and run-local work vehicle).
-  - Keep the `c0c11dd` fault-injected work-vehicle rollback (`js/jobvehicle.js`) intact.
-  - Explicitly label run-local vehicle/fuel behavior in the dispatch UI so it is a documented `15.0` mechanic rather than an open bug.
-- **Shelved to `15.2.x`:** Cross-reload persistent loaner vehicles/fuel, assistant vehicle boarding, dynamic road closures, and 7–12 minute multi-act courier arcs.
-- **Verification:** Run focused courier checks (`qa/run36_jobvehicle_installed.py`, `qa/run36_loan_touch_retry.py`, `qa/run33_shift_hold_resume.py`).
-
-### Micro-Revision `15.0.3` — Witness Investigation Lock-In (`J02.WITNESS` Working Flavor)
-- **Scope:**
-  - Freeze the bounded `witness_trace` call (report review, civilian contact interview, optional person-of-interest denial interview, damageable missing-witness foot escort, one-time first aid, and optional unarmed support contact).
-  - Add a defensive null/property guard around `hp` deserialization in `js/jobcareer.js` / `js/jobdispatch.js` when hydrating saved witness/contact records so legacy or partial checkpoint objects never throw `KeyError('hp')` or undefined property errors on reload.
-- **Shelved to `15.2.x`:** Armed suspect confrontation, police responder handoff, arrest/transport mechanics, and full Detective rank progression.
-- **Verification:** Run `qa/run35_witness_profile.py` and `qa/run35_witness_hold_resume.py`.
-
-### Micro-Revision `15.0.4` — Flight, Cruise & Touch HUD Lock-In (`T25`, `T26`, `T28`)
-- **Scope:**
-  - Lock in the working 60m altitude combat-separation boundary, screen-sized flying hero rendering, held aircraft-to-self-flight transition (`flyEnd` guard), road-vehicle `CRUISE` hold/cancel, and 48px coarse-pointer HUD wrapping (`js/flight.js`, `js/hudlayout.js`, `js/actionui.js`).
-  - Add a clean viewport clamp for the separate flight-control panel on narrow landscape screens so it never covers the primary action/exit button.
-- **Shelved to `15.4.x`:** Full 3D rooftop-relative altitude combat, adaptive dynamic HUD re-architecting, and physical Android hardware sign-off.
-- **Verification:** Run `qa/run30_flight_hold_transition.py`, `qa/run30_flight_job_actual_touch.py`, and `qa/run28_current_self_tap.py`.
-
-### Micro-Revision `15.0.5` — Law, Radar, Attribution & Civilian Safety Lock-In (`T18`, `T19`, `T20`)
-- **Scope:**
-  - Lock in the working stationary cruiser `RADAR` tool, witnessed-only traffic citations, 12-second stuck-officer traffic-stop cancellation, off-screen radioed cruiser spawning, launch-position ballistic/spell witness checks, rewind evidence preservation, and optional Auto-fire Safety Assist (`js/police.js`, `js/combat.js`, `js/rewind.js`).
-- **Shelved to `15.3.x`:** Player-operated traffic stops/ticketing, suspect arrest/transport, tow trucks, and persistent long-term NPC witness memory.
-- **Verification:** Run `qa/police_arrival_viewport_v15.py` and targeted `v15` law/attribution tests.
-
-### Micro-Revision `15.0.6` — Player-Car Squad Boarding & Overflow Hold Lock-In (`T21`, `T22` Subset)
-- **Scope:**
-  - With `T22.MULTI_VEHICLE_CONVOY: false`, verify and lock in the working squad behaviors: travel-oriented infantry follow slots, boarding the player's vehicle up to seat capacity, overflow squad members holding position with a map marker, and clean unpinning on player re-entry.
-  - Keep `vehClearEmbeddedHay` (tractor) and `vehClearEmbeddedStop` (armytruck) plus warehouse clear-strip forklift placement active for player-driven vehicles.
-- **Shelved to `15.1.x`:** Multi-vehicle AI overflow convoys (`A09`, `A10`, `F04`), herringbone shoulder parking, and faction-specific indoor breaching formations.
-- **Verification:** Run `qa/packs/vehicles.py` enabled subset (excluding deferred `A09`/`A10`/`F04`).
-
-### Micro-Revision `15.0.7` — Save Protection, Portable Backup & Map Scale Baseline (`T24`, `T27`)
-- **Scope:**
-  - Lock in unreadable-save overwrite protection, storage-failure retry UI, Progress Backup JSON export/import/recovery (`js/savebackup.js`), and the `DEFAULT` (1:2) / `±25%` real-map scale options that preserve existing saved world keys.
-- **Shelved to `15.3.x`:** Procedural/generated-world road-width and building-footprint rescaling (`T24` citygen/regiongen coordinate migration).
-- **Verification:** Run `qa/backup_touch_v15.py`.
-
-### Micro-Revision `15.0.8` — Baseline Gate Alignment for `v15.0`
-- **Scope:**
-  - Update `qa/v15_regression_policy.py` and `qa/v15_release_gate.py` so they support a **Baseline Release Mode (`--profile=v15.0-omega`)**:
-    1. All tests for enabled features must pass 100%.
-    2. Explicitly gated `15.1+` items (`A09`, `A10`, `F04` convoy tests and unbuilt careers) are recorded in `DEFERRED_TO_V15_1_LEDGER.json` rather than blocking the `v15.0` baseline build.
-    3. Locally omitted asset tests (`v142:R20` Clay City and `sabers:S10` omitted MP3 track) are explicitly classified under the authorized 2-city/2-track local subset rule (verified via `R24` and `ORIGINAL_SNAPSHOT_MANIFEST.json`) rather than treated as code regressions.
-
----
-
-## 3. PHASE B: THE MIDPOINT BREAKPOINT (`v15.0.99-OMEGA`)
-**Meaning:** `v15.0.99-OMEGA` is the **Ironclad Midpoint Seal** between the `15.0.x` stabilization micro-revisions and the `15.1+` shelved-feature expansions.
-
-At `v15.0.99-OMEGA`, and **ONLY** at `v15.0.99-OMEGA`:
-1. Set `index.html` cache tag to `15.0.99-OMEGA`.
-2. Run the full serial regression suite once across all 10 packs and verify that:
-   - Source SHA-256 digest is identical before and after the run.
-   - Every enabled test passes (`426/426` enabled, with `S10` and `R20` documented under the local-asset omission manifest and `A09`/`A10`/`F04` deferred to `15.1.x`).
-3. Run `qa/run22_stage_overlay.py`, `qa/run26_overlay_verify.py`, and `qa/package_v15_final.py` to build the clean, shippable **`omni-shift-v15.0-omega-overlay.zip`** (no `.git`, every file <20 MB, with `V15_OVERLAY_MANIFEST.json` listing the 30 unchanged remote asset prerequisites).
-4. Create a local Git tag/branch `v15.0.99-OMEGA` and update `qa/v15_recent_commits_recovery.bundle`.
-
-**No shelved feature may be re-enabled or coded until `v15.0.99-OMEGA` is sealed and packaged.**
-
----
-
-## 4. PHASE C: SHELVED FEATURE ROADMAP (`15.1.x` – `15.7.x`)
-Once `v15.0.99-OMEGA` is locked, bring back the shelved features one isolated minor version at a time:
-
-### `v15.1.x` — Multi-Vehicle AI Convoy & Herringbone Recovery (`T22`, `T29`)
-- **`15.1.1`:** Deterministic corridor & prop-relocation trace (fixing `A09` fixture vs. `K_POLE` width mismatch).
-- **`15.1.2`:** Leader traffic-collision avoidance & follower `rejoin` catch-up velocity floor when leader halts early.
-- **`15.1.3`:** Herringbone target lock (fixing the bug where `cvDrive` overwrites `c.hx, c.hy` every tick) and `A10` 30-frame physical parking certification.
-- **`15.1.4`:** Flip `T22.MULTI_VEHICLE_CONVOY: true` once `A09`, `A10`, and `F04` pass deterministically.
-
-### `v15.2.x` — Full Detective (`J02`) & Courier (`J09`) Career Completion + Persistent Vehicles (`T16`, `T17`)
-- **`15.2.1`:** Serialize active loaner work-vehicle pose, HP, and fuel in `meta.jobState` across reloads, and allow the courier assistant to board passenger seats.
-- **`15.2.2`:** Complete `J09` Courier 5-stage career progression, road-closure rerouting, and 7–12 minute flagship arc.
-- **`15.2.3`:** Complete `J02` Detective confrontation, police responder arrival, guarded handoff, and 5-stage career progression.
-
-### `v15.3.x` — Proactive Police Role (`J01`, `T18`), Actor Identity (`T19`), & World Scale Migration (`T24`)
-- **`15.3.1`:** Durable Actor UUIDs & hydration/dehydration invariants (`T19`) so mission/witness NPCs never lose identity across streaming or crime-selector passes (`C66`).
-- **`15.3.2`:** Player-operated cruiser pull-over, walk-up citation/search, suspect arrest, and cruiser transport (`J01` Patrol Officer + `T18`).
-- **`15.3.3`:** Versioned `genScaleVersion: 2` procedural road/building scale migration (`T24`) that keeps legacy `genScaleVersion: 1` worlds byte-identical for old saves.
-
-### `v15.4.x` — Emergency & Rescue Careers (`J04` Firefighter, `J05` Paramedic, `J06` SAR, `J07` Airlift, `J08` Mechanic/Tow)
-- Build each responder career in its own sub-revision (`15.4.1` through `15.4.5`) reusing `jobcore.js` checkpoints and `jobvehicle.js` spawning.
-
-### `v15.5.x` — Tactical & Underworld Careers (`J03` SWAT, `J10` Bounty Hunter, `J11` Security, `J12` Heist, `J13` Smuggler, `J14` Mercenary)
-- Build one career per sub-revision (`15.5.1` through `15.5.6`).
-
-### `v15.6.x` — Universe-Specific Career Profiles (`J15`) & Squad Faction Doctrine (`T21`)
-- Map universe-native call variants (Star Wars bounty/Imperial patrols, Cyberpunk trauma/netrunner, Post-Apoc convoy escort) and faction door/crossing formations.
-
-### `v15.7.x` — Material-Aware Destruction & Repair (`T23`)
-- Implement bounded, per-chunk delta-overlay structural damage, wall penetration, fire spread caps, and repair crews.
-
----
-
-## 5. TECHNICAL CAUTIONS & ANSWERS TO `V15_INDEPENDENT_REVIEW_HANDOFF.md`
-*(For use during `15.0.x` stabilization and `15.1.x` convoy work)*
-
-### Top 5 Technical Findings (Tagged Observed / Inference / Unverified)
-1. **[Observed — High Impact] `cvDrive` Overwrites Herringbone Target `c.hx, c.hy` Every Frame (`js/convoy.js:488–534`):**
-   - In `cvDrive(v, dt, target, gap, i)`, `was` is captured before `cvDriveNormal`. On the frame `cvDriveNormal` transitions `c.st` from `"go"`/`"column"` to `"herring"`, `was !== 'herring'` and `c.st === 'herring'`. Execution falls through to lines 513–534, which **re-projects and overwrites `c.hx` and `c.hy` 120–360 px forward**! Worse, on subsequent frames (`was === 'herring'`), lines 494–507 run a curved-path lookahead check (`cvHaltPoseClear`) that slams the brakes (`v.ctl.thr = -1; v.ctl.hb = 1`) whenever `look` (minimum 96 px) touches the leader's safety box or another follower—freezing the follower 30–90 px short of `c.hx, c.hy` so `A10` (`d < 18` for 30 frames) never completes.
-2. **[Observed — High Impact] `A09` Corridor Scan Width vs. Actual Vehicle Footprint (`qa/packs/vehicles.py:187` vs. `js/vehicles.js:795`):**
-   - `A09` scans for a straight corridor using `for (const o of [-46, 0, 46]) if (cityCircleBlocked(..., 4, false))`—checking a lateral half-width of `46 + 4 = 50 px` at `24 px` longitudinal steps.
-   - However, `me` is spawned as a `sedan` (`L = 64, D = 144`) and followers can promote wider parked props (`armytruck`, `suv`, `pickup`), plus `A09` steers using `vehAngDiff(R.ang, me.ang) * 2`. In `run35_convoy_candidate.json`, `me` started at `x = 216.0, y = 325.3` and drifted laterally to `x = 212.7, y = 78.1`, clipping tile `(tx: 75249, ty: 61434)` (`k: 20` / `K_POLE`) at the edge of the corridor, which triggered `vehWorldCollide` velocity damping and dropped top speed to `17 mph`.
-3. **[Observed — High Impact] Traffic Collision & `rejoin` Deadlock in `A09` (`run36_convoy_obstacle_trace.json`):**
-   - In `run36`, the leader (`cv`) did not hit terrain, but collided repeatedly with live traffic (`trf2`, hover car, `depth: 3.17`), capping leader speed at `9 mph` (`vy: 106 px/s`).
-   - Because `A09` asserts `if (P.d < 120 && Math.hypot(u.vx, u.vy) > 60) followed++` only at the single instant `k = 480` (right after the 8-second drive loop ends), any traffic slowdown that causes followers to brake via the feeler `vDes = Math.min(vDes, Math.max(0, (block - 20) * 1.6))` at `k = 480` results in `followed = 0`.
-   - Then, when `keys.Space = true` halts the leader, followers with `err < -gap * 0.8` are forced into `c.st = "rejoin"` (`js/convoy.js:343`). While in `rejoin` during a halt, `lead` speed is `0`, so `vDes = Math.max(0, lead - err * 1.1)` drops to `0` as soon as `err >= -gap * 0.4` (even while `err < 0` or `P.d <= 90`), stranding both units at `speed: 0` in `"rejoin"` (`dist: 330.4` and `113.6`) forever!
-4. **[Inference — Medium Impact] `C66` Witness Disappearance & Initial `KeyError('hp')` (`T19` / `J02`):**
-   - When a saved witness checkpoint is reloaded while the player is far away, chunk streaming/townsfolk pool recycling (`TF.walk`) can fail to hydrate the physical walker `p.w` before the test fixture inspects the actor's live `hp` field, whereas positioning the player near the saved coordinates forces immediate chunk/walker hydration. Storing authoritative `hp` on the persistent `meta.jobState.active.data` record (and falling back to it when `p.w` is unhydrated) will prevent both the `KeyError('hp')` and off-screen state loss.
-5. **[Observed — Medium Impact] `v143:A02` & Touch Action Priority Edge Cases:**
-   - In `v143:A02` (building/roof action fallback), `actionui.js` debounces taps on wall-clock time and filters competing prompts. When `jobdispatch.js` or telemetry pills update layout during startup, coordinate shifts or active chooser modal state can swallow synthetic test taps if the chooser state isn't explicitly cleared on `G.start()`.
-
-### Actionable Patch Blueprint for `v15.1.x` (Do NOT apply until after `v15.0.99-OMEGA` is sealed!)
-When you reach `v15.1.x` to fix Convoy (`js/convoy.js`):
-1. **Fix the `rejoin` Speed Floor When Leader is Halted (`js/convoy.js:368–375`):**
-   - When `CONVOY.halted` is true and `c.st === "rejoin"`, `lead` is `0`. Replace the `vDes` calculation during halted rejoin with a positive closing speed until the vehicle is within herringbone eligibility (`Math.abs(err) < gap * 0.8 && P.d < 90`):
+### Q1. Product vs. Fixture Halt-Spot Rehearsal (§4 / §7.1)
+* **Verdict:** **Put a lightweight Shoulder-Availability Delay in the Product (`convoyStep`) AND fix the station coordinates in the QA Fixture (`chrono1513HaltReady`).** However, first fix the two underlying bugs identified below (`keepAim` +240 px overshoot and `cvHaltLaneClear` using `v.D` instead of `v.L`), which are the actual reason Unit 0 (`[-212, -710]`, `d=191→143`) and Unit 1 (`[-276, -389]`, `d=265→83`) failed to settle in `part13`/`part14`.
+* **Why `part14` Produced a Byte-Identical Trace (Observed Fact):**
+  1. In `qa/packs/vehicles.py`, `chrono1513HaltReady(cx, cy, ang)` checks stations `f of [0.45, 0.55, 0.65]` of `2000 px` (`900 px`, `1100 px`, `1300 px`). In `A09`/`A10`, the leader starts at `y = 651.98` (`ang = -π/2`) and halts after 320 drive frames at `y = -1144.74` (`1796.7 px` down-road, `f ≈ 0.90`), while followers sit at `y = -389..-710`. Because the first corridor passed at `f = 0.45..0.65`, `chrono1511FindCorridor` returned the **exact same corridor** (`sx = -139.98, sy = 651.98`) as `part12` and `part13`.
+  2. In `chrono_1513_planner_diag.log`, both followers **DID** commit to `herring` spots at `t = 0` (`Unit 0 -> [-212, -710]`, `d = 191`; `Unit 1 -> [-276, -389]`, `d = 265`) with `ka: true` (`c.keepAim = true`). They failed to reach `d < 18` because `c.keepAim` (`js/convoy.js:574–576`) aimed `+240 px` *past* `(c.hx, c.hy)` while `d > 90`, steering their `look = dSpot` halt-guard arcs (`js/convoy.js:838–844`) straight into obstacles beyond the spot (`arcS = 6..8`, `arcT = 8`) at `d = 143..147`, triggering `pinFails` release into a dead-band where `cvHaltLaneClear` rejected all `extra = 0, 64` candidates.
+* **Minimal Concrete Changes:**
+  1. **`Omni-Shift-Nexus-Survivors/js/convoy.js` (`cvDriveNormal`, lines 574–577):** Cap the `keepAim` virtual tangent lead so it never aims past the validated spot into unvalidated terrain, and turn it off once `d <= 64`:
      ```javascript
-     if (CONVOY.halted && c.st === "rejoin") {
-       const needClose = err < -gap * 0.6 || P.d > 80;
-       if (needClose) vDes = Math.max(vDes, Math.min(140, Math.max(Math.abs(err), P.d) * 0.9 + 45));
-       else c.st = "column"; // Eligible to enter herringbone block on next tick
+     if (c.keepAim && Number.isFinite(c.hAng) && (d > 64 && Math.abs(vehAngDiff(c.hAng, v.ang)) > .35)) {
+       const leadD = Math.min(48, d * 0.4);
+       const ax = c.hx + Math.cos(c.hAng) * leadD, ay = c.hy + Math.sin(c.hAng) * leadD;
+       if (Math.hypot(ax - v.x, ay - v.y) > 24) { tx = ax; ty = ay; }
      }
      ```
-2. **Stop Overwriting `c.hx, c.hy` and Relax Self-Braking Near `c.hx, c.hy` (`js/convoy.js:488–534`):**
-   - If `cvDriveNormal` already found a valid `(c.hx, c.hy)` that passed `!cityCircleBlocked` and `cvSpotClear`, do **not** overwrite `c.hx, c.hy` with `[240, 180, 300, 120, 360]` forward offsets unless the original `(c.hx, c.hy)` failed `cvHaltPoseClear`.
-   - In the `was === 'herring'` braking loop (`lines 494–507`), cap `look` to `Math.min(dToTarget, 64)` so the parking car does not brake for obstacles *beyond* its target parking spot `c.hx, c.hy`.
+  2. **`Omni-Shift-Nexus-Survivors/js/convoy.js` (`cvDrive` halt-guard lookahead, lines 832–836):** When `c.st === 'herring'`, cap the curved lookahead `look` to `Math.max(12, Math.min(look, dSpot - 12))` so the halt guard checks the path *up to* the validated spot center `(c.hx, c.hy)` (whose full pose is already certified by `cvHaltStaticPoseClear(v, c.hx, c.hy, h)`), not the wall beyond `(c.hx, c.hy)`.
+  3. **`qa/packs/vehicles.py` (`chrono1513HaltReady`):** Sample stations `[0.55, 0.70, 0.85]` of `2000 px` (`1100 px`, `1400 px`, `1700 px`—matching the actual follower halt zone behind the leader's `~1800 px` stop) and require **both** `side = 1` and `side = -1` (or two distinct stations `>= 180 px` apart) to have a valid spot so a 2-follower column has 2 non-overlapping slots.
+* **Exact Observable / Test:** `qa/run1513_planner_diag.py` and `qa/run1511_convoy_cases.py` (`A09` and `A10` both `ok: true`, `physicallyParked: true`, `arcS` stays `0` during approach from `d = 191 -> <18`).
+* **Risk to A09/A10/F04:** Near zero for `A09` and `F04` (only affects `c.st === 'herring'` approach after halt).
+* **Unverified:** Live browser execution of the combined `keepAim` + `cvHaltLaneClear` change against the 19-row gauntlet `qa/run1519_final.py`.
 
 ---
 
-## 6. PEER-AI PERSPECTIVE DISCLAIMER
+### Q2. Plateau Policy: "N Consecutive Identical-Red Canonical Traces" (§6 / §7.2)
+* **Verdict:** **Adopt a Mandatory 3-Strike Plateau Circuit Breaker.** Eight to fourteen iterations on a single sub-revision (`15.1.3`) with an unchanging canonical failure trace violates the 1-to-2 hour micro-revision principle.
+* **Concrete Rule Added to Ledger (Section 3 below):**
+  1. **2-Run Identical-Trace Stop:** If two consecutive `-partK` checkpoints produce the same failing canonical test outcome (`A10 ok: false`), the agent is **prohibited** from shipping another speculative heuristic tweak. It must run a single deterministic state-dump script to prove *why* the previous lever either did not fire or did not move the metric.
+  2. **Hard Cap of 3 `-partK` Sub-Commits per Micro-Revision:** No micro-revision (`15.X.Y`) may exceed `part3`. If the target gate is still red after `part3`, the feature switch (`T22.MULTI_VEHICLE_CONVOY`) stays `false`, the remaining blocker is logged in `DEFERRED_TO_V15_8_LEDGER.json`, the current revision closes as `15.X.Y-DEFERRED-LOCK`, and execution advances immediately to the next minor series (`15.2.1`).
 
-> **Important Perspective Note for the Implementation Agent (Arena.ai) & Developer:**
-> This review and the **`CHRONO-LATTICE RATCHET LEDGER`** were prepared by an external AI reviewing a static snapshot (`c0c11dd`) and workspace archive from a different angle. Because I am outside your live E2B/Playwright runtime environment, I cannot execute live browser traces or see runtime side effects that only appear during interactive execution.
->
-> **Arena.ai has direct, superior visibility into the live codebase, the Playwright harness, and module interactions.** Where a subsystem or fix looks complex or risky from my external static view, Arena.ai may see a cleaner, faster native solution—and where my static analysis flags a potential edge case, Arena.ai should verify it against the actual live source before changing working code. Use this ledger's **micro-revision boundaries (`15.0.1` → `v15.0.99-OMEGA` → `15.1+`)** as your strict scope guardrail so you can apply your full coding intelligence to one small, finishable chunk at a time.
+---
+
+### Q3. `cvHaltLaneClear` Fixed ~136-px Lane Ring (§4 / §7.3)
+* **Verdict:** **`cvHaltLaneClear` (`js/convoy.js:463`) contains a geometric dimension bug: it uses `Math.max(v.D, v.L) * 0.5` (`72 px`, half the car's LENGTH) instead of lateral width (`v.L * 0.5 = 32 px`) plus an excessive `64 px` padding (`136 px` total).**
+* **Why This Matters (Proven from Code):**
+  * At `js/convoy.js:529`, the primary shoulder offset is `off = v.L * 0.9 + 14` (`64 * 0.9 + 14 = 71.6 px` from the trail centerline), and the second offset (`extra = 64`) is `135.6 px`.
+  * Because `cvHaltLaneClear` (`line 463`) requires `clearance = (Math.max(144, 64) * 0.5 + 40 * net.k + 24) / 32 = 136 px / 32`, **every `extra = 0` (`71.6 px`) and `extra = 64` (`135.6 px`) shoulder candidate on a mapped road fails `cvHaltLaneClear` automatically!** And `extra = 128` (`199.6 px`) lands inside roadside buildings (`cityCircleBlocked`).
+* **Minimal Concrete Change (`Omni-Shift-Nexus-Survivors/js/convoy.js`, function `cvHaltLaneClear`, line 463):**
+  * Replace the isotropic length-based radius `(Math.max(v.D, v.L) * .5 + 40 * net.k + 24)` with the actual lateral projection of a shoulder-parked vehicle (`v.L * 0.5 + v.D * 0.15` for slight angle, plus `20 * net.k + 12` lane half-width margin = `~85 px` when `CONVOY.halted` has already stopped the leader in the lane, or keep `136 px` only for opposing/unblocked high-speed links):
+    ```javascript
+    const latHalf = v.L * 0.5 + v.D * 0.12;
+    const clearance = (latHalf + 20 * net.k + 12) / 32;
+    ```
+* **Exact Observable / Test:** In `qa/run1513_planner_diag.py`, `cands` at `extra = 0` (`71.6 px`) or `extra = 64` (`135.6 px`) transitions from `lane: false` to `lane: true` while `qa/run1518_shoulder_lane.py` and `qa/run1515_parking_traffic.py` remain 100% green.
+* **Risk to A09/A10/F04:** Low; check against `qa/run1518_shoulder_lane.py` and `qa/run1515_parking_traffic.py` to ensure live traffic in adjacent lanes still passes cleanly without contact.
+
+---
+
+### Q4. Fate of `part14`’s Non-Firing Peer-Yield Lever (§6 / §7.4)
+* **Verdict:** **Revert the non-firing runtime block in `cvDriveNormal` (`js/convoy.js:643–663`) or gate it strictly behind an invariant test.**
+* **Reasoning:** Shipping dead code that provably never fires in the target scenario ("doctrine insurance") adds state-machine branches that complicate future debugging. Since `qa/run1516_yield_safety.py` and `qa/run1517_crossing_safety.py` already cover peer yielding, remove lines `648–663` from `js/convoy.js` during `15.1.3-part15` so `part15` tests only the active `cvHaltLaneClear` + `keepAim` fix.
+
+---
+
+### Q5. Audit of `qa/ESTIMATE_TRAJECTORY` & The Estimation Ritual (§6 / §7.5)
+* **Verdict:** **Replace subjective 3-line percentage ranges with a single Deterministic Gate-Count Ratio (`Locked Sub-Revisions / Total Planned Sub-Revisions`) and freeze `v15 overall` during `-partK` sub-steps.**
+* **Why (Audit of `ESTIMATE_TRAJECTORY.csv`):**
+  * Across 24 convoy sub-checkpoints (`15.1.2 p1` → `15.1.3 part14`), the Blue `v15 overall` line was incremented from `53–56%` to `66–70%` (`+14 points`) while the project was working on a single sub-system (`T22` Convoy, which is only 1 of 31 original items!).
+  * Worse, at `part14`, when `15.1.3` and `15.1.x series` were rescored downward (`-15%` and `-13%`), `v15 overall` was simultaneously bumped **up** `+2%` (`64–67%` → `66–70%`).
+  * **New Scoring Rule:**
+    1. **`v15 overall` CANNOT increase on any `-partK` commit.** It may only increase when a numbered revision reaches `-LOCKED` (e.g., `15.1.3-LOCKED`, `15.2.1-LOCKED`).
+    2. **Fixed Weights:** `15.0.99-OMEGA` (Locked Baseline) = `50%`. Each of the 7 post-Omega minor series (`15.1` through `15.7`) is worth a fixed **`7%`** of `v15 overall` (totaling `99%`, + `1%` for final packaging = `100%`). Therefore, all of `15.1.x` (`15.1.1`–`15.1.4`) can move `v15 overall` by at most `+7%` (`50%` → `57%`), completely eliminating grade inflation.
+
+---
+
+### Q6. Where §6 Self-Assessment Was Too Soft (§6 / §7.6)
+1. **Ceremony Overhead (~14 full 78-file archives + cache bumps on failing `-partK` steps):** Archiving 78 files and bumping 72 cache tags in `index.html` on every intermediate `-partK` diagnostic step wasted massive turn time. **Fix:** Run `git commit` + `git bundle` on every `-partK` (takes <2 seconds and guarantees rollback safety), but run the 78-file `qa/archive_part.py`, `index.html` cache bump, and `CHANGELOG_v15.md` write **ONLY** when locking a revision (`-LOCKED`).
+2. **Batching 3 Untested Levers in `part14`:** Shipping three changes at once in `part14` before running `run1513_planner_diag.py` hid the fact that `chrono1513HaltReady` selected the exact same corridor and `cvHaltLaneClear` still blocked all 12 candidates. Enforce **1 hypothesis = 1 test run**.
+3. **Widening `run1519_replan.py` from 240 to 420 frames:** Because `planRetryAt = runTime + 2` (120 frames) plus a 1.1s–2.0s reverse cycle (`~90 frames`) + 2.0s `terrainWait` (`120 frames`) mathematically requires `~330 frames` (`5.5 s`) to complete one back-out + re-plan cycle, widening `run1519_replan.py` from `240` (`4.0 s`) to `420` (`7.0 s`) was **mathematically necessary calibration**, not gate-weakening. That change is approved.
+
+---
+
+## 2. UPDATED RATCHET GOVERNANCE (`CHRONO-LATTICE RATCHET LEDGER` v2.0)
+
+Effective immediately at commit `8fab687`, the following rules govern `15.1.3-part15` and all subsequent revisions:
+
+1. **Hard 2-Part Cap to Close `15.1.3` (`part15` → `15.1.3-LOCKED`):**
+   - **Step `15.1.3-part15`:** Apply the three targeted fixes from Q1 & Q3 (`cvHaltLaneClear` lateral width formula, `keepAim` lead cap `<= 48 px` + `cvDrive` lookahead cap `dSpot - 12`, and `chrono1513HaltReady` station range `[0.55, 0.70, 0.85]`) and remove the dead peer-yield block (`lines 648–663`). Run `qa/run1511_convoy_cases.py` (`A09` + `A10`) and `qa/run1519_final.py`.
+   - **If `A09` + `A10` + Gauntlet are GREEN:** Immediately lock `15.1.3-LOCKED`, flip `T22.MULTI_VEHICLE_CONVOY: true` in `15.1.4-LOCKED`, verify the full suite, and advance to **`15.2.1`** (Persistent Work Vehicles & Full Courier/Detective Careers).
+   - **If `A10` is STILL RED after `15.1.3-part16` (Max 2 attempts):** Trigger the **Plateau Circuit Breaker**. Leave `T22.MULTI_VEHICLE_CONVOY: false` (keeping working player-car squad boarding and overflow hold markers active), log `A10` in `DEFERRED_TO_V15_8_LEDGER.json`, tag `15.1.3-DEFERRED-LOCK`, and **immediately advance to `15.2.1`**. Do NOT spend a 17th part on `15.1.3`.
+2. **Lightweight `-partK` vs. Full `-LOCKED` Ceremony:**
+   - **On `-partK` commits:** Code edit + targeted test + `git commit` + refresh `qa/v15_recent_commits_recovery.bundle`. **Skip** `index.html` cache bumps, `CHANGELOG_v15.md` essays, and 78-file directory copies on `-partK`.
+   - **On `-LOCKED` commits:** Bump `index.html` cache tag, update `CHANGELOG_v15.md` and `ESTIMATE_TRAJECTORY.csv`, refresh `qa/v15_recent_commits_recovery.bundle`, and run `qa/archive_part.py`.
+3. **Locked Non-Inflating Progress Formula:**
+   - Recalculate `v15 overall` in `ESTIMATE_TRAJECTORY.csv` using fixed milestone weights:
+     - `15.0.99-OMEGA` = **50%** (complete)
+     - `15.1.x` = **+7%** (`57%` when `15.1.4` locks)
+     - `15.2.x` = **+7%** (`64%` when `15.2.3` locks)
+     - `15.3.x` = **+7%** (`71%` when `15.3.3` locks)
+     - `15.4.x` = **+7%** (`78%` when `15.4.5` locks)
+     - `15.5.x` = **+7%** (`85%` when `15.5.6` locks)
+     - `15.6.x` = **+7%** (`92%` when `15.6.x` locks)
+     - `15.7.x` = **+8%** (`100%` when `15.7.x` locks)
+   - Never increase `v15 overall` on a `-partK` checkpoint.

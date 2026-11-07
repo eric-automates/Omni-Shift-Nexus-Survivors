@@ -3,3 +3,7 @@
 *.zip
 .DS_Store
 Thumbs.db
+
+# Local agent/test Python bytecode is ephemeral, not game content.
+__pycache__/
+*.py[cod]
