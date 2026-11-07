@@ -130,7 +130,14 @@ function jobFinish(id, outcome) {
   if (Array.isArray(def.carriedCaseEndings) && def.carriedCaseEndings.includes(outcome) &&
       (!a.data || typeof a.data !== "object" || Array.isArray(a.data) || a.data.caseDrop != null))
     return { ok: false, why: "Recover your case before requesting a handoff" };
-  const entry = { id: a.id, contract: a.contract, role: a.role, world: a.world, outcome, pay: end.pay };
+  let pay = end.pay;
+  const fh = JOB_CORE.finishHooks && JOB_CORE.finishHooks[a.contract];
+  if (typeof fh === "function") {
+    let adj = null;
+    try { adj = fh(s, a, outcome, pay); } catch (e) { return { ok: false, why: "Outcome details are unavailable" }; }
+    if (adj && Number.isFinite(adj.pay) && adj.pay >= 0) pay = adj.pay;
+  }
+  const entry = { id: a.id, contract: a.contract, role: a.role, world: a.world, outcome, pay };
   if (def.historyHook) {
     const hook = JOB_CORE.historyHooks[def.historyHook];
     if (typeof hook !== "function") return { ok: false, why: "Outcome details are unavailable" };
@@ -142,7 +149,7 @@ function jobFinish(id, outcome) {
   s.history.push(entry);
   if (s.history.length > JOB_CORE.historyMax) s.history.splice(0, s.history.length - JOB_CORE.historyMax);
   s.active = null;
-  const result = jobCommit(s, end.pay); if (result.ok) result.pay = end.pay;
+  const result = jobCommit(s, pay); if (result.ok) result.pay = pay;
   return result;
 }
 function jobWithdraw(id) {

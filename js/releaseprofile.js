@@ -19,17 +19,18 @@ const V15_FEATURE_RELEASE = Object.freeze({
   "J09.MEDICAL_CONTACT":true,
   "J09.SHIFT":true,
   "J02.WITNESS":true,
-  "T22.MULTI_VEHICLE_CONVOY":false
+  "J01.PATROL":true,
+  "T22.MULTI_VEHICLE_CONVOY":true
 });
 // Every authored gameplay contract must be mapped before UI exposure.
 const V15_CAREER_CONTRACTS = Object.freeze({
   community_supply:"J09", priority_supply:"J09", medical_supply:"J09",
-  courier_shift:"J09", witness_trace:"J02"
+  courier_shift:"J09", witness_trace:"J02", patrol_traffic:"J01"
 });
 const V15_CONTRACT_FEATURES = Object.freeze({
   community_supply:"J09.SUPPLY", priority_supply:"J09.PRIORITY",
   medical_supply:"J09.MEDICAL", courier_shift:"J09.SHIFT",
-  witness_trace:"J02.WITNESS"
+  witness_trace:"J02.WITNESS", patrol_traffic:"J01.PATROL"
 });
 function v15FeatureEnabled(id) { return V15_FEATURE_RELEASE[id] === true; }
 function v15CareerEnabled(id) { return V15_CAREER_RELEASE[id] === true; }

@@ -1,6 +1,7 @@
-// FILE: js/jobvehicle.js — optional run-local physical courier work vehicle.
-// Job checkpoint records one issuance per shift, but existing vehicles are
-// run-local: a reload never silently recreates an intact vehicle.
+// FILE: js/jobvehicle.js — optional physical courier work vehicle, durable since
+// 15.2.1: the issued vehicle's pose, damage and fuel are snapshotted into
+// meta.jobState.active.data.loan.veh and re-materialized on resume. Dead or
+// wrecked vehicles are durably recorded as gone; a reload never resurrects them.
 "use strict";
 const JC_LOAN={incident:null,world:null,key:null};
 // No improvised military aircraft, tanks or unverified animal teams as courier
@@ -12,6 +13,83 @@ function jcLoanLive(a) {
 }
 function jcLoanMarker() {
   return JC_LOAN.key && JC_LOAN.world===jobWorldKey() ? VEH.byKey.get(JC_LOAN.key)||null : null;
+}
+function jcLoanSnap(v) { return { wx: Math.round((v.x + CITY.orx) * 10) / 10, wy: Math.round((v.y + CITY.ory) * 10) / 10, ang: Math.round(v.ang * 1e4) / 1e4, hp: Math.round(v.hp), fuel: Math.round(v.fuel * 1e4) / 1e4 }; }
+function jcLoanCheckpoint() {
+  const read = jobReadState(); if (!read.ok) return false;
+  const a = read.state.active, v = a && jcLoanLive(a);
+  if (!a || !a.data?.loan || !v) return false;
+  if (v.dead || v.burnt || v.wreck) {
+    if (!a.data.loan.veh) return true;
+    delete a.data.loan.veh;
+    const r = jobCommit(read.state, 0);
+    if (!r.ok) jdNotice("VEHICLE LOSS NOT RECORDED · Check storage; the saved vehicle may restore until the loss is written.");
+    return r.ok;
+  }
+  if (!Number.isFinite(v.fuel) || v.fuel <= 0) return false;
+  const next = jcLoanSnap(v), old = a.data.loan.veh;
+  if (old && Math.hypot(old.wx - next.wx, old.wy - next.wy) < 8 && old.hp === next.hp && Math.abs(old.fuel - next.fuel) < 1e-4 && Math.abs(old.ang - next.ang) < 1e-3) return true;
+  a.data.loan.veh = next;
+  const r = jobCommit(read.state, 0);
+  if (!r.ok) jdNotice("VEHICLE CHECKPOINT NOT SAVED · Check storage before leaving.");
+  return r.ok;
+}
+function jcLoanSync(a) {
+  // Re-materialize the saved loaner on resume. Fail-closed on any doubt: a bad
+  // or unsafe snapshot never creates a duplicate, and the durable record stays.
+  if (!a || a.contract !== JOB_COURIER_SHIFT || a.world !== jobWorldKey() || !a.data?.loan?.key) return null;
+  const key = a.data.loan.key;
+  if (JC_LOAN.key !== key) { JC_LOAN.incident = a.id; JC_LOAN.world = a.world; JC_LOAN.key = key; }
+  const live = VEH.byKey.get(key); if (live) return live;
+  const q = a.data.loan.veh;
+  if (!q || ![q.wx, q.wy, q.ang, q.hp, q.fuel].every(Number.isFinite) || q.hp <= 0 || q.fuel <= 0 || q.fuel > 1.2) return null;
+  const k = vehWorldK(), x = q.wx - CITY.orx, y = q.wy - CITY.ory, L = 64 * k, D = 144 * k;
+  if (![x, y].every(Number.isFinite) || Math.hypot(x, y) > 4e5) return null;
+  if (cityCircleBlocked(x, y, Math.hypot(L, D) * 0.42, false) || (cityFlagsAt(x, y) & (F_IN | F_WATER))) return null;
+  try {
+    const v = vehNew(a.data.loan.kind || "pickup", x, y, q.ang, 64, 144, { key, k, fuel: q.fuel });
+    if (VEH.byKey.get(key) !== v || VEH.list.filter(u => u && u.key === key).length !== 1) return null;
+    v.hp = Math.max(1, Math.min(v.S.hp, q.hp)); v.awake = false; v.sleep = 2;
+    return v;
+  } catch (e) { return null; }
+}
+function jcRidePerson() { const p = JD_SUPPORT.actor; return p && p.alive && p.w && Number.isFinite(p.w.hp) && p.w.hp > 0 ? p : null; }
+function jcRideBoard() {
+  const a = jdActive();
+  if (!a || a.contract !== JOB_COURIER_SHIFT || a.world !== jobWorldKey() || a.phase !== "delivery" || a.data?.support?.status !== "active") return { ok: false, why: "An active assistant on a delivery leg is required." };
+  const v = player.inVehicle && player.veh && !player.veh.dead && !player.veh.wreck ? player.veh : null;
+  if (!v) return { ok: false, why: "Get in a working vehicle first." };
+  const p = jcRidePerson(), w = p?.w;
+  if (!w || w.flee > 0 || w.stun > 0 || w.inside) return { ok: false, why: "Your assistant is not in a state to board." };
+  if (Math.hypot(w.x - v.x, w.y - v.y) > 90) return { ok: false, why: "Pull up beside your assistant (within about 90 px)." };
+  jdSupportCheckpoint(p); // anchor the last on-foot position before riding
+  w.inside = "vehicle:" + v.key; JD_SUPPORT.ride = { key: v.key };
+  return { ok: true, why: "Assistant is in the passenger seat." };
+}
+function jcRideOut() {
+  const p = jcRidePerson(), w = p?.w, ride = JD_SUPPORT.ride;
+  if (!ride) return { ok: false, why: "Nobody is riding." };
+  const v = VEH.byKey.get(ride.key);
+  if (w) {
+    let x = w.x, y = w.y;
+    if (v) { const s = Math.sin(v.ang), c = Math.cos(v.ang); x = v.x - s * v.L * 0.55 + c * 26; y = v.y + c * v.L * 0.55 + s * 26; }
+    const spot = (typeof cityFindWalkable === "function" && cityFindWalkable(x, y, 26, true)) || [x, y];
+    w.inside = null; w.x = spot[0]; w.y = spot[1]; w.tx = spot[0]; w.ty = spot[1]; w.idle = 1e6;
+  }
+  JD_SUPPORT.ride = null;
+  if (p) jdSupportCheckpoint(p);
+  return { ok: true, why: "Assistant stepped out on a checked walkway." };
+}
+function jcRideTick(dt) {
+  const ride = JD_SUPPORT.ride; if (!ride) return;
+  const v = VEH.byKey.get(ride.key);
+  const p = jcRidePerson(), w = p?.w;
+  if (!w || !p.alive) { JD_SUPPORT.ride = null; return; }
+  if (!v || v.dead || v.burnt || v.wreck) { jcRideOut(); return; }
+  if (!player.inVehicle && Math.hypot(v.vx, v.vy) < 8) { jcRideOut(); return; }
+  const s = Math.sin(v.ang), c = Math.cos(v.ang);
+  w.x = v.x - s * v.L * 0.32 + c * 12; w.y = v.y + c * v.L * 0.32 + s * 12;
+  w.vx = v.vx; w.vy = v.vy; w.face = v.ang; w.inside = "vehicle:" + v.key; w.idle = 1e6;
 }
 function jcLoanOutside(x,y,L,D) {
   const prev=JD_SUPPORT.view;let now;try{now=camView(0)}catch(e){return false;}
@@ -101,6 +179,7 @@ function jcLoanRequest(id) {
     const v=vehNew(kind,site.x,site.y,site.h,64,144,{key,k:vehWorldK(),fuel:.65});
     JC_LOAN.incident=a.id;JC_LOAN.world=a.world;JC_LOAN.key=key;
     v.awake=false;v.sleep=2;
+    jcLoanCheckpoint(); // 15.2.1: the pose/hp/fuel record is durable from issuance
     return {ok:true,kind,site:{x:site.x,y:site.y},vehicle:key};
   } catch(e) {
     // The issuance was already persisted, so do not make another offer while a
@@ -132,12 +211,24 @@ function jcLoanRequest(id) {
     if(!panel||!a||a.contract!==JOB_COURIER_SHIFT||a.world!==jobWorldKey()||a.phase==="offer")return;
     const box=document.createElement("p"),v=jcLoanLive(a);box.style.color="#ffd58b";
     if(!a.data.loan){
-      box.textContent="Optional work vehicle: dispatch can place a real, driveable vehicle beside a checked road in supported settings. Only one is issued per run. It lasts only for this run; after a restart it is not recreated. The assistant stays on foot.";
+      box.textContent="Optional work vehicle: dispatch can place a real, driveable vehicle beside a checked road in supported settings. Only one is issued per run. Its position, damage and fuel are saved across restarts until it is lost. An unarmed assistant may ride its passenger seat.";
       const b=document.createElement("button");b.type="button";b.className="btn";b.textContent="REQUEST WORK VEHICLE";b.style.cssText="min-height:48px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";b.onclick=()=>{const r=jcLoanRequest(a.id);jdOpen(r.ok?"Work vehicle assigned. Follow the amber square on the minimap.":r.why);};box.appendChild(b);
-    }else box.textContent=v?((v.dead||v.burnt||v.wreck)?"Your work vehicle is disabled; continue on foot or use another vehicle.":"Work vehicle is the amber square on the minimap. It lasts only for this run; the assistant cannot board."):"The work vehicle was issued in a previous run or could not be deployed. It is not recreated; continue on foot or use another vehicle.";
+    }else box.textContent=v?((v.dead||v.burnt||v.wreck)?"Your work vehicle is disabled; continue on foot or use another vehicle. The loss is saved.":"Work vehicle is the amber square on the minimap. Its position, damage and fuel are saved — after a restart it waits where you left it."):(a.data.loan.veh?"The saved work vehicle could not be placed yet; it will appear as soon as its recorded spot is clear.":"The work vehicle was issued before this feature or could not be deployed; nothing is recreated. Continue on foot or use another vehicle.");
+      const sup=jdSupportSync(a),sw=sup&&sup.alive?sup.w:null;
+      if(sw&&a.phase==="delivery"&&a.data?.support?.status==="active"){const riding=JD_SUPPORT.ride&&sw.inside&&String(sw.inside).startsWith("vehicle:");const b2=document.createElement("button");b2.type="button";b2.className="btn";b2.style.cssText="min-height:48px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";b2.textContent=riding?"SEND ASSISTANT TO THE CURB":"ASSISTANT TO PASSENGER SEAT (within ~90 px)";b2.onclick=()=>{const r=riding?jcRideOut():jcRideBoard();jdOpen(r.why);};box.appendChild(b2);}
     const close=Array.from(panel.querySelectorAll("button")).find(b=>b.textContent==="CLOSE");panel.insertBefore(box,close||null);
   };
-  V10.onRunStart.push(()=>{JC_LOAN.incident=JC_LOAN.world=JC_LOAN.key=null;});
+  V10.onRunStart.push(()=>{JC_LOAN.incident=JC_LOAN.world=JC_LOAN.key=null;JC_LOAN.saveTimer=0;JD_SUPPORT.ride=null;});
+  V10.onStep.push(dt=>{
+    if(!(CITY.on&&runActive&&player)){JC_LOAN.saveTimer=0;return;}
+    const a=jdActive();
+    if(a&&a.contract===JOB_COURIER_SHIFT&&a.world===jobWorldKey()&&a.data?.loan){
+      const v=jcLoanSync(a);JC_LOAN.saveTimer=(JC_LOAN.saveTimer||0)+dt;
+      if(v&&JC_LOAN.saveTimer>=3){JC_LOAN.saveTimer=0;jcLoanCheckpoint();}
+    } else JC_LOAN.saveTimer=0;
+    jcRideTick(dt);
+  });
+  V10.onRunReset.push(()=>{jcLoanCheckpoint();if(JD_SUPPORT.ride)jcRideOut();JC_LOAN.saveTimer=0;});
   V10.onRenderWorld.push(g=>{if(!JC_LOAN.key)return;const v=jcLoanMarker();if(!v||!runActive||player.inVehicle||Math.hypot(player.x-v.x,player.y-v.y)>900)return;g.save();g.textAlign="center";g.font="bold 14px sans-serif";g.fillStyle="#ffcf70";g.strokeStyle="#12202a";g.lineWidth=4;g.strokeText("WORK VEHICLE",v.x,v.y-v.D/2-14);g.fillText("WORK VEHICLE",v.x,v.y-v.D/2-14);g.restore();});
   V10.onRenderScreen.push(g=>{if(!JC_LOAN.key)return;const v=jcLoanMarker();if(!v||!runActive||MAPV.open||player.inVehicle||(typeof HUDL!=="undefined"&&HUDL.enabled&&HUDL.miniHidden))return;const r=miniRect(),mpp=MAPV.miniSizes[MAPV.mini],[px,py]=mapPlayerM();let dx=((v.x+CITY.orx)/32-px)/mpp,dy=((v.y+CITY.ory)/32-py)/mpp;const lim=r.S/2-10,k=Math.min(1,lim/Math.max(Math.abs(dx),Math.abs(dy),1));dx*=k;dy*=k;g.save();g.fillStyle="#ffd166";g.strokeStyle="#172027";g.lineWidth=2;g.fillRect(r.x+r.S/2+dx-5,r.y+r.S/2+dy-5,10,10);g.strokeRect(r.x+r.S/2+dx-5,r.y+r.S/2+dy-5,10,10);g.restore();});
 })();

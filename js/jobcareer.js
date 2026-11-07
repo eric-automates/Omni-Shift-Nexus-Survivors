@@ -7,6 +7,78 @@ const JC_STOPS = [
   {name:"Second delivery", story:"Dispatch has another request. At the route check, you may add an insulated relay stop or go directly.",pay:140,stock:6},
   {name:"Final delivery", story:"The final shipment closes the distribution shift. The clinic contact must accept it in person.",pay:160,stock:8}
 ];
+// 15.2.2 (J09): the courier career ladder. Five stages derived from the durable count of
+// COMPLETED shifts only — never from history length (history is capped and evicted) and
+// never from partial/withdrawn outcomes. A present-but-invalid count fails closed to
+// stage 1 at read time and is normalized at write time; nothing is invented for a save
+// that never earned it.
+const JC_RANKS = [
+  {name:"Rookie runner", shifts:0, bonus:0},
+  {name:"Route courier", shifts:2, bonus:0.05},
+  {name:"Senior courier", shifts:4, bonus:0.1},
+  {name:"Dispatch-trusted", shifts:6, bonus:0.15},
+  {name:"Distribution lead", shifts:8, bonus:0.2}
+];
+function jcCareerShifts(state) {
+  const c = state && state.career, o = c && typeof c === "object" && !Array.isArray(c) ? c.courier : null;
+  const n = o && typeof o === "object" && !Array.isArray(o) ? o.shifts : null;
+  return Number.isSafeInteger(n) && n >= 0 ? n : 0;
+}
+function jcCareerRank(state) {
+  const s = jcCareerShifts(state); let i = 0;
+  for (let k = 0; k < JC_RANKS.length; k++) if (s >= JC_RANKS[k].shifts) i = k;
+  const next = JC_RANKS[i+1] ? JC_RANKS[i+1].shifts - s : null;
+  return {rank:i+1, name:JC_RANKS[i].name, bonus:JC_RANKS[i].bonus, shifts:s, next};
+}
+// 15.2.3-part1: the detective career mirrors the courier ladder — five stages
+// derived only from durably completed, filed cases. Unresolved handoffs and
+// withdrawals never count; a present-but-invalid count fails closed to stage 1
+// at read time and is normalized at write time. Rank applies to the payout
+// inside the single finish transaction; the panel derives every label from the
+// same computation so promised and paid amounts can't diverge.
+const JD_RANKS = [
+  {name:"Scene clerk", cases:0, bonus:0},
+  {name:"Field interviewer", cases:3, bonus:0.05},
+  {name:"Case investigator", cases:6, bonus:0.1},
+  {name:"Lead investigator", cases:9, bonus:0.15},
+  {name:"Homicide consultant", cases:12, bonus:0.2}
+];
+const JD_COUNTED = ["lead_filed","contact_filed","witness_safe","witness_supported","witness_protected"];
+function jdCareerCases(state) {
+  const c = state && state.career, o = c && typeof c === "object" && !Array.isArray(c) ? c.detective : null;
+  const n = o && typeof o === "object" && !Array.isArray(o) ? o.cases : null;
+  return Number.isSafeInteger(n) && n >= 0 ? n : 0;
+}
+function jdCareerRank(state) {
+  const s = jdCareerCases(state); let i = 0;
+  for (let k = 0; k < JD_RANKS.length; k++) if (s >= JD_RANKS[k].cases) i = k;
+  const next = JD_RANKS[i+1] ? JD_RANKS[i+1].cases - s : null;
+  return {rank:i+1, name:JD_RANKS[i].name, bonus:JD_RANKS[i].bonus, cases:s, next};
+}
+function jdTracePay(state, outcome, base) {
+  return JD_COUNTED.includes(outcome) ? Math.round(base * (1 + jdCareerRank(state).bonus)) : base;
+}
+// Panel labels must show what the finish transaction will actually pay, so the
+// read is taken fresh here: the dispatch panel's own `read` variable is a world
+// descriptor, not the job state.
+function jdTracePanelPay(outcome, base) {
+  const r = jobReadState();
+  return jdTracePay(r.ok ? r.state : null, outcome, base);
+}
+function jdCareerPanelRank() {
+  const r = jobReadState();
+  return jdCareerRank(r.ok ? r.state : null);
+}
+JOB_CORE.finishHooks = Object.assign(JOB_CORE.finishHooks || {}, {
+  [JOB_TRACE]: (s, a, outcome, pay) => {
+    const counting = JD_COUNTED.includes(outcome), rank = jdCareerRank(s);
+    if (counting) {
+      const prev = s.career && typeof s.career === "object" && !Array.isArray(s.career) ? s.career : {};
+      s.career = Object.assign({}, prev, {detective: {cases: jdCareerCases(s) + 1}});
+    }
+    return {pay: counting ? Math.round(pay * (1 + rank.bonus)) : pay};
+  }
+});
 jobRegister({id:JOB_COURIER_SHIFT,role:"courier",start:"pickup",
   edges:{pickup:["assessment"],assessment:["delivery","relay"],relay:["delivery"],delivery:["dispatch"],dispatch:["pickup"]},
   endings:{completed:{from:["delivery"],pay:0},partial:{from:["assessment","relay","delivery","dispatch"],pay:0}},
@@ -18,26 +90,46 @@ function jcQuantity(n) { return Number.isFinite(n) ? String(Math.round(n*100)/10
 function jcCanWork() {
   return !!(runActive && CITY.on && player && !player.inVehicle && !player.roof && (player.flyAlt||0)<=2 && ECO.on && SCN.mode==="economy" && TF.on);
 }
+const JC_PLAN = { ring: 160 };   // 15.2.2-part3: flagship-arc stride; relax pass 1 falls back to the narrow rings, so a shift is never blocked by its own pacing
 function jcPlan(stop,id,avoidUid) {
   if(!jcCanWork())return {ok:false,why:"Stand outside on the ground in an economy town with townsfolk active."};
   const nearby=accNearBuildings(1100).filter(b=>["clinic","hospital"].includes(tfKind(b)));
   if(!nearby.length)return {ok:false,why:"Move closer to a clinic or hospital, then ask dispatch again."};
   // Validate each segment; no partial/snapped path is accepted. A detour is optional
   // if the bounded search cannot find one, rather than blocking the whole shift.
-  for(let i=0;i<5;i++) {
+  // 15.2.2-part2: a candidate plan may be assigned a road closure — derived purely
+  // from the world seed, stop and iteration. A closure only materializes when it
+  // actually blocks the natural route AND the patched grid still yields a fully
+  // validated walk around it; otherwise the plan is committed exactly as before the
+  // feature. If every closure attempt fails, a second closure-free pass reproduces
+  // the pre-feature planner, so a shift is never blocked by its own rerouter.
+  for(let relax=0;relax<2;relax++) for(let i=0;i<5;i++) {
     const seed=(CITY.seed>>>0)+(id%10000)*11+stop*733+i*79;
-    const pickup=jobFindSite(player.x,player.y,seed+17),p=jobSiteLocal(pickup);if(!p)continue;
-    const assessment=jobFindSite(p.x,p.y,seed+109),q=jobSiteLocal(assessment);if(!q)continue;
-    // Prefer a different clinic from the last successful stop when one is
-    // reachable; fall back to the same service if local geography offers no alternative.
-    const different=avoidUid ? nearby.filter(b=>b.uid!==avoidUid) : nearby;
-    const med=jdMedicalOfferSite(q.x,q.y,different) || (avoidUid ? jdMedicalOfferSite(q.x,q.y,nearby) : null);if(!med)continue;
-    const d=jobSiteLocal(med.site);let relay=null;
-    for(let j=0;j<3&&!relay;j++) {
-      const r=jobFindSite(q.x,q.y,seed+211+j*53),v=jobSiteLocal(r);
-      if(v && jobRouteValid(v.x,v.y,d.x,d.y))relay=r;
+    const pickup=jobFindSite(player.x,player.y,seed+17,relax?0:JC_PLAN.ring),p=jobSiteLocal(pickup);if(!p)continue;
+    let closure=null;
+    if(relax===0 && Math.hypot(p.x-player.x,p.y-player.y)>260) {
+      const hc=Math.imul(seed^0x5f356495,2654435761)>>>0;
+      if((hc>>>9&3)===1) {
+        const cand={x:Math.round((player.x+p.x)/2),y:Math.round((player.y+p.y)/2),r:88};
+        const nat=stFindPath(player.x,player.y,p.x,p.y);
+        if(nat && nat.found===true && JOB_ROUTE.crosses(nat.pts,player.x,player.y,cand))closure=cand;
+      }
     }
-    return {ok:true,route:{pickup,assessment,relay,delivery:med.site,clinic:med.clinic,recipientMode:1}};
+    const attempt=JOB_ROUTE.withClosed(closure?[closure]:[],()=>{
+      if(closure && !jobRouteValid(player.x,player.y,p.x,p.y))return null;
+      const assessment=jobFindSite(p.x,p.y,seed+109,relax?0:JC_PLAN.ring),q=jobSiteLocal(assessment);if(!q)return null;
+      // Prefer a different clinic from the last successful stop when one is
+      // reachable; fall back to the same service if local geography offers no alternative.
+      const different=avoidUid ? nearby.filter(b=>b.uid!==avoidUid) : nearby;
+      const med=jdMedicalOfferSite(q.x,q.y,different) || (avoidUid ? jdMedicalOfferSite(q.x,q.y,nearby) : null);if(!med)return null;
+      const d=jobSiteLocal(med.site);let relay=null;
+      for(let j=0;j<3&&!relay;j++) {
+        const r=jobFindSite(q.x,q.y,seed+211+j*53,relax?0:JC_PLAN.ring),v=jobSiteLocal(r);
+        if(v && jobRouteValid(v.x,v.y,d.x,d.y))relay=r;
+      }
+      return {pickup,assessment,relay,delivery:med.site,clinic:med.clinic,recipientMode:1,...(closure?{closures:[closure]}:{})};
+    });
+    if(attempt)return {ok:true,route:attempt};
   }
   return {ok:false,why:"No complete on-foot route to a medical entrance was found. Move closer to a clinic and retry."};
 }
@@ -70,12 +162,21 @@ function jcReplan(id) {
   if(!jcCanWork() || !a || a.id!==id || a.contract!==JOB_COURIER_SHIFT || a.world!==jobWorldKey() || !["pickup","assessment","relay"].includes(a.phase) || jdCaseDropped(a))return {ok:false,why:"Stand on open ground with your case to request a replacement waypoint."};
   const old=jobSiteLocal(a.data[a.phase]),future=a.phase==="pickup"?["assessment"]:a.phase==="assessment"?["delivery"].concat(a.data.relay?["relay"]:[]):["delivery"];
   const targets=future.map(k=>jobSiteLocal(a.data[k]));if(targets.some(p=>!p))return {ok:false,why:"The remaining route data is unavailable; end the shift early."};
-  for(let i=0;i<8;i++){
+  const search=(cl)=>{
+   for(let i=0;i<8;i++){
     const site=jobFindSite(player.x,player.y,(CITY.seed>>>0)+(id%10000)*43+a.data.stop*313+i*67+1401),q=jobSiteLocal(site);
     if(!q || old && Math.hypot(q.x-old.x,q.y-old.y)<64 || !jobRouteValid(player.x,player.y,q.x,q.y) || !targets.every(p=>jobRouteValid(q.x,q.y,p.x,p.y)))continue;
     a.data[a.phase]=site;const r=jobCommit(read.state,0);if(r.ok && typeof MAPV!=="undefined")MAPV.lastSig="";return r;
-  }
-  return {ok:false,why:"No replacement with all remaining routes reachable was found. Try from another position or end the shift early."};
+   }
+   return null;
+  };
+  // 15.2.2-part2: a replanned waypoint must stay valid for the shift's pinned closures.
+  // If no closure-respecting replacement exists, dispatch replans without the closure
+  // and records that honestly (the route never blocks the shift; the record stays true).
+  const cl=Array.isArray(a.data.closures)?a.data.closures:[];
+  let r=cl.length?JOB_ROUTE.withClosed(cl,()=>search(cl)):search(cl);
+  if(!r&&cl.length){r=search([]);if(r){a.data.closures=[];r=jobCommit(read.state,0);if(r.ok&&typeof MAPV!=="undefined")MAPV.lastSig="";return r;}}
+  return r||{ok:false,why:"No replacement with all remaining routes reachable was found. Try from another position or end the shift early."};
 }
 // A single emergency fuel canister for the vehicle the player actually drove.
 // The existing vehicle simulation is run-local: the canister use is durable,
@@ -129,9 +230,11 @@ function jcDeliver(id) {
   const stock=ECO.stock,mem=ecoMem();
   if(!stock || mem.stock!==stock || !Number.isFinite(stock.med) || stock.med<0)return {ok:false,why:"Town medicine stock is unavailable."};
   const before=stock.med,after=before>=ECO_GOODS.med.ref*4?before:Math.min(ECO_GOODS.med.ref*4,before+chapter.stock),added=Math.max(0,after-before);
-  const pay=chapter.pay+(a.data.route==="relay"?25:0), receipts=a.data.receipts.concat([{stop:stop+1,clinic:String(a.data.clinic.name||"Medical clinic").slice(0,100),clinicUid:a.data.clinic.uid,route:a.data.route==="relay"?"relay":"direct",pay,restock:added,recipient:"met",...(a.data.support?.carrying?{carrier:"assistant"}:{})}]);
+  const rank=jcCareerRank(read.state), pay=Math.round((chapter.pay+(a.data.route==="relay"?25:0))*(1+rank.bonus)), receipts=a.data.receipts.concat([{stop:stop+1,clinic:String(a.data.clinic.name||"Medical clinic").slice(0,100),clinicUid:a.data.clinic.uid,route:a.data.route==="relay"?"relay":"direct",pay,restock:added,recipient:"met",...(a.data.support?.carrying?{carrier:"assistant"}:{})}]);
   const done=stop===JC_STOPS.length-1;
   if(done) {
+    const cPrev=(read.state.career&&typeof read.state.career==="object"&&!Array.isArray(read.state.career))?read.state.career:{};
+    read.state.career=Object.assign({},cPrev,{courier:{shifts:jcCareerShifts(read.state)+1}});
     read.state.history.push({id:a.id,contract:a.contract,role:a.role,world:a.world,outcome:"completed",pay:receipts.reduce((n,r)=>n+r.pay,0),receipts});
     if(read.state.history.length>JOB_CORE.historyMax)read.state.history.splice(0,read.state.history.length-JOB_CORE.historyMax);
     read.state.active=null;
@@ -180,7 +283,9 @@ function jcEnd(id) {
       const b=document.createElement("button");b.type="button";b.className="btn";b.textContent="MEDICAL DISTRIBUTION SHIFT";b.style.cssText="min-height:48px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";
       b.onclick=()=>{const r=jcOffer();jdOpen(r.ok?"Distribution shift offered.":r.why);};panel.insertBefore(b,close||null);
       const last=read.ok&&jobReadState().state.history.filter(h=>h.contract===JOB_COURIER_SHIFT).slice(-1)[0];
-      if(last){const p=document.createElement("p");const detail=Array.isArray(last.receipts)?last.receipts.map(r=>"Stop "+r.stop+": "+r.clinic+", "+r.route+", paid "+r.pay+", medicine +"+jcQuantity(r.restock)).join(" · "):"";p.textContent="LAST DISTRIBUTION SHIFT · "+(last.outcome==="completed"?"completed":"ended early")+" · "+(last.receipts?.length||0)+" of 3 delivered · total pay "+last.pay+". "+detail+(last.reason==="contact_met_away"?" · off-site partial handoff: no medicine added to stock":last.reason==="case_inaccessible"?" · case inaccessible after assistant loss":"");panel.insertBefore(p,b);}
+      if(last){const p=document.createElement("p");const detail=Array.isArray(last.receipts)?last.receipts.map(r=>"Stop "+r.stop+": "+r.clinic+", "+r.route+", paid "+r.pay+", medicine +"+jcQuantity(r.restock)).join(" · "):"";p.textContent="LAST DISTRIBUTION SHIFT · "+(last.outcome==="completed"?"completed":"ended early")+" · "+(last.receipts?.length||0)+" of "+JC_STOPS.length+" delivered · total pay "+last.pay+". "+detail+(last.reason==="contact_met_away"?" · off-site partial handoff: no medicine added to stock":last.reason==="case_inaccessible"?" · case inaccessible after assistant loss":"");panel.insertBefore(p,b);}
+      const cr=jobReadState();
+      if(cr.ok){const rk=jcCareerRank(cr.state);const q=document.createElement("p");q.textContent="COURIER CAREER · Stage "+rk.rank+"/5 · "+rk.name+(rk.next===null?" · top stage reached":" · "+rk.next+" more completed shift"+(rk.next===1?"":"s")+" for the next stage");q.style.cssText="font-size:12px;opacity:.8";panel.insertBefore(q,b);}
       return;
     }
     if(a.contract!==JOB_COURIER_SHIFT || !read.inWorld)return;
@@ -190,12 +295,13 @@ function jcEnd(id) {
     text("h2","MEDICAL DISTRIBUTION SHIFT");if(message){const p=text("p",message);p.style.color="#ffd166";}
     const stop=a.data?.stop,chapter=JC_STOPS[stop];
     if(!chapter || !Array.isArray(a.data.receipts)){text("p","This shift's saved data is not supported. Withdraw it without changing other jobs.");button("WITHDRAW",()=>{const r=jobWithdraw(a.id);jdOpen(r.ok?"Shift withdrawn.":r.why);});button("CLOSE",jdClose);return;}
-    text("p","DELIVERY "+(stop+1)+" / 3 · "+chapter.name+" · completed "+a.data.receipts.length+" / 3");
+    text("p","DELIVERY "+(stop+1)+" / "+JC_STOPS.length+" · "+chapter.name+" · completed "+a.data.receipts.length+" / "+JC_STOPS.length);
+    if(Array.isArray(a.data.closures)&&a.data.closures.length)text("p","ROAD CLOSURE · a street on the old route is closed; dispatch re-routed this leg around it · the destinations themselves are unchanged.");
     if(a.phase!=="offer") {
-      text("p","WORK VEHICLE & FUEL · The optional work vehicle and changes to vehicle fuel last only for this run. After restarting, the work vehicle is not restored. If used, the one-time emergency canister remains used after a restart. The assistant travels on foot.");
+      text("p","WORK VEHICLE & FUEL · The optional work vehicle saves its position, damage and fuel; after a restart it returns where you left it, until it is destroyed. Vehicle fuel changes otherwise stay run-local. If used, the one-time emergency canister remains used after a restart. The assistant may ride the work vehicle’s passenger seat on delivery legs.");
     }
     if(a.phase==="offer") {
-      text("p","Three connected clinic deliveries with a route check at each stop. "+chapter.story+" A real civilian clinic contact accepts each case. Relay packaging is an abstract handoff. You may request a real work vehicle while this shift is active; it lasts only for this run and is not restored after restart. You can also use another vehicle or travel on foot. You may request an unarmed civilian assistant to carry the case on foot; they can flee, be injured or die and cannot board vehicles. One emergency canister can refill the last vehicle you drove to 30%, if stopped nearby and low on fuel. Vehicle fuel is run-local. Economy mode only. No timer.");
+      text("p","Three connected clinic deliveries with a route check at each stop. "+chapter.story+" A real civilian clinic contact accepts each case. Relay packaging is an abstract handoff. You may request a real work vehicle while this shift is active; its position, damage and fuel are saved across restarts until it is destroyed. You can also use another vehicle or travel on foot. You may request an unarmed civilian assistant to carry the case on foot; they can flee, be injured or die. While on a delivery leg they may ride a stopped vehicle’s passenger seat and step out on a checked curb. One emergency canister can refill the last vehicle you drove to 30%, if stopped nearby and low on fuel. Vehicle fuel is run-local. Economy mode only. No timer.");
       button("ACCEPT SHIFT",()=>{const r=jobAccept(a.id);if(r.ok){jdClose();jdNotice("SHIFT ACCEPTED · Collect the first case.");}else jdOpen(r.why);});
       button("DECLINE",()=>{const r=jobWithdraw(a.id);jdOpen(r.ok?"Shift declined.":r.why);});
     } else if(a.phase==="dispatch") {

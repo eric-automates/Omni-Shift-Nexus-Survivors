@@ -290,6 +290,7 @@ function trfStep(dt) {
   const keep = [];
   for (const c of TRF.cars) {
     if (c.dead) continue;
+    if (c.j01tow) { trfPlace(c); keep.push(c); continue; }   // 15.3.3: a car under hook is steered by its wrecker, not by itself
     const far = Math.hypot(c.x - px, c.y - py) > V.r * 3.2 && !(c.x > V.x0 - 6 && c.x < V.x1 + 6 && c.y > V.y0 - 6 && c.y < V.y1 + 6);
     if (far && !c.keep) { trfDrop(c); continue; }
     let acc;
@@ -332,6 +333,7 @@ function trfAhead(c, obst, reach) {
     const dx = o[0] - c.x, dy = o[1] - c.y, fwd = dx * hx + dy * hy;
     if (fwd < 0 || fwd > reach + c.D) continue;
     if (o[6] && o[6].vehObs) continue;
+    if (o[5] === 1 && c.j01dsp) continue;   // 15.3.3: a dispatch unit weaves the on-foot crowd at its scene — it must not sit stalled forever
     const lat = Math.abs(-dx * hy + dy * hx);
     if (lat > c.W / 2 + o[2] + 0.25 * c.k) continue;
     const d = fwd - c.D / 2 - o[2];
@@ -343,10 +345,12 @@ function trfDriveStep(c, dt, a0, b0, s0, T, lanes, obst, V) {
   const L = c.L, k = c.k, endN = trfEndNode(L, c.d), rIn = trfR(endN, L);
   let v0 = c.v0;
   if (c.siren && c.police) v0 *= 1.5;
+  if (c.pdp && c.pdp.pull) v0 = 0;   // 15.3.2 J01: this car has accepted the player's lights
   // leader on the same lane
   let gap = 1e9, dv = 0;
   const lane = lanes.get(L.id * 16 + (c.d > 0 ? 0 : 8) + c.q) || [];
-  for (const o of lane) { if (o === c || o.s <= c.s) continue; const g = o.s - c.s - (o.D + c.D) / 2; if (g < gap) { gap = g; dv = c.v - o.v; } }
+  for (const o of lane) { if (o === c || o.s <= c.s) continue; if ((o.pdp && o.pdp.pull && o.towDue !== undefined) || (c.j01dsp && (o.pdp && o.pdp.pull || o.v < 0.35 * c.k))) continue;   // 15.3.3: a curb-held car does not dam the road for anyone; a unit on lights additionally drives past anything that is stood still — it weaves queues instead of dying in one
+    const g = o.s - c.s - (o.D + c.D) / 2; if (g < gap) { gap = g; dv = c.v - o.v; } }
   // the junction ahead
   const toEnd = L.L - rIn - c.s;   // centre to the junction mouth
   const deg = endN.links.length;
@@ -357,6 +361,7 @@ function trfDriveStep(c, dt, a0, b0, s0, T, lanes, obst, V) {
     // dead end (or the edge of the net): stop, then turn around — or quietly leave if nobody's looking
     stopAt = L.L - c.s - c.D / 2 - 0.4 * k;
     if (stopAt < 0.6 * k && c.v < 0.4 * k) {
+      if (c.pdp && c.pdp.pull) return 0;   // 15.3.3: a car pulled to the curb stays THERE — the dead-end turn-around and the quiet disappearance belong to free traffic only
       const vis = c.x > V.x0 - 5 && c.x < V.x1 + 5 && c.y > V.y0 - 5 && c.y < V.y1 + 5;
       if (!vis || !L.ow) { if (!vis) { trfDrop(c); return 0; } c.d = -c.d; c.s = L.L - c.s; c.q = Math.min(c.q, L.lanes - 1); c.next = null; trfPlace(c); return 0; }
       trfDrop(c); return 0;
@@ -371,13 +376,14 @@ function trfDriveStep(c, dt, a0, b0, s0, T, lanes, obst, V) {
       else if (st === 1) go = line < c.v * c.v / (2 * b0) + 0.5 * k;   // too close to stop → go through on amber
     } else if (deg >= 3) {
       const minor = L.rank < endN.maxRank || (endN.stop && endN.allEq);   // side roads give way; equal roads with a sign: all-way stop
-      if (minor) {
+      if (minor && c.j01dsp) { go = trfBoxFree(endN, c); if (go) c.wait = 0; }   // 15.3.3: a unit on lights yields only to a car actually IN the box — an unbroken major-road queue must not hold it forever
+      else if (minor) {
         if (c.wait < 0.7) { go = false; if (line < 1.2 * k && c.v < 0.35 * k) c.wait += dt; }
         else go = trfBoxFree(endN, c) && trfMajorClear(endN, c);
       } else go = trfBoxFree(endN, c, true);
     }
     // don't block the box: room on the far side
-    if (go && c.next) { const sp = trfEntrySpace(c.next); if (sp < c.D + s0) go = false; }
+    if (go && c.next && !c.j01dsp) { const sp = trfEntrySpace(c.next); if (sp < c.D + s0) go = false; }   // 15.3.3: a unit on lights squeezes into gaps the civilians wait out
     if (!go) stopAt = line;
     else if (c.next && c.next.turn) {   // slow for the turn
       const vt = (c.next.turn ? 6.5 : 12) * k;
@@ -394,6 +400,23 @@ function trfDriveStep(c, dt, a0, b0, s0, T, lanes, obst, V) {
     const hx = Math.cos(c.ang), hy = Math.sin(c.ang), lat = (A.o[0] - c.x) * -hy + (A.o[1] - c.y) * hx, room = L.w / 2 + (L.ow ? 0 : L.w / 2) * 0.9;
     c.shT = Math.min(room, c.W + 0.7 + Math.abs(lat) * 0.2) * (lat >= 0 ? 1 : -1);
   } else if (c.shT && (!A.o || A.o[5] !== 1) && c.blockT <= 0) c.shT = 0;
+  // a player car bearing down head-on: a stopped or crawling driver eases aside when the
+  // road gives them room — the same courtesy asked of parking convoys. No room, police
+  // cars and normal driving are untouched; the felt shove/crash rules still apply.
+  if (A.o && A.o[5] === 2) {
+    const hx = Math.cos(c.ang), hy = Math.sin(c.ang);
+    const closing = c.v - (A.o[3] * hx + A.o[4] * hy);   // scalar speeds: TRF cars have no vx/vy
+    const lat = (A.o[0] - c.x) * -hy + (A.o[1] - c.y) * hx;
+    const need = c.W / 2 + (A.o[2] || .6) + .4, room = L.w / 2 + (L.ow ? 0 : L.w / 2) * .9;
+    // shifting by +|sh| moves right, which is away when the player sits left (lat ≥ 0)
+    const separation = Math.abs(lat) + (c.sh || 0) * (lat >= 0 ? 1 : -1);
+    const urgent = !c.police && c.st === 0 && c.v < 1.6 * k && Number.isFinite(closing) && closing > .5 && A.d < 1e8 && A.d / closing < 1.8;
+    if (urgent && separation < need) {
+      const want = need - Math.abs(lat);
+      if (want > .1 && want <= room) { c.shT = want * (lat >= 0 ? 1 : -1); c.avoidSh = c.shT; c.avoidT = runTime; }
+    } else if (c.avoidSh && c.shT === c.avoidSh && (separation >= need || !urgent)) c.shT = 0;
+  } else if (c.avoidSh && c.shT === c.avoidSh) c.shT = 0;
+  if (c.pdp && c.pdp.pull) { const pdR = L.w / 2 + (L.ow ? 0 : L.w / 2) * 0.9; c.shT = Math.min(pdR, c.W + 1.8); }   // ease to the right edge, then hold
   if ((c.sh || 0) !== (c.shT || 0)) { const st = 1.4 * k * dt, d = (c.shT || 0) - (c.sh || 0); c.sh = (c.sh || 0) + Math.max(-st, Math.min(st, d)); }
   let acc = trfIdm(c.v, v0, gap, dv, a0, b0, s0, T);
   acc = Math.max(-8 * k, Math.min(a0, acc));

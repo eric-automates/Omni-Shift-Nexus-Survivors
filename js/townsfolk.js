@@ -20,7 +20,7 @@
    ========================================================================= */
 "use strict";
 
-const TF = { on: false, bld: new Map(), npc: new Map(), walk: [], regT: 0, regPos: null, pathBudget: 0, talkT: -1, talk: null, panel: null, hireSeq: 1, frame: 0 };
+const TF = { on: false, bld: new Map(), npc: new Map(), walk: [], pinned: [], regT: 0, regPos: null, pathBudget: 0, talkT: -1, talk: null, panel: null, hireSeq: 1, frame: 0 };
 const TF_MAX_OUT = 34, TF_MAX_IN = 18, TF_REG_M = 380, TF_LIVE_M = 300;
 
 /* --- who works where ---------------------------------------------------------------- */
@@ -90,6 +90,14 @@ function tfRng(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >
 function tfKind(b) { return b.kind && (TF_JOBS[b.kind] || TF_HOMES[b.kind]) ? b.kind : b.type; }
 function tfArea(b) { return Math.max(20, (b.cw || 10) * (b.ch || 10) * 0.25); }
 function tfPerson(id, r, extra) {
+  // 15.3.1 durable identity: the id IS the person. Re-registering a known id
+  // refreshes role fields (home/job/occupancy) but never replaces the human
+  // being — name, face, life state and any mission record ride through it.
+  const ex = TF.npc.get(id);
+  if (ex) {
+    if (extra) for (const k in extra) if (k !== "id" && k !== "seed" && k !== "name" && k !== "age" && k !== "shirt" && k !== "pants" && k !== "head") ex[k] = extra[k];
+    return ex;
+  }
   const N = tfNamePool(), L = tfLookPool();
   const p = Object.assign({ id, seed: tfHash(id), name: N[0][Math.floor(r() * N[0].length)] + " " + N[1][Math.floor(r() * N[1].length)], age: 18 + Math.floor(r() * 58),
     shirt: L.shirts[Math.floor(r() * L.shirts.length)], pants: L.pants[Math.floor(r() * L.pants.length)], head: L.heads[Math.floor(r() * L.heads.length)],
@@ -207,7 +215,36 @@ function tfSpawnWalker(p, x, y, inside, b) {
   TF.walk.push(p);
   return p.w;
 }
-function tfDespawn(i) { const p = TF.walk[i]; if (p) p.w = null; TF.walk.splice(i, 1); }
+function tfDespawn(i) { const p = TF.walk[i]; if (p) { if (p.tfJob) tfJobRecord(p); p.w = null; } TF.walk.splice(i, 1); }
+/* --- 15.3.1 mission-pinned actors: the durable record ------------------------
+   A pinned person is dehydrated (walked off) and rehydrated (walked back) by
+   the streaming system without ever losing identity or state: the last live
+   walker fields are checkpointed onto the person before the walker is dropped,
+   and restored when the same person is walked again. Readers use tfJobVal,
+   which answers from the live walker if there is one and from the checkpoint
+   otherwise — never a null deref, never a silently reset health bar. */
+function tfJobClaim(p, tag) { p.tfJob = tag || true; if (TF.pinned.indexOf(p) < 0) TF.pinned.push(p); return p; }
+function tfJobRelease(p) { if (!p) return; p.tfJob = null; p.jrec = null; const i = TF.pinned.indexOf(p); if (i >= 0) TF.pinned.splice(i, 1); }
+function tfJobRecord(p) {
+  const W = p.w; if (!W) return;
+  p.jrec = { hp: W.hp, stun: W.stun || 0, flee: W.flee, fleeX: W.fleeX, fleeY: W.fleeY, x: W.x, y: W.y, inside: W.inside || null, jobContact: !!W.jobContact, jobEscort: !!W.jobEscort, idle: W.idle, born: W.born };
+}
+function tfJobVal(p, k, fb) {
+  if (!p) return fb;
+  if (p.w) { const v = p.w[k]; return v === undefined ? fb : v; }
+  if (p.jrec) { const v = p.jrec[k]; return v === undefined ? fb : v; }
+  return fb;
+}
+function tfJobHydrate(p) {
+  if (!p || !p.tfJob || !p.alive || p.w || !p.jrec) return p && p.w || null;
+  const q = p.jrec;
+  if (!player || Math.hypot(q.x - player.x, q.y - player.y) > TF_LIVE_M * 32 * 0.8) return null;
+  const W = tfSpawnWalker(p, q.x, q.y, false, null);
+  W.hp = q.hp; W.stun = q.stun; W.flee = q.flee; W.fleeX = q.fleeX; W.fleeY = q.fleeY;
+  W.jobContact = q.jobContact; W.jobEscort = q.jobEscort; W.born = q.born; if (q.idle !== undefined) W.idle = q.idle;
+  if (q.inside) { W.inside = q.inside; W.x = q.x; W.y = q.y; W.tx = q.x; W.ty = q.y; }
+  return W;
+}
 function tfNearBuildings(rM) {
   const [xm, ym] = cityWorldM(player.x, player.y), out = [], seen = new Set();
   let blocks = [];
@@ -225,6 +262,9 @@ function tfRegisterNear() {
   return L;
 }
 function tfPopulate() {
+  // pinned mission people rehydrate as you approach them — same object, same
+  // state, wherever the encounter left them (15.3.1 hydration invariant)
+  if (player && TF.on && TF.pinned.length) for (let k = TF.pinned.length - 1; k >= 0; k--) { const p = TF.pinned[k]; if (!p.alive || !p.tfJob) { TF.pinned.splice(k, 1); continue; } if (!p.w) tfJobHydrate(p); }
   if (!player || player.inVehicle === 3 && TF.walk.length > TF_MAX_OUT) return;
   const h = scnHour(), L = TF.nearList || [];
   const rush = (h >= 7 && h < 9.5) || (h >= 15.5 && h < 18.5) ? 1 : h >= 22 || h < 6 ? 0.25 : 0.65;
@@ -359,6 +399,10 @@ function tfStep(dt) {
       } else if(W.jobSupport) {
         const target=typeof jdSupportTarget==="function" ? jdSupportTarget(p) : null;
         if(target && (Math.hypot(W.x-target.x,W.y-target.y)>(target.stop||30) || (target.stop===8 && !stClearLine(W.x,W.y,target.x,target.y,7))))tfMove(W,target.x,target.y,100,dt);
+        else W.vx=W.vy=0;
+      } else if(W.jdResponder) {
+        const target=typeof jdResponseTarget==="function" ? jdResponseTarget(p) : null;
+        if(target && Math.hypot(W.x-target.x,W.y-target.y)>target.stop)tfMove(W,target.x,target.y,140,dt);
         else W.vx=W.vy=0;
       } else if(W.jobEscort && !player.inVehicle && !player.roof && (player.flyAlt||0)<=2) {
         const target=typeof jdEscortTarget==="function" ? jdEscortTarget(p) : {x:player.x,y:player.y,stop:48};
@@ -505,7 +549,7 @@ function tfJobsTick() {
   if (SCN.mode === "economy" && Math.random() < 0.02) {
     // Active dispatch actors have their own explicit loss paths. Do not silently
     // replace a witness or support worker with an unrelated street enemy.
-    const L = TF.walk.filter(p => p.alive && !p.bad && p.w && !p.w.inside && !p.w.jobContact && (p.occ === "unemployed" || p.mood < 0.35));
+    const L = TF.walk.filter(p => p.alive && !p.bad && p.w && !p.w.inside && !p.tfJob && !p.w.jobContact && (p.occ === "unemployed" || p.mood < 0.35));
     const p = L[Math.floor(Math.random() * L.length)];
     if (p && typeof ecoTurnBad === "function") ecoTurnBad(p);
   }
@@ -636,11 +680,11 @@ function townsLights(push) {
   if (typeof V10 !== "undefined") {
     V10.onRunStart.push(() => {
       TF.on = typeof CITY !== "undefined" && CITY.on && (SCN.mode === "economy" || SCN.mode === "apoc");
-      TF.bld.clear(); TF.npc.clear(); TF.walk.length = 0; TF.regT = 0; TF.nearList = null; tfTalkClose();
+      TF.bld.clear(); TF.npc.clear(); TF.walk.length = 0; TF.pinned.length = 0; TF.regT = 0; TF.nearList = null; tfTalkClose();
     });
     V10.onStep.push(tfStep);
     V10.onRenderWorld.push(tfRender);
-    V10.onRunReset.push(() => { TF.on = false; TF.walk.length = 0; tfTalkClose(); });
+    V10.onRunReset.push(() => { TF.on = false; TF.walk.length = 0; TF.pinned.length = 0; tfTalkClose(); });
   }
 })();
 // Optional assist for straight-projectile auto-fire. It checks the actual

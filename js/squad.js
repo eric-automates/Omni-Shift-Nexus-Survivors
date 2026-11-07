@@ -13,11 +13,16 @@ const mBurst = new Uint8Array(MAX_MINION), mAim = new Float32Array(MAX_MINION), 
 const mName = new Array(MAX_MINION).fill("");
 // Paths are disposable navigation hints, not save state.  A maximum of two
 // searches per simulation step keeps a large fireteam from stalling a phone.
-const squadNav = Array.from({ length: MAX_MINION }, () => ({ path: null, retry: 0, stuck: 0, lineT: 0, lineOK: true }));
+const squadNav = Array.from({ length: MAX_MINION }, () => ({ path: null, retry: 0, stuck: 0, lineT: 0, lineOK: true,
+  lane: null, tLane: null, curbT: 0, curbD0: 0, forced: 0, laneT: 0, dashed: 0, dashT: 0,
+  slotX: 0, slotY: 0, slotOK: 0, fmode: 0, swN: 0, swT: 0, pinT: 0,
+  mid: null, midNext: 0 }));
 let squadPathBudget = 0;
 function squadNavReset(m) {
   const N = squadNav[m]; if (!N) return;
   N.path = null; N.retry = N.stuck = N.lineT = 0; N.warnT = -999;
+  N.lane = N.tLane = null; N.curbT = N.curbD0 = N.forced = N.laneT = N.dashed = N.dashT = 0;
+  N.slotX = N.slotY = N.slotOK = N.fmode = N.swN = N.swT = N.pinT = 0; N.mid = null; N.midNext = 0;
 }
 function squadRewindArrays() { return [mBurst, mAim, mTeam, mSlot, mTag]; }
 
@@ -54,7 +59,8 @@ const SQUAD_ORDERS = [
   { id: 3, label: "ADVANCE", icon: "⬆", call: "MOVE UP! ADVANCE!", reply: ["Moving up!", "Pushing forward!", "Oorah!"] }
 ];
 const squadState = { order: 0, ax: 0, ay: 0, focusIdx: -1, focusUid: 0, orderT: 0, wheelOpen: false, theme: "marine",
-                     innateN: 0, reinforceT: 40, gunSfxT: 0, uiT: 0, alive: 0, soldiers: 0, coGunner: -1, hl: -1, formHeading: 0 };
+                     innateN: 0, reinforceT: 40, gunSfxT: 0, uiT: 0, alive: 0, soldiers: 0, coGunner: -1, hl: -1, formHeading: 0,
+                     audT: 0, compress: 0, reformT: 0, lastOrder: -1 };
 
 /* === 2. CALL-INS === */
 function squadThemeKey() {
@@ -122,6 +128,106 @@ function squadIssueOrder(id) {
 }
 
 /* === 4. AI (replaces js/sim.js updateMinionsSim) === */
+/* === 3b. CURB SENSE (15.4.x part1) — the foot squad reads the road -------------------
+   The 15.4 plan asks for deliberate road crossings, no standing in live traffic, and
+   above all "do not make followers incapable of following across a roadway". Every rule
+   below is gated on TRF.on && CITY.on (a fireteam in arena/classic worlds pays nothing
+   but one null check), consumes zero RNG (the pack's determinism is sacred) and never
+   writes to the traffic engine. Combat movement passes `nocurb`: curb sense must not
+   pause a firefight — the same principle 15.1 established for routine tickets.
+   State lives only on squadNav[m] (disposable, cleared by squadNavReset like the paths).
+   Fixture: qa/run1541_curb_sense.py · pack C118 · counters on window.SQCURB (QA only). */
+function sqProbe(k, n) { const P = typeof window !== "undefined" ? window.SQCURB : null; if (P) P[k] = (P[k] | 0) + (n || 1); }
+// nearest live link within `rad` px of a world-px point: band data in px units.
+function sqLaneAt(wx, wy) {
+  if (typeof TRF === "undefined" || !TRF.on || !TRF.net || !TRF.net.links) return null;
+  const gx = (wx + CITY.orx) / 32, gy = (wy + CITY.ory) / 32, R = 170 / 32;
+  let bL = null, bd = 1e9, bpx = 0, bpy = 0, bsx = 1, bsy = 0;
+  for (const L of TRF.net.links) {
+    let bb = L._sqbb;
+    if (!bb) { const q = L.pts; let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+      for (let i = 0; i < q.length; i += 2) { if (q[i] < x0) x0 = q[i]; if (q[i] > x1) x1 = q[i]; if (q[i + 1] < y0) y0 = q[i + 1]; if (q[i + 1] > y1) y1 = q[i + 1]; }
+      L._sqbb = bb = [x0, y0, x1, y1]; }
+    if (gx < bb[0] - R || gx > bb[2] + R || gy < bb[1] - R || gy > bb[3] + R) continue;
+    const q = L.pts;
+    for (let i = 0; i + 3 < q.length; i += 2) {
+      const ax = q[i], ay = q[i + 1], dx = q[i + 2] - ax, dy = q[i + 3] - ay, ll = dx * dx + dy * dy;
+      let t = ll > 1e-9 ? ((gx - ax) * dx + (gy - ay) * dy) / ll : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const px = ax + dx * t, py = ay + dy * t, d = Math.hypot(gx - px, gy - py);
+      if (d < bd) { bd = d; bL = L; bpx = px; bpy = py; const sl = Math.hypot(dx, dy) || 1; bsx = dx / sl; bsy = dy / sl; }
+    }
+  }
+  if (!bL) return null;
+  const hw = (bL.ow ? bL.w * 0.5 : bL.w * 0.25) * 32;   // drivable half-width in px (both carriageways share L.w)
+  const d = bd * 32;
+  return { t: runTime, L: bL, d: d, hw: hw, inside: d < hw + 6, cx: bpx * 32 - CITY.orx, cy: bpy * 32 - CITY.ory, sx: bsx, sy: bsy };
+}
+// any live car whose swept footprint would cover (wx,wy) within leadT seconds
+function sqThreat(wx, wy, leadT) {
+  const cars = (typeof TRF !== "undefined" && TRF.cars) || [];
+  for (const c of cars) {
+    if (!c || c.dead || !c.L) continue;
+    const cx0 = c.x * 32 - CITY.orx, cy0 = c.y * 32 - CITY.ory;
+    const spd = c.v * 32;
+    if (spd < 6 && Math.hypot(cx0 - wx, cy0 - wy) > c.lpx * 0.7 + 30) continue;   // parked and remote: no sweep needed
+    const vx = Math.cos(c.ang) * spd, vy = Math.sin(c.ang) * spd;
+    const co = Math.cos(c.ang), si = Math.sin(c.ang);
+    const reach = Math.abs(vx) * leadT + Math.abs(vy) * leadT + c.lpx + 90;
+    if (Math.abs(cx0 - wx) + Math.abs(cy0 - wy) > reach) continue;
+    const steps = spd > 8 ? 4 : 1;
+    for (let j = 0; j <= steps; j++) {
+      const t = leadT * j / steps;
+      const dx = cx0 + vx * t - wx, dy = cy0 + vy * t - wy;
+      if (Math.abs(dx * co + dy * si) < c.lpx * 0.5 + 10 && Math.abs(-dx * si + dy * co) < c.wpx * 0.5 + 10) return true;
+    }
+  }
+  return false;
+}
+// nearest out-of-band standing spot (perpendicular first, then diagonals): never teleports
+function sqCurbOut(wx, wy, ln) {
+  const r = ln.hw + 26, nx = -ln.sy, ny = ln.sx, K = 0.7071;
+  const dirs = [[nx, ny], [-nx, -ny],
+    [nx * K + ln.sx * K, ny * K + ln.sy * K], [nx * K - ln.sx * K, ny * K - ln.sy * K],
+    [-nx * K + ln.sx * K, -ny * K + ln.sy * K], [-nx * K - ln.sx * K, -ny * K - ln.sy * K],
+    [ln.sx, ln.sy], [-ln.sx, -ln.sy]];
+  for (const m2 of [1, 1.6]) for (const q of dirs) {
+    const px2 = wx + q[0] * r * m2, py2 = wy + q[1] * r * m2;
+    const rr = typeof cityResolve === "function" ? cityResolve(px2, py2, 7, false) : [px2, py2];
+    if (Math.hypot(rr[0] - px2, rr[1] - py2) > 3) continue;                     // would be shoved into a wall: not standable
+    const l2 = sqLaneAt(rr[0], rr[1]);
+    if (l2 && l2.inside) continue;
+    return [rr[0], rr[1]];
+  }
+  return null;
+}
+// how far along (dx,dy) from a world-px point before geometry would shove you back
+function sqWallDist(px, py, dx, dy) {
+  for (let r = 14; r <= 84; r += 14) {
+    const x2 = px + dx * r, y2 = py + dy * r;
+    const q = typeof cityResolve === "function" ? cityResolve(x2, y2, 7, false) : [x2, y2];
+    if (Math.hypot(q[0] - x2, q[1] - y2) > 1) return r;
+  }
+  return 99;
+}
+function sqSideProbe(k) { const P = typeof window !== "undefined" ? window.SQSIDE : null; if (P) P[k] = (P[k] | 0) + 1; }
+// Curb point on a chosen side of a band, for march routing. Projects the sample onto the
+// LANE CENTERLINE, then out to the curb ring (hw+26) on the anchor's side, keeping the
+// along-road station — measuring the radius from the off-center sample itself overshoots
+// the facade by that offset and answers null everywhere (measured: 22 evals, 22 refusals).
+function sqCurbSide(wx, wy, ln, ax, ay) {
+  const nx = -ln.sy, ny = ln.sx, r = ln.hw + 26;
+  const sg = ((ax - ln.cx) * nx + (ay - ln.cy) * ny) >= 0 ? 1 : -1;
+  const along = (wx - ln.cx) * ln.sx + (wy - ln.cy) * ln.sy;
+  for (const k of [1, 0.86, 1.14]) for (const toff of [0, 42, -42]) {   // walk the strip for width, like a pedestrian
+    const px2 = ln.cx + ln.sx * (along + toff) + nx * sg * r * k, py2 = ln.cy + ln.sy * (along + toff) + ny * sg * r * k;
+    const rr = typeof cityResolve === "function" ? cityResolve(px2, py2, 7, false) : [px2, py2];
+    if (Math.hypot(rr[0] - px2, rr[1] - py2) > 3) continue;
+    const l2 = sqLaneAt(rr[0], rr[1]);
+    if (l2 && l2.inside) continue;
+    return [rr[0], rr[1]];
+  }
+  return null;
+}
 function squadMove(m, dx, dy, simDt, mul) {
   if (!dx && !dy) { mVX[m] = 0; mVY[m] = 0; return; }
   const vx = dx * mSpd[m] * mul, vy = dy * mSpd[m] * mul;
@@ -143,10 +249,67 @@ function squadMove(m, dx, dy, simDt, mul) {
   mVX[m] = (mX[m] - ox) / Math.max(.0001, simDt); mVY[m] = (mY[m] - oy) / Math.max(.0001, simDt);
   if (moved > .1) mWalk[m] += simDt * (mKind[m] === 1 ? 11 : 7.5);
 }
-function squadMoveTo(m, tx, ty, simDt, mul, stopR) {
-  const dx = tx - mX[m], dy = ty - mY[m], d = Math.hypot(dx, dy), N = squadNav[m];
+function squadMoveTo(m, tx, ty, simDt, mul, stopR, nocurb) {
+  let dx = tx - mX[m], dy = ty - mY[m], d = Math.hypot(dx, dy), N = squadNav[m];
   N.retry = Math.max(0, N.retry - simDt);
   N.lineT = Math.max(0, (N.lineT || 0) - simDt);
+  // --- march routing consumer (15.4.3 part1): the 4 Hz audit decides strip routes toward
+  //     the LEADER anchor (slot targets jitter and defeat caching); this only steers the
+  //     active waypoint and hands the final leg back. Targets move, never positions.
+  if (!nocurb && N.mid && typeof TRF !== "undefined" && TRF.on) {
+    const A = N.mid;
+    if (d < 150 || Math.hypot(A.px - player.x, A.py - player.y) > 70 || runTime - A.born > 2.5) N.mid = null;
+    else if (Math.hypot(A.a[0] - mX[m], A.a[1] - mY[m]) < 26) { if (A.hop > 1) { A.a = A.b; A.hop = 1; sqSideProbe("hops"); } else N.mid = null; }
+    else { tx = A.a[0]; ty = A.a[1]; dx = tx - mX[m]; dy = ty - mY[m]; d = Math.hypot(dx, dy); }
+  }
+  // --- curb sense (see 3b): mid-lane halts retarget to the curb, a pin gets one dash,
+  //     and stepping into a band with traffic closing holds the person at the curb edge —
+  //     bounded at 6 s so a follower can NEVER refuse the roadway permanently.
+  if (!nocurb && typeof CITY !== "undefined" && CITY.on && typeof TRF !== "undefined" && TRF.on) {
+    if (!N.lane || runTime - N.lane.t > 0.25) N.lane = sqLaneAt(mX[m], mY[m]);
+    const ln = N.lane;
+    if (ln) {
+      if (!ln.inside && d > stopR + 2) {
+        // the ordered stop point itself sits in a live band: take the curb beside it instead —
+        // persistently, or the member oscillates (arrive, snap, walk back, snap, ...)
+        if (!N.tLane || runTime - N.tLane.t > 0.25) N.tLane = sqLaneAt(tx, ty);
+        const lt = N.tLane;
+        if (lt && lt.inside) {
+          const out2 = sqCurbOut(tx, ty, lt);
+          if (out2) { tx = out2[0]; ty = out2[1]; dx = tx - mX[m]; dy = ty - mY[m]; d = Math.hypot(dx, dy); sqProbe("snaps"); }
+        }
+      }
+      if (ln.inside) {
+        N.laneT += simDt;
+        if (N.laneT > 2.5 && !N.dashed && N.stuck > 1.2) { N.dashed = 1; N.dashT = runTime + 1.2; sqProbe("dashes"); }
+        if (d <= stopR || (N.dashed && N.dashT > runTime) || (N.laneT > 2.5 && N.stuck > 1.2)) {
+          const out = sqCurbOut(mX[m], mY[m], ln);
+          if (out) {
+            if (d <= stopR) sqProbe("snaps");
+            tx = out[0]; ty = out[1]; dx = tx - mX[m]; dy = ty - mY[m]; d = Math.hypot(dx, dy);
+            if (N.dashT > runTime) mul *= 1.6;
+          }
+        }
+        if (typeof window !== "undefined" && window.SQCURB && sqThreat(mX[m], mY[m], 0.5)) sqProbe("hazards");
+      } else {
+        N.laneT = 0; N.dashed = 0;
+        if (ln.d > ln.hw + 40) N.curbT = 0;
+        if (!(N.forced && runTime - N.forced < 3) && d > stopR + 2) {
+          const gd = d || 1, step = Math.max(24, mSpd[m] * mul * simDt * 3);
+          const nxv = -ln.sy, nyv = ln.sx;
+          const px2 = mX[m] + dx / gd * step, py2 = mY[m] + dy / gd * step;
+          const pd = Math.abs((px2 - ln.cx) * nxv + (py2 - ln.cy) * nyv);
+          if (pd < ln.hw + 4 && (ln.d > pd || ln.d < ln.hw + 30)) {
+            if (sqThreat(px2, py2, 1.5)) {
+              if (!N.curbT) { N.curbT = runTime; N.curbD0 = d; sqProbe("holds"); }
+              if (runTime - N.curbT > 6 || d > N.curbD0 + 150) { N.forced = runTime; N.curbT = 0; sqProbe("forced"); }
+              else { mVX[m] = 0; mVY[m] = 0; return d; }
+            } else N.curbT = 0;
+          } else N.curbT = 0;
+        }
+      }
+    }
+  }
   if (d <= stopR) { N.path = null; mVX[m] = mVY[m] = 0; return d; }
   let gx = tx, gy = ty;
   let blocked = false;
@@ -246,6 +409,109 @@ function squadMinionsSim(simDt) {
     const heading = Math.atan2(player.vy, player.vx);
     S.formHeading = lerpAng(S.formHeading, heading, Math.min(1, simDt * 4));
   }
+  // --- formation audit (15.4.2 part1, 4 Hz, ONE pass for the whole team): wedge-slot
+  // legality decides per-member mode — 0 wedge, 1 file (tight alley forces everyone; a
+  // blocked slot drops that member into file rank), 2 curb-shift beside the slot. Slots
+  // are TARGETS, never teleports: positions stay continuous by construction. A member
+  // flipping modes >4 times in 6 s pins to file for 12 s: bounded, like everything here.
+  S.audT -= simDt;
+  if (S.audT <= 0) {
+    S.audT = 0.25;
+    if (S.order !== S.lastOrder) { S.lastOrder = S.order; S.compress = 0; S.reformT = 0;
+      for (let m = 0; m < MAX_MINION; m++) { const N3 = squadNav[m]; N3.fmode = 0; N3.swN = 0; N3.pinT = 0; } }   // orders re-set the formation context wholesale
+    for (let m = 0; m < MAX_MINION; m++) squadNav[m].slotOK = 0;
+    if (S.order === 0 && typeof CITY !== "undefined" && CITY.on && typeof cityResolve === "function") {
+      const live = [];
+      for (let m = 0; m < MAX_MINION; m++) if (mAct[m] && mTeam[m] === 1 && mKind[m] >= 5 && mKind[m] <= 8) live.push(m);
+      live.sort((a, b) => ((mSlot[a] % 8) - (mSlot[b] % 8)) || a - b);
+      if (!live.length) { S.compress = 0; S.reformT = 0; }
+      else {
+        const c0 = Math.cos(S.formHeading), s0 = Math.sin(S.formHeading);
+        // An ALLEY is a walled corridor of its own — not a traffic lane. If the leader stands in
+        // a live band, curb sense owns the geometry (slot-level shifts below); mislabelling road
+        // facades as an alley parks file ranks in the roadway where no curb-shift can apply.
+        const lnP = sqLaneAt(player.x, player.y);
+        const alley = !(lnP && lnP.inside) &&
+          sqWallDist(player.x, player.y, -s0, c0) < 85 && sqWallDist(player.x, player.y, s0, -c0) < 85;
+        const used = [];
+        let allWedgeOK = true;
+        for (let mi = 0; mi < live.length; mi++) {
+          const m = live[mi], N2 = squadNav[m];
+          const slot = mSlot[m] % 8, row = Math.floor(slot / 2) + 1, side = slot % 2 ? 1 : -1;
+          const forward = -40 - (row - 1) * 45, lateral = side * (38 + (row - 1) * 22);
+          let wx2 = player.x + c0 * forward - s0 * lateral, wy2 = player.y + s0 * forward + c0 * lateral;
+          const legal = (x2, y2) => {
+            const q = cityResolve(x2, y2, 7, false);
+            if (Math.hypot(q[0] - x2, q[1] - y2) > 1) return false;
+            const ln = sqLaneAt(x2, y2); if (ln && ln.inside) return false;
+            for (const u of used) if (Math.hypot(u[0] - x2, u[1] - y2) < 26) return false;
+            return true;
+          };
+          const wedgeOK = legal(wx2, wy2);
+          if (!wedgeOK) allWedgeOK = false;
+          let mode = wedgeOK ? 0 : 1;
+          if (!wedgeOK && !alley) {
+            const ln2 = sqLaneAt(wx2, wy2);
+            if (ln2 && ln2.inside) { const out = sqCurbOut(wx2, wy2, ln2);
+              if (out) { let ox = out[0], oy = out[1]; const gl0 = Math.hypot(ox - wx2, oy - wy2) || 1;
+                if (sqWallDist(ox, oy, (ox - wx2) / gl0, (oy - wy2) / gl0) < 40) {   // lip hugs the facade: step off it toward the strip
+                  const bx = ox + (wx2 - ox) / gl0 * 12, by = oy + (wy2 - oy) / gl0 * 12;
+                  if (legal(bx, by)) { ox = bx; oy = by; sqSideProbe("buffers"); } else sqSideProbe("bufferSkips");
+                }
+                if (legal(ox, oy)) { wx2 = ox; wy2 = oy; mode = 2; } } }
+          }
+          if (alley) mode = 1;
+          if (S.compress && !alley) mode = 1;   // hold file through the reform countdown — or members flip at audit cadence and it never completes
+          if (mode === 1) { const fw = -30 - mi * 30, lat = (mi % 2 ? 14 : -14); wx2 = player.x + c0 * fw - s0 * lat; wy2 = player.y + s0 * fw + c0 * lat; }
+          if (N2.pinT > runTime) { mode = 1; const fw = -30 - mi * 30, lat = (mi % 2 ? 14 : -14); wx2 = player.x + c0 * fw - s0 * lat; wy2 = player.y + s0 * fw + c0 * lat; }
+          else if (mode !== N2.fmode) {
+            if (N2.swT && runTime - N2.swT < 6) { N2.swN++; if (N2.swN > 4) { N2.pinT = runTime + 12; N2.swN = 0; } } else N2.swN = 0;
+            N2.swT = runTime; N2.fmode = mode;
+          }
+          used.push([wx2, wy2]);
+          N2.slotX = wx2; N2.slotY = wy2; N2.slotOK = 1;
+        }
+        for (let ri = 0; ri < live.length; ri++) {   // route decision per member, 4 Hz, toward the leader anchor
+          const m = live[ri], NR = squadNav[m];
+          const rd = Math.hypot(player.x - mX[m], player.y - mY[m]);
+          if (alley || rd < 240) { NR.mid = null; continue; }
+          if (NR.mid) continue;
+          if (runTime < (NR.midNext || 0)) continue;
+          sqSideProbe("evals");
+          const rxx = player.x - mX[m], ryy = player.y - mY[m];
+          const step = 28, nS = Math.max(3, Math.min(30, Math.floor(rd / step)));
+          let first = -1, last = -1, exp = 0; const SL = [];
+          for (let i2 = 0; i2 <= nS; i2++) {
+            const px = mX[m] + rxx / rd * step * i2, py = mY[m] + ryy / rd * step * i2;
+            const l = sqLaneAt(px, py);
+            if (l && l.inside) { exp++; if (first < 0) first = i2; last = i2; SL[i2] = [px, py, l]; } else SL[i2] = null;
+          }
+          if (first < 0) { NR.midNext = runTime + 0.75; continue; }
+          let refused = true;
+          if (exp >= 2) {
+            const cnt = (ax, ay, bx, by) => { let k2 = 0;
+              for (let i3 = 1; i3 < 10; i3++) { const l = sqLaneAt(ax + (bx - ax) * i3 / 10, ay + (by - ay) * i3 / 10); if (l && l.inside) k2++; } return k2; };
+            const w1 = sqCurbSide(SL[first][0], SL[first][1], SL[first][2], mX[m], mY[m]);
+            const w2 = sqCurbSide(SL[last][0], SL[last][1], SL[last][2], mX[m], mY[m]);
+            if (w1 && w2) {
+              const len = Math.hypot(w1[0] - mX[m], w1[1] - mY[m]) + Math.hypot(w2[0] - w1[0], w2[1] - w1[1]) + Math.hypot(player.x - w2[0], player.y - w2[1]);
+              const via = cnt(mX[m], mY[m], w1[0], w1[1]) + cnt(w1[0], w1[1], w2[0], w2[1]) + cnt(w2[0], w2[1], player.x, player.y);
+              if (via <= exp * 0.65 && len <= rd * 1.45) {   // a >=35% exposure cut is the win worth walking 45% further for; below that, straight is better
+                const nearFirst = Math.hypot(w1[0] - mX[m], w1[1] - mY[m]) <= Math.hypot(w2[0] - mX[m], w2[1] - mY[m]);
+                NR.mid = { a: nearFirst ? w1 : w2, b: nearFirst ? w2 : w1, hop: nearFirst ? 2 : 1, px: player.x, py: player.y, born: runTime };
+                sqSideProbe("routes"); refused = false;
+                const SP = typeof window !== "undefined" ? window.SQSIDE : null;
+                if (SP) SP.worstLen = Math.max(SP.worstLen || 0, len / rd);
+              }
+            }
+            if (refused) { NR.midNext = runTime + 1.0; sqSideProbe("refused"); }
+          }
+        }
+        if (alley) { S.compress = 1; S.reformT = 0; }
+        else if (S.compress) { S.reformT = allWedgeOK ? S.reformT + 0.25 : 0; if (S.reformT >= 2) { S.compress = 0; S.reformT = 0; } }
+      }
+    } else { S.compress = 0; S.reformT = 0; }
+  }
   let alive = 0, soldiers = 0, coGunner = -1;
   if (player.inVehicle > 0 && !(typeof CITY !== "undefined" && CITY.on)) {   // v14.1: in Nexus City riders take real seats (js/convoy.js)
     for (let m = 0; m < MAX_MINION; m++) if (mAct[m] && mKind[m] >= 5 && mKind[m] <= 7) { coGunner = m; break; }
@@ -288,11 +554,17 @@ function squadMinionsSim(simDt) {
       const rx = player.x + aimX * 230, ry = player.y + aimY * 230;
       hx = rx + Math.cos(formAng) * 40; hy = ry + Math.sin(formAng) * 40; engageR = 430; leashR = 1e9;
     } else if (S.order === 0 && soldier && mTeam[m]) {
-      // Compact wedge behind the leader. Different slots remain separate as the team turns.
-      const slot = mSlot[m] % 8, row = Math.floor(slot / 2) + 1, side = slot % 2 ? 1 : -1;
-      const forward = -40 - (row - 1) * 45, lateral = side * (38 + (row - 1) * 22);
-      const c = Math.cos(S.formHeading), s = Math.sin(S.formHeading);
-      hx = player.x + c * forward - s * lateral; hy = player.y + s * forward + c * lateral;
+      // Compact wedge behind the leader; the 15.4.2 formation audit may have already
+      // resolved this member to a file rank or a curb-shifted slot for the current
+      // 0.25 s window — that resolved target wins. Different slots remain separate.
+      const N2 = squadNav[m];
+      if (N2.slotOK) { hx = N2.slotX; hy = N2.slotY; }
+      else {
+        const slot = mSlot[m] % 8, row = Math.floor(slot / 2) + 1, side = slot % 2 ? 1 : -1;
+        const forward = -40 - (row - 1) * 45, lateral = side * (38 + (row - 1) * 22);
+        const c = Math.cos(S.formHeading), s = Math.sin(S.formHeading);
+        hx = player.x + c * forward - s * lateral; hy = player.y + s * forward + c * lateral;
+      }
       engageR = 360; leashR = 270;
     } else { hx = player.x + Math.cos(formAng) * 44; hy = player.y + Math.sin(formAng) * 44; engageR = 360; leashR = 270; }
     const holdP = typeof convoyHoldPoint === "function" ? convoyHoldPoint(m) : null;   // v14.1: no seat left - hold the spot
@@ -328,13 +600,13 @@ function squadMinionsSim(simDt) {
           if (homeD > 60) { mvx = (hx - mX[m]) / homeD; mvy = (hy - mY[m]) / homeD; }
           else if (d > sp.max) { mvx = 0; mvy = 0; }
         }
-        if (d > sp.max && S.order !== 1) squadMoveTo(m, eX[bestE], eY[bestE], simDt, 1, sp.max);
+        if (d > sp.max && S.order !== 1) squadMoveTo(m, eX[bestE], eY[bestE], simDt, 1, sp.max, 1);
         else squadMove(m, mvx, mvy, simDt, 1);
         if (d <= sp.max * 1.15) {
           const fired = squadFireSoldier(m, kind, mAim[m], simDt, 1);
           if (fired === false) {
             const flank = squadFindSafeFlank(m, eX[bestE], eY[bestE], sp, homeD, S.order);
-            if (flank) squadMoveTo(m, flank[0], flank[1], simDt, .6, 5);
+            if (flank) squadMoveTo(m, flank[0], flank[1], simDt, .6, 5, 1);
           }
         }
       } else {
@@ -351,7 +623,7 @@ function squadMinionsSim(simDt) {
       const dx = eX[bestE] - mX[m], dy = eY[bestE] - mY[m], d = Math.hypot(dx, dy) || 1, ang = Math.atan2(dy, dx);
       mAim[m] = ang;
       if (kind === 2) {
-        if (d > 135 && !(S.order === 1 && homeD > 60)) squadMoveTo(m, eX[bestE], eY[bestE], simDt, 1, 135);
+        if (d > 135 && !(S.order === 1 && homeD > 60)) squadMoveTo(m, eX[bestE], eY[bestE], simDt, 1, 135, 1);
         else if (d < 75) squadMove(m, -dx / d, -dy / d, simDt, 0.65);
         else if (S.order === 1 && homeD > 60) squadMoveTo(m, hx, hy, simDt, 1, 8);
         if (mAtkCD[m] <= 0 && d < 300) {
@@ -362,7 +634,7 @@ function squadMinionsSim(simDt) {
           } else {
             squadHoldFire(m);
             const flank = squadFindSafeFlank(m, eX[bestE], eY[bestE], { max: 211, spd: 380, spread: 0 }, homeD, S.order);
-            if (flank) squadMoveTo(m, flank[0], flank[1], simDt, .6, 5);
+            if (flank) squadMoveTo(m, flank[0], flank[1], simDt, .6, 5, 1);
           }
         }
       } else {
@@ -370,7 +642,7 @@ function squadMinionsSim(simDt) {
         const reach = mRad[m] + eRad + 6;
         const mayChase = S.order !== 1 || Math.hypot(eX[bestE] - S.ax, eY[bestE] - S.ay) < leashR + 40;
         if (d > reach * 0.85) {
-          if (mayChase) squadMoveTo(m, eX[bestE], eY[bestE], simDt, 1, reach * 0.85);
+          if (mayChase) squadMoveTo(m, eX[bestE], eY[bestE], simDt, 1, reach * 0.85, 1);
           else squadMoveTo(m, hx, hy, simDt, 1, 8);
         }
         if (d <= reach && mAtkCD[m] <= 0) {

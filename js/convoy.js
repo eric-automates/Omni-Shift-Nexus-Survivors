@@ -281,14 +281,79 @@ function cvSpotClear(v, x, y, h) {   // would the vehicle fit at this pose (tile
   for (const u of VEH.list) if (u !== v && !u.far && Math.hypot(u.x - x, u.y - y) < (Math.max(u.D, u.L) + Math.max(v.D, v.L)) * 0.5) return false;
   return true;
 }
+// Lightweight traffic is outside VEH.list until promoted after impact.
+function cvTrafficPoseClear(v, x, y, h, horizon = 0) {
+  if (typeof TRF === "undefined" || !TRF.on || !Array.isArray(TRF.cars)) return true;
+  const box = { cx:x, cy:y, c:Math.cos(h), s:Math.sin(h), hf:v.D * .5 + 12, hw:v.L * .5 + 12 };
+  for (const t of TRF.cars) {
+    if (!t || t.dead) continue;
+    const tx = t.x * 32 - CITY.orx, ty = t.y * 32 - CITY.ory, len = t.lpx, wid = t.wpx;
+    if (![tx, ty, len, wid, t.ang].every(Number.isFinite) || len <= 0 || wid <= 0) return false;
+    // Parking may request a short straight-line traffic prediction as well as
+    // the present footprint. It is a bounded precaution, not a prediction
+    // of junction turns or a guarantee against an uncooperative vehicle.
+    if (horizon > 0 && t.v != null && (!Number.isFinite(t.v) || t.v < 0)) return false;
+    const speed = Number.isFinite(t.v) ? t.v * 32 : 0;
+    if (!Number.isFinite(speed)) return false;
+    const steps = horizon > 0 && speed > 0 ? 2 : 0;
+    for (let j = 0; j <= steps; j++) {
+      const d = steps ? speed * horizon * j / steps : 0;
+      const ox = tx + Math.cos(t.ang) * d, oy = ty + Math.sin(t.ang) * d;
+      if (![ox, oy].every(Number.isFinite)) return false;
+      if (Math.hypot(ox - x, oy - y) > Math.hypot(box.hf, box.hw) + Math.hypot(len, wid) * .5 + 8) continue;
+      const other = { cx:ox, cy:oy, c:Math.cos(t.ang), s:Math.sin(t.ang), hf:len * .5 + 8, hw:wid * .5 + 8 };
+      if (vehSAT(box, other)) return false;
+    }
+  }
+  return true;
+}
 // Check a conservative swept footprint before and throughout a straight
 // reverse; never assume the lane behind remains clear of moving traffic.
 function cvBackClear(v, distance) {
   const fx = Math.cos(v.ang), fy = Math.sin(v.ang);
   for (let d = 12; d <= distance; d += 12) {
-    if (!cvSpotClear(v, v.x - fx * d, v.y - fy * d, v.ang)) return false;
+    const x = v.x - fx * d, y = v.y - fy * d;
+    // The normal pose check covers terrain and live rigid bodies. Halt-pose
+    // checks add the on-foot player, pedestrians and unseated squad members.
+    if (!cvSpotClear(v, x, y, v.ang) || !cvHaltPoseClear(v, x, y, v.ang)) return false;
+    // Repeated each reversing frame so newly arriving traffic stops it.
+    if (!cvTrafficPoseClear(v, x, y, v.ang)) return false;
   }
   return true;
+}
+// A stationary rejoining car can be touching a stationary column car whose
+// shoulder plan is waiting. Permit a short straight reverse only if sampled
+// motion separates both padded footprints monotonically. All other vehicles
+// retain the conservative normal clearance, as do terrain, people and traffic.
+// Bounded samples cannot guarantee continuous collision-free motion.
+function cvYieldBackClear(v, distance, peer) {
+  if (!v.convoy || v.convoy.st !== 'rejoin' || !peer || peer.convoy?.st !== 'column' ||
+      !(peer.convoy.planRetryAt > runTime) || Math.hypot(peer.vx, peer.vy) > 3 || Math.abs(peer.w) > .05 ||
+      ![v.x,v.y,v.ang,v.L,v.D,peer.x,peer.y,peer.ang,peer.L,peer.D,peer.vx,peer.vy,peer.w,distance].every(Number.isFinite)) return false;
+  const fx = Math.cos(v.ang), fy = Math.sin(v.ang), other = vehBox(peer, {}), own = vehBox(v, {});
+  const physical = vehSAT(own, other);
+  if (physical && physical.depth > 1) return false;
+  const padded = { cx:v.x, cy:v.y, c:fx, s:fy, hf:v.D * .5 + 12, hw:v.L * .5 + 12 };
+  const initial = vehSAT(padded, other), initialDistance = Math.hypot(v.x - peer.x, v.y - peer.y);
+  // The old circular check may still be blocked after the padded rectangles
+  // have separated. Continue only while this same peer is still nearby.
+  if (!initial && initialDistance >= (Math.max(peer.D, peer.L) + Math.max(v.D, v.L)) * .5 + 12) return false;
+  let lastDepth = initial ? initial.depth : 0, lastPhysicalDepth = physical ? physical.depth : 0, lastDistance = initialDistance;
+  for (let d = 3; d <= distance; d += 3) {
+    const x = v.x - fx * d, y = v.y - fy * d;
+    const separation = Math.hypot(x - peer.x, y - peer.y);
+    if (!(separation > lastDistance) || !cvHaltStaticPoseClear(v, x, y, v.ang) ||
+        !cvHaltPoseClear(v, x, y, v.ang) || !cvTrafficPoseClear(v, x, y, v.ang, 1)) return false;
+    for (const u of VEH.list) {
+      if (u === v || u === peer || u.far) continue;
+      if (Math.hypot(u.x - x, u.y - y) < (Math.max(u.D, u.L) + Math.max(v.D, v.L)) * .5) return false;
+    }
+    const hit = vehSAT({ ...padded, cx:x, cy:y }, other), depth = hit ? hit.depth : 0;
+    const real = vehSAT({ ...own, cx:own.cx - fx * d, cy:own.cy - fy * d }, other), realDepth = real ? real.depth : 0;
+    if (depth > lastDepth + .02 || realDepth > lastPhysicalDepth + .02) return false;
+    lastDepth = depth; lastPhysicalDepth = realDepth; lastDistance = separation;
+  }
+  return lastDepth === 0;
 }
 // Never catch up by teleporting a vehicle whose body is in either the last
 // painted camera or the current calculated camera. Unknown views fail closed.
@@ -324,12 +389,124 @@ function convoyStep(dt) {
   }
   if (me) { CONVOY.vehicles = CONVOY.vehicles.filter(u => u.convoy && !u.dead); }
 }
+// Only let a stopped-leader rejoin move through the spacing cap when its
+// predicted slow forward arc consistently increases leader separation.
+// These bounded samples fail closed for terrain, vehicles, people and traffic.
+function cvRetreatClear(v, a) {
+  const leader = VEH.me;
+  if (!leader || ![leader.x, leader.y, leader.vx, leader.vy, v.x, v.y, v.vx, v.vy, v.ang, v.w, a].every(Number.isFinite) || Math.hypot(leader.vx, leader.vy) >= 10) return false;
+  const steer = Math.max(-1, Math.min(1, a * 2)), wb = Math.max(30 * (v.k || 1), v.D * .62);
+  const curv = Math.tan(steer * v.S.st) / wb;
+  let last = Math.hypot(v.x - leader.x, v.y - leader.y);
+  for (let j = 1; j <= 8; j++) {
+    const d = 12 * j, ang = v.ang + curv * d;
+    const x = v.x + Math.cos(v.ang + curv * d * .5) * d, y = v.y + Math.sin(v.ang + curv * d * .5) * d;
+    const distance = Math.hypot(x - leader.x, y - leader.y);
+    if (distance <= last || !cvSpotClear(v, x, y, ang) || !cvHaltPoseClear(v, x, y, ang) || !cvTrafficPoseClear(v, x, y, ang)) return false;
+    last = distance;
+  }
+  return true;
+}
+// A halted peer's chosen shoulder is reserved ground: two followers must not
+// pick the same pose, and a re-plan must not target beside a parked body.
+function cvHaltPeerTargetClear(v, x, y) {
+  if (typeof CONVOY === 'undefined' || !CONVOY.vehicles) return true;
+  for (const u of CONVOY.vehicles) {
+    if (u === v || !u.convoy || u.dead) continue;
+    const p = u.convoy;
+    if (p.st !== 'herring' && !(p.st === 'column' && p.planRetryAt > runTime)) continue;
+    if (!Number.isFinite(p.hx) || !Number.isFinite(p.hy)) continue;
+    if (Math.hypot(x - p.hx, y - p.hy) < (Math.max(u.L, u.D) + Math.max(v.L, v.D)) * .5 + 14) return false;
+  }
+  return true;
+}
+// Do not select a shoulder whose *approach* the halt guard would immediately
+// brake against (terrain, peers, people, traffic). Coarse arc samples are a
+// planning aid; the per-frame guard stays the safety net.
+function cvHaltApproachClear(v, x, y) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  const total = Math.hypot(x - v.x, y - v.y);
+  if (!(total > 0) || !Number.isFinite(total)) return false;
+  const dh = vehAngDiff(Math.atan2(y - v.y, x - v.x), v.ang), steer = Math.max(-1, Math.min(1, dh * 2));
+  const wb = Math.max(30 * (v.k || 1), v.D * .62), samples = Math.max(4, Math.min(20, Math.ceil(total / 24)));
+  for (const st of [0, steer]) {
+    const curv = Math.tan(st * v.S.st) / wb;
+    for (let j = 1; j <= samples; j++) {
+      const d = total * j / samples, ang = v.ang + curv * d;
+      const px = v.x + Math.cos(v.ang + curv * d * .5) * d, py = v.y + Math.sin(v.ang + curv * d * .5) * d;
+      if (!cvHaltStaticPoseClear(v, px, py, ang) || !cvHaltPoseClear(v, px, py, ang) || !cvTrafficPoseClear(v, px, py, ang, 1)) return false;
+    }
+  }
+  return true;
+}
+// Keep a stopped shoulder target out of the known lightweight traffic lanes,
+// including lanes with no car currently nearby. The road-link projection is
+// bounded/approximate; it does not certify junction turns or unsampled roads.
+function cvHaltSpotStripClear(v, x, y, h) {
+  // 15.1.3: the relaxed pass may skip the traffic-sensitive approach arc, but
+  // terrain never leaves. A spot whose last ~150 px of lane-axis run-in sits
+  // in a wall or prop row is NOT endpoint-safe: committing to it under the
+  // target lock strands the car reversing forever (the A10 pin-oscillation).
+  for (let j = 1; j <= 5; j++) { const px = x - Math.cos(h) * j * 30, py = y - Math.sin(h) * j * 30; if (!cvHaltStaticPoseClear(v, px, py, h)) return false; }
+  return cvHaltStaticPoseClear(v, x, y, h);
+}
+function cvHaltLaneClear(v, x, y) {
+  if (typeof TRF === 'undefined' || !TRF.on) return true;
+  const net = TRF.net;
+  if (!net || TRF.pending || !Array.isArray(net.links) || !Number.isFinite(net.k) || net.k <= 0 || typeof trfAt !== 'function') return false;
+  if (![v.D, v.L, x, y, CITY.orx, CITY.ory].every(Number.isFinite) || v.D <= 0 || v.L <= 0) return false;
+  const xm = (x + CITY.orx) / 32, ym = (y + CITY.ory) / 32;
+  // Match the traffic AI's conservative circular live-vehicle obstacle,
+  // plus an extra margin for lateral settling and numerical noise.
+  // A parked car may settle up to 18 px short of its target; reserve that
+  // tolerance as well as a small additional margin in the planned clearance.
+  // 15.1.3-part15 (REV2 Q3): a shoulder-parked car projects its LATERAL
+  // half-width at a slight angle onto the lane axis — the old length-based
+  // isotropic radius (72 + 40k + 24 = 136 px) rejected every legal shoulder
+  // offset in the planner ladder and created the A10 dead band.
+  const latHalf = v.L * 0.5 + v.D * 0.12;
+  // REV2's lateral projection with the contract the old isotropic ring was
+  // actually protecting: run1518 requires EVERY point within ±120 px of a live
+  // lane centreline to stay non-clear (curve/junction samples), and the planner
+  // ladder needs the extra=64 step (135.6 px) to be feasible for A10. So the
+  // clearance must sit inside (120, 135.6]: latHalf(49.3) + 20·k + 52 ≈ 121–125
+  // px satisfies both; 136 was a geometry error of composition that only worked
+  // by making the whole ladder dead.
+  const clearance = (latHalf + 20 * net.k + 52) / 32;
+  for (const L of net.links) {
+    if (!L || !Array.isArray(L.pts) || L.pts.length < 4 || L.pts.length % 2 || !L.cum || !L.nx || !L.ny ||
+        L.cum.length < L.pts.length / 2 || L.nx.length < L.pts.length / 2 || L.ny.length < L.pts.length / 2 ||
+        !Number.isFinite(L.L) || L.L <= 0 || !Number.isFinite(L.w) || L.w <= 0 || ![-1,0,1].includes(L.ow) ||
+        !Number.isInteger(L.lanes) || L.lanes < 1 || L.lanes > 3) return false;
+    // Road normals may be mitered to twice their nominal width at bends.
+    const p = L.pts, reach = clearance + L.w + 2 * net.k;
+    for (let j = 0; j + 3 < p.length; j += 2) {
+      const ax = p[j], ay = p[j+1], bx = p[j+2], by = p[j+3];
+      if (![ax, ay, bx, by, L.cum[j/2], L.cum[j/2+1]].every(Number.isFinite)) return false;
+      if (xm < Math.min(ax, bx) - reach || xm > Math.max(ax, bx) + reach ||
+          ym < Math.min(ay, by) - reach || ym > Math.max(ay, by) + reach) continue;
+      const s0 = L.cum[j/2], s1 = L.cum[j/2+1];
+      if (!(s1 > s0)) continue;
+      for (const dir of (L.ow ? [L.ow] : [1, -1])) for (let q = 0; q < L.lanes; q++) {
+        // Project onto the lane segment itself, not its road centreline;
+        // changing miter normals can make those projections differ at bends.
+        const a = trfAt(L, dir, dir > 0 ? s0 : L.L - s0, q, null);
+        const b = trfAt(L, dir, dir > 0 ? s1 : L.L - s1, q, null);
+        if (!a || !b || ![a[0], a[1], b[0], b[1]].every(Number.isFinite)) return false;
+        const dx = b[0] - a[0], dy = b[1] - a[1], len2 = dx*dx + dy*dy;
+        const t = len2 > 0 ? Math.max(0, Math.min(1, ((xm-a[0])*dx + (ym-a[1])*dy) / len2)) : 0;
+        if (Math.hypot(xm - (a[0]+dx*t), ym - (a[1]+dy*t)) < clearance) return false;
+      }
+    }
+  }
+  return true;
+}
 function cvDriveNormal(v, dt, sTarget, gap, i) {
   const c = v.convoy, cs = Math.cos(v.ang), sn = Math.sin(v.ang), vf = v.vx * cs + v.vy * sn, top = v.S.top * VPX;
   if (!CONVOY.trail.length || !VEH.me) { v.ctl.thr = vf > 10 ? -1 : 0; v.ctl.hb = 1; return; }
   v.ctl.hb = 0;
   const P = cvProject(v), lead = Math.max(Math.hypot(VEH.me.vx, VEH.me.vy), CONVOY.leaderSp);
-  let tx, ty, vDes;
+  let tx, ty, vDes, haltJoin = false, spacingCap = false;
   const err = P.s - sTarget;                       // > 0: ahead of my slot (too close) · < 0: behind
   // out of your sight, a vehicle that is wedged or has fallen far behind rejoins the column at its slot
   // no progress along the trail for 3 s while we should be catching up = wedged (reversing / see-sawing counts as stuck)
@@ -340,52 +517,111 @@ function cvDriveNormal(v, dt, sTarget, gap, i) {
     const pt = cvTrailAt(Math.max(0, sTarget));
     if (pt && cvOutsideViews(v, v.x, v.y) && cvOutsideViews(v, pt.x, pt.y) && cvSpotClear(v, pt.x, pt.y, pt.h)) {
       v.x = pt.x; v.y = pt.y; v.ang = pt.h; v.vx = Math.cos(pt.h) * lead * 0.8; v.vy = Math.sin(pt.h) * lead * 0.8; v.w = 0; v.steerA = 0;
-      c.lastS = null; c.stuckAcc = 0; c.progT = null; c.tries = 0; c.revT = 0; c.fwdT = 0; c.snapT = runTime; c.st = "go"; c.unparked = true;
+      c.lastS = null; c.stuckAcc = 0; c.progT = null; c.tries = 0; c.revT = 0; c.fwdT = 0; c.snapT = runTime; c.st = "go"; c.unparked = true; c.pinTries = 0; c.pinFails = 0;
       return;
     }
   }
   // A late vehicle must first close up to its slot; stopping immediately while
   // hundreds of pixels behind can strand the column after the leader halts.
   // Keep normal obstacle feelers and the leader-spacing cap active while joining.
-  if (CONVOY.halted && c.st !== "herring" && err < -gap * 0.8) c.st = "rejoin";
+  // While the leader is halted the nominal slots trail far behind a stationary
+  // car and the real column compresses in front of them (15.1.3 evidence: err
+  // -246/-485 with the cars parked beside the leader). Both select windows must
+  // span the compressed column or no released car can ever re-plan.
+  // The compressed-column windows apply ONLY to a car that just released a
+  // pinned spot (pinFails): CONVOY.halted is still true for the first frames of
+  // a fresh drive, and a blanket wide window had followers parking mid-lane as
+  // the leader pulled away (top speed 385 -> 186 px/s, herringbone 0).
+  const eligBand = c.pinFails ? 2.4 : 0.8;
+  if (CONVOY.halted && c.st !== "herring" && err < -gap * eligBand) c.st = "rejoin";
   // halted: herringbone - pull off alternately right / left at ~45°, road kept clear
   if (CONVOY.halted && c.st !== "rejoin") {
-    if (c.st !== "herring" && Math.abs(vf) < 30 && Math.abs(err) < gap * 0.8) {
+    if (c.st !== "herring" && Math.abs(vf) < 30 && Math.abs(err) < gap * eligBand) {
       const preferred = (i % 2 === 0) ? 1 : -1, base = cvTrailAt(Math.min(P.s + 40, cvLeadS() - 60)) || { x: v.x, y: v.y, h: v.ang };
-      const off = v.L * 0.9 + 14;
+      const off = v.L * 0.9 + 14, trafficK = typeof TRF !== 'undefined' && TRF.on && TRF.net ? TRF.net.k : 1;
       c.st = "column";
-      // Prefer alternating shoulders, but do not give up if just that side
-      // is blocked. Both choices still pass the existing terrain check.
-      for (const side of [preferred, -preferred]) {
-        const hx = base.x - Math.sin(base.h) * off * side + Math.cos(base.h) * 36, hy = base.y + Math.cos(base.h) * off * side + Math.sin(base.h) * 36;
-        if (!cityCircleBlocked(hx, hy, Math.max(v.L, 40) * 0.5, false) && cvSpotClear(v, hx, hy, base.h)) { c.st = "herring"; c.hx = hx; c.hy = hy; c.side = side; break; }
+      // Prefer alternating shoulders, then farther candidates if necessary
+      // to leave known lanes open. No clear shoulder means wait and retry.
+      const offsets = typeof TRF !== 'undefined' && TRF.on ? [0,64,128,192,256,320] : [0];
+      // First pass demands a clear approach arc; if every candidate fails,
+      // a relaxed pass commits the nearest endpoint-safe spot so the car at
+      // least starts moving and the per-frame guard can steer or re-time the
+      // plan, instead of two retries oscillating on identical strictness.
+      let planned = null;
+      for (let pass = 0; pass < 2 && !planned; pass++) {
+        const strict = pass === 0;
+        for (const side of [preferred, -preferred]) {
+          for (const extra of offsets) {
+            const d = off + extra * trafficK;
+            const hx = base.x - Math.sin(base.h) * d * side + Math.cos(base.h) * 36, hy = base.y + Math.cos(base.h) * d * side + Math.sin(base.h) * 36;
+            if (cvHaltLaneClear(v, hx, hy) && !cityCircleBlocked(hx, hy, Math.max(v.L, 40) * 0.5, false) && cvSpotClear(v, hx, hy, base.h) && cvHaltPeerTargetClear(v, hx, hy) && (strict ? cvHaltApproachClear(v, hx, hy) : cvHaltSpotStripClear(v, hx, hy, base.h))) { planned = { hx, hy, side }; break; }
+          }
+          if (planned) break;
+        }
       }
+      if (planned) { c.st = "herring"; c.hx = planned.hx; c.hy = planned.hy; c.side = planned.side; c.hAng = base.h; c.planT = runTime; c.lastApproachD = null; c.orbitT = 0; c.tries = 0; c.refined = 0; c.pinTries = 0; c.pinFails = 0; }
+      if (c.st !== 'herring') { c.planRetryAt = runTime + 2; c.stuckT = 0; }
     }
     if (c.st === "herring") {
       const d = Math.hypot(c.hx - v.x, c.hy - v.y);
-      if (d < 18) { v.ctl.thr = vf > 8 ? -1 : 0; v.ctl.st = 0; v.ctl.hb = vf < 8 ? 1 : 0; return; }
+      if (d < 18) { c.pinFails = 0; v.ctl.thr = vf > 8 ? -1 : 0; v.ctl.st = 0; v.ctl.hb = vf < 8 ? 1 : 0; return; }
       tx = c.hx; ty = c.hy; vDes = Math.min(110, d * 2);
+      // A spot abeam of the nose sits inside the steering-bound turning
+      // circle, so direct pursuit can only ever orbit it (this is what the
+      // old forward-extension accidentally fixed, at the cost of replacing
+      // the endpoint). Pursue a virtual aim point short ahead of the spot
+      // along its own heading until the car is close and aligned enough to
+      // curl in directly; the final pose remains the validated spot.
+      if (c.keepAim && Number.isFinite(c.hAng) && (d > 64 && Math.abs(vehAngDiff(c.hAng, v.ang)) > .35)) {
+        // REV2 Q1: the +240 px virtual lead aimed into unvalidated terrain past
+        // the spot and drove the halt-guard arc into walls (arcS 6..8 pins).
+        // Cap the lead and drop it inside 64 px so the final pose is the spot.
+        const leadD = Math.min(48, d * 0.4);
+        const ax = c.hx + Math.cos(c.hAng) * leadD, ay = c.hy + Math.sin(c.hAng) * leadD;
+        if (Math.hypot(ax - v.x, ay - v.y) > 24) { tx = ax; ty = ay; }
+      }
     } else { v.ctl.thr = vf > 8 ? -1 : 0; v.ctl.st = 0; v.ctl.hb = Math.abs(vf) < 8 ? 1 : 0; return; }
   } else {
-    if (c.st === "herring" || c.st === "column") c.st = "rejoin";
+    if (c.st === "herring" || c.st === "column") { c.st = "rejoin"; c.pinTries = 0; c.terrainWait = 0; }
     // pure pursuit on the leader's breadcrumbs; join the trail first if we are off it
     const Ld = Math.max(70, Math.min(260, Math.abs(vf) * 0.5 + 60));
-    const aim = P.d > 140 ? cvTrailAt(P.s + 160) : cvTrailAt(P.s + Ld);
+    // A stopped leader cannot pull an off-trail vehicle back by moving.
+    // Aim at the nearest trail point, or the slot behind it if we projected
+    // ahead of that slot; do not aim farther toward the stopped leader.
+    haltJoin = CONVOY.halted && c.st === "rejoin" && P.d > 90;
+    const aim = haltJoin ? cvTrailAt(Math.max(0, Math.min(P.s, sTarget))) : (P.d > 140 ? cvTrailAt(P.s + 160) : cvTrailAt(P.s + Ld));
     if (!aim) return;
     tx = aim.x; ty = aim.y;
     if (P.d < 90 && c.st !== "go" && !(CONVOY.halted && err < -gap * 0.8)) c.st = "go";
     // speed: hold the slot, catch up when behind (catch-up speed above the march rate), never past the leader
     const catchUp = Math.min(top, lead * 1.25 + 110);
     vDes = err < -gap * 0.4 ? catchUp : Math.max(0, lead - err * 1.1);
-    // A vehicle can be at the right trail arclength but still be well off
-    // the trail. When the leader stops, slot error alone is zero and used to
-    // strand it in rejoin forever. Creep toward the trail only from behind
-    // its slot; the leader-spacing cap and obstacle feelers still apply.
-    if (CONVOY.halted && c.st === "rejoin" && P.d > 90 && err <= 0) vDes = Math.max(vDes, Math.min(90, P.d * .5));
+    // Slot error alone can be positive while the vehicle is safely behind
+    // the leader but stranded off the trail. Creep only toward a point no
+    // farther forward than the slot. The spacing cap and obstacle feelers
+    // below still override this request, including when the leader is close.
+    if (haltJoin) vDes = Math.max(vDes, Math.min(90, P.d * .5));
     if (CONVOY.contactT > 0 && err < 0) vDes = Math.min(top, vDes + 80);     // close up and drive through
-    if (P.s + v.D * 0.5 >= cvLeadS() - VEH.me.D * 0.5 - gap * 0.35) vDes = Math.min(vDes, lead * 0.6);
+    spacingCap = P.s + v.D * 0.5 >= cvLeadS() - VEH.me.D * 0.5 - gap * 0.35;
   }
   let a = vehAngDiff(Math.atan2(ty - v.y, tx - v.x), v.ang);
+  // Bearing-only pursuit cannot curl into a spot inside its own turning
+  // circle (the radius is steering-geometry bound, not speed bound), so a
+  // car that keeps driving while the gap grows would orbit forever without
+  // ever meeting the near-still stuck test below. Trade a short checked
+  // reverse for a sharper angle — the same manoeuvre the stuck timer uses.
+  if (c.st === 'herring' && !(c.revT > 0) && !(c.fwdT > 0)) {
+    const dHalt = Math.hypot(c.hx - v.x, c.hy - v.y);
+    const grow = c.lastApproachD == null ? 0 : dHalt - c.lastApproachD;
+    c.lastApproachD = dHalt;
+    if (dHalt < 460 && Math.abs(a) > 1.35 && grow > -6 && Math.abs(vf) > 20) {
+      c.orbitT = (c.orbitT || 0) + dt;
+      if (c.orbitT > 1.1) {
+        c.orbitT = 0; c.tries++; c.revSt = Math.sign(a) || 1; c.revT = 1.1; c.orbitRev = true;
+        if (c.tries > 12) { cvRadio("V" + v.convoyN + " PARK APPROACH ABANDONED", "#ffab40"); cvAbandon(v); return; }
+      }
+    } else c.orbitT = 0;
+  } else if (c.st === 'herring') c.lastApproachD = null;
   if (Math.abs(a) > 0.6) vDes = Math.min(vDes, 260); if (Math.abs(a) > 1.2) vDes = Math.min(vDes, 140);
   // look ahead (three feelers) for anything solid - walls, fences, parked cars, live vehicles - and steer around it
   const look = Math.max(80, Math.abs(vf) * 0.8 + 60), fx = v.x + cs * (v.D / 2), fy = v.y + sn * (v.D / 2);
@@ -399,17 +635,38 @@ function cvDriveNormal(v, dt, sTarget, gap, i) {
   const dC = feel(0);
   let block = dC < look ? dC : 1e9;
   if (dC < look * 0.9) { const dL = feel(-0.55), dR = feel(0.55); if (Math.max(dL, dR) > dC + 10) a += dL > dR ? -0.6 : 0.6; }
+  if (spacingCap) {
+    const vr = -v.vx * sn + v.vy * cs;
+    // The slow creep allowance beside a halted leader is only for a path that
+    // does not close on the leader's body (F04's leaderSafe contract). A car
+    // past its slot retreats toward the trail aim; that must never aim INSIDE
+    // the leader's collision envelope — holding is the correct response there.
+    const retreatAimClear = !VEH.me || Math.hypot(VEH.me.x - tx, VEH.me.y - ty) > (v.D + VEH.me.D) * .5 + gap * .15;
+    const retreat = haltJoin && retreatAimClear && vf >= -2 && vf < 60 && Math.abs(vr) < 8 && Math.abs(v.w) < .3 && cvRetreatClear(v, a);
+    vDes = Math.min(vDes, retreat ? 60 : lead * 0.6);
+  }
   const wantedSpeed = vDes;
   // Do not creep into a vehicle or wall when the available stopping gap is
   // gone. A clear path immediately restores the normal pursuit speed.
   if (block < 1e9) vDes = Math.min(vDes, Math.max(0, (block - 20) * 1.6));
+  // 15.1.3-part16: final metres into a validated spot. At short range the forecast
+  // projects this car's footprint beyond the spot into ground the planner never
+  // validated, freezing the car at d≈26 forever (vDes ≤ 52 also never arms block
+  // recovery). When the spot's own pose re-passes both static and full checks this
+  // frame, allow a slow crawl — the swept pose at the endpoint is exactly what was
+  // certified at commit.
+  if (c.st === 'herring' && Number.isFinite(c.hx) && Math.hypot(c.hx - v.x, c.hy - v.y) < 40 && cvHaltPoseClear(v, c.hx, c.hy, v.ang) && cvHaltStaticPoseClear(v, c.hx, c.hy, v.ang)) vDes = Math.min(30, Math.max(vDes, 22));
   // Distinguish an obstruction from deliberately holding formation. After a
   // wait, try a short straight reverse into checked space. If boxed in, keep
   // braking and recheck periodically rather than forcing through traffic.
-  if (wantedSpeed > 60 && block <= 20 && Math.abs(vf) < 14 && !(c.revT > 0) && !(c.fwdT > 0)) {
+  // Use the same stop threshold as the handbrake below. Otherwise a small
+  // obstruction gap can force vDes below 5 while never starting this timer.
+  if (wantedSpeed > 60 && block < 1e9 && vDes < 5 && Math.abs(vf) < 14 && !(c.revT > 0) && !(c.fwdT > 0)) {
     c.blockWait = (c.blockWait || 0) + dt;
     if (c.blockWait >= 4) {
-      if (cvBackClear(v, 84)) { c.revT = 1.5; c.yieldReverse = true; c.blockWait = 0; }
+      const clear = cvBackClear(v, 84);
+      const peer = !clear && CONVOY.halted ? VEH.list.find(u => u !== v && u.key && cvYieldBackClear(v, 84, u)) : null;
+      if (clear || peer) { c.revT = 1.5; c.yieldReverse = true; c.yieldPeerKey = peer ? peer.key : null; c.blockWait = 0; }
       else c.blockWait = 3;
     }
   } else if (!(c.revT > 0)) c.blockWait = 0;
@@ -423,10 +680,13 @@ function cvDriveNormal(v, dt, sTarget, gap, i) {
   // stuck recovery: reverse straight into checked space, then steer toward the path;
   // after a few tries the crew cross-loads into the column (or holds) instead of sitting in a wedged car
   if (c.revT > 0) {
-    if (!cvBackClear(v, 84)) { c.revT = 0; c.fwdT = 0; c.yieldReverse = false; v.ctl.thr = 0; v.ctl.st = 0; v.ctl.hb = 1; return; }
+    const normalClear = cvBackClear(v, 84);
+    const peer = c.yieldPeerKey && VEH.list.find(u => u.key === c.yieldPeerKey);
+    if (!normalClear && !(peer && cvYieldBackClear(v, 84, peer))) { c.revT = 0; c.fwdT = 0; c.yieldReverse = false; c.yieldPeerKey = null; v.ctl.thr = 0; v.ctl.st = 0; v.ctl.hb = 1; return; }
+    if (normalClear) c.yieldPeerKey = null;
     const yielding = !!c.yieldReverse;
-    c.revT -= dt; v.ctl.thr = yielding ? -0.5 : -0.85; v.ctl.st = 0; v.ctl.hb = 0;
-    if (c.revT <= 0) { c.revT = 0; c.fwdT = yielding ? 0 : 0.8; c.yieldReverse = false; }
+    c.revT -= dt; v.ctl.thr = yielding ? -0.5 : -0.85; v.ctl.st = c.orbitRev ? -c.revSt : 0; v.ctl.hb = 0;
+    if (c.revT <= 0) { c.revT = 0; c.fwdT = yielding ? 0 : 0.9; c.yieldReverse = false; c.yieldPeerKey = null; c.orbitRev = false; }
     return;
   }
   if (c.fwdT > 0 && block <= 20) c.fwdT = 0;
@@ -487,8 +747,67 @@ function cvHaltPoseClear(v, x, y, h) {
   }
   return true;
 }
+// Halted followers can approach the same crossing from different headings.
+// Check nearby live-vehicle footprints at short, matching future times. The
+// other car's current velocity/yaw and our present steering are only an
+// approximation: this is an early-braking aid, not continuous collision proof.
+function cvHaltVehicleForecastClear(v, steer, vf) {
+  if (![v.x, v.y, v.ang, v.vx, v.vy, v.L, v.D, steer, vf, v.S.st].every(Number.isFinite)) return false;
+  const cs = Math.cos(v.ang), sn = Math.sin(v.ang), side = -v.vx * sn + v.vy * cs;
+  const wb = Math.max(30 * (v.k || 1), v.D * .62), turn = Math.tan(steer * v.S.st) / wb;
+  for (const u of VEH.list) {
+    if (u === v || u.far) continue;
+    if (![u.x, u.y, u.ang, u.vx, u.vy, u.w, u.L, u.D].every(Number.isFinite)) return false;
+    // Broad phase follows the sampled 1.5-second horizon rather than a fixed
+    // radius, so a fast closing car is not silently excluded just for range.
+    const reach = Math.hypot(v.D, v.L) * .5 + Math.hypot(u.D, u.L) * .5 + 12 +
+      (Math.hypot(v.vx, v.vy) + Math.hypot(u.vx, u.vy) + 24) * 1.5;
+    if (Math.hypot(u.x - v.x, u.y - v.y) > reach) continue;
+    for (let j = 1; j <= 6; j++) {
+      const t = j * .25, half = u.w * t * .5;
+      const scale = Math.abs(half) < 1e-6 ? 1 : Math.sin(half) / half;
+      const ux = u.x + (u.vx * Math.cos(half) - u.vy * Math.sin(half)) * t * scale;
+      const uy = u.y + (u.vx * Math.sin(half) + u.vy * Math.cos(half)) * t * scale;
+      const ua = u.ang + u.w * t, other = {cx:ux, cy:uy, c:Math.cos(ua), s:Math.sin(ua), hf:u.D*.5, hw:u.L*.5};
+      const d = Math.max(24, vf) * t;
+      for (const curv of [0, turn]) {
+        const mid = v.ang + curv * d * .5, ang = v.ang + curv * d;
+        const own = {cx:v.x + Math.cos(mid)*d - sn*side*t, cy:v.y + Math.sin(mid)*d + cs*side*t,
+          c:Math.cos(ang), s:Math.sin(ang), hf:v.D*.5+8, hw:v.L*.5+8};
+        if (vehSAT(own, other)) return false;
+      }
+    }
+  }
+  return true;
+}
 function cvDrive(v, dt, target, gap, i) {
-  const was = v.convoy?.st;
+  const prior = v.convoy;
+  // A failed shoulder plan is a deliberate wait, not a stuck driving
+  // attempt. Do not rerun pursuit or accumulate stuck time during retries.
+  if (CONVOY.halted && prior?.st === 'column' && prior.planRetryAt) {
+    if (runTime < prior.planRetryAt) {
+      const vf = v.vx * Math.cos(v.ang) + v.vy * Math.sin(v.ang);
+      v.ctl.thr = vf > 8 ? -1 : vf < -8 ? 1 : 0;
+      v.ctl.hb = Math.abs(vf) < 8 ? 1 : 0; v.ctl.st = 0;
+      return;
+    }
+    prior.planRetryAt = 0; prior.stuckT = 0;
+  }
+  const was = prior?.st;
+  // Traffic networks rebuild as the player moves or streamed data arrives.
+  // Revalidate a selected target when that network changes or becomes pending.
+  if (was === 'herring') {
+    const active = typeof TRF !== 'undefined' && TRF.on, epoch = active ? TRF.stats?.builds : null;
+    if (prior.laneTraffic !== !!active || (active && (prior.laneBuild !== epoch || TRF.pending || !TRF.net))) {
+      if (!cvHaltLaneClear(v, prior.hx, prior.hy)) {
+        const vf = v.vx * Math.cos(v.ang) + v.vy * Math.sin(v.ang);
+        prior.st = 'column'; prior.planRetryAt = runTime + 2; prior.stuckT = 0;
+        v.ctl.thr = vf > 8 ? -1 : vf < -8 ? 1 : 0; v.ctl.hb = Math.abs(vf) < 8 ? 1 : 0; v.ctl.st = 0;
+        return;
+      }
+      prior.laneTraffic = !!active; prior.laneBuild = epoch;
+    }
+  }
   cvDriveNormal(v, dt, target, gap, i);
   const c = v.convoy;
   if (!c || !CONVOY.halted) return;
@@ -497,16 +816,79 @@ function cvDrive(v, dt, target, gap, i) {
     if (vf > 0 || v.ctl.thr > 0) {
       const steer = Math.max(-1, Math.min(1, v.ctl.st));
       const wb = Math.max(30 * (v.k || 1), v.D * .62), curv = Math.tan(steer * v.S.st) / wb;
-      const look = Math.max(96, Math.min(200, vf * vf / 100 + 64));
-      let blocked = false;
-      for (let j = 1; j <= 8; j++) {
+      let look = Math.max(96, Math.min(200, vf * vf / 100 + 64));
+      // A herringbone car stops AT its spot; never brake for what lies beyond
+      // it, and weight the collision forecast by the distance actually left.
+      let vfHalt = vf;
+      if (c.st === 'herring' && Number.isFinite(c.hx) && Number.isFinite(c.hy)) {
+        const dSpot = Math.hypot(c.hx - v.x, c.hy - v.y);
+        look = Math.max(12, Math.min(look, dSpot - 12));
+        vfHalt = Math.min(Math.max(0, vf), dSpot / 1.5);
+      }
+      let blocked = vf >= -2 && !cvHaltVehicleForecastClear(v, steer, vfHalt), terrainBlocked = false;
+      for (let j = 1; !blocked && j <= 8; j++) {
         const d = look * j / 8, ang = v.ang + curv * d;
         const x = v.x + Math.cos(v.ang + curv * d * .5) * d;
         const y = v.y + Math.sin(v.ang + curv * d * .5) * d;
-        if (!cvHaltPoseClear(v, x, y, ang)) { blocked = true; break; }
+        if (!cvHaltStaticPoseClear(v, x, y, ang)) { blocked = true; terrainBlocked = true; break; }
+        if (!cvHaltPoseClear(v, x, y, ang) || !cvTrafficPoseClear(v, x, y, ang, 1)) { blocked = true; break; }
       }
-      if (blocked) { v.ctl.thr = vf > 5 ? -1 : 0; v.ctl.hb = vf < 5 ? 1 : 0; v.ctl.st = 0; }
-    }
+      if (blocked) {
+        // A shoulder can be valid in its planned orientation but blocked for
+        // the actual steering arc. A car frozen against such an arc is not
+        // failing to park — it lacks room to begin the curl, and buildings do
+        // not depart. Work the steering (15.1.3): up to three steered back-outs
+        // through the checked reverse chain before the spot is treated as truly
+        // unreachable and handed to the avoid/re-plan path.
+        if (terrainBlocked && c.st === 'herring' && Math.hypot(v.vx, v.vy) < 8 &&
+            Number.isFinite(c.hx) && Number.isFinite(c.hy)) {
+          const dPin = Math.hypot(c.hx - v.x, c.hy - v.y);
+          c.terrainWait = (c.terrainWait || 0) + dt;
+          if (c.terrainWait >= 2) {
+            // 15.1.3 lock: the committed spot survives arc-terrain stalls. The old
+            // avoid+12 s + re-plan cycle let every stall hand the planner a fresh
+            // spot near the nose, whose +240 refinement landed in the same blocked
+            // geometry — the target walked and A10 never completed. Now the car
+            // works the stall with alternating steered back-outs, and a genuinely
+            // unreachable approach ends in the standard cross-load abandon.
+            if ((c.pinTries | 0) >= 1) {
+              // Try one steered back-out, then release — kill the lock (a stale
+              // re-arm would just pin the same unreachable pose), require strict
+              // re-selection, and cap the cycles: after two releases the crew
+              // cross-loads (A10 fail-closed) instead of cycling forever.
+              if ((c.pinFails | 0) >= 2) { cvRadio("V" + v.convoyN + " PARK APPROACH ABANDONED", "#ffab40"); cvAbandon(v); }
+              else {
+                c.pinFails = (c.pinFails | 0) + 1; c.pinTries = 0; c.terrainWait = 0;
+                c.avoidHX = c.hx; c.avoidHY = c.hy; c.avoidUntil = runTime + 12;
+                c.hx = NaN; c.hy = NaN; c.keepAim = false; c.hAng = null;
+                c.st = 'column'; c.planRetryAt = runTime + 2;
+              }
+            } else if (dPin > 40 && !(c.revT > 0) && !(c.fwdT > 0)) {
+              c.pinTries = (c.pinTries | 0) + 1; c.terrainWait = 0; c.tries = (c.tries || 0) + 1;
+              if (c.tries > 12) { cvRadio("V" + v.convoyN + " PARK APPROACH ABANDONED", "#ffab40"); cvAbandon(v); }
+              else { c.revSt = (c.pinTries % 2 ? 1 : -1); c.revT = Math.min(2.0, 1.1 + 0.25 * (c.pinTries % 4)); c.orbitRev = true; }
+            } else if (dPin <= 40) c.terrainWait = 0;
+          }
+        } else c.terrainWait = 0;
+        // A deliberate safety stop is not a failed driving attempt. Otherwise
+        // normal pursuit can increment the stuck counter before this guard
+        // brakes, eventually abandoning a car that is correctly yielding.
+        c.stuckT = 0;
+        v.ctl.thr = vf > 5 ? -1 : 0; v.ctl.hb = vf < 5 ? 1 : 0; v.ctl.st = 0;
+        if (!terrainBlocked) { c.stopWait = (c.stopWait || 0) + dt; c.stopTerrain = false; }
+      } else {
+        c.terrainWait = 0;
+        // Deliberate yield stops are not plan failures: the re-arm gets its one
+        // fresh refinement pass as before (15.1.5 controls depend on it). Spot
+        // *durability* is what 15.1.3 added — a degraded column car whose old
+        // committed spot is still valid re-arms it via the resume gate in
+        // cvDriveNormal even when slot eligibility for a NEW selection fails.
+        if ((c.stopWait || 0) >= 1 && !c.stopTerrain && c.st === 'herring' && Math.abs(vf) < 30) {
+          c.st = 'column'; c.planRetryAt = runTime; c.keepAim = false; c.hAng = null;
+        }
+        c.stopWait = 0;
+      }
+    } else c.terrainWait = 0;
     return;
   }
   if (c.planRetryAt && runTime < c.planRetryAt) {
@@ -514,23 +896,57 @@ function cvDrive(v, dt, target, gap, i) {
   }
   const base = cvTrailAt(cvProject(v).s), h = base ? base.h : v.ang;
   const fx = Math.cos(h), fy = Math.sin(h), orig = { x: c.hx, y: c.hy };
+  // Only a plan-commit frame reaches here (later herring frames return via
+  // the was === 'herring' guard). Forward refinement is deliberate: the
+  // turning circle is steering-bound, so a spot abeam of the nose is only
+  // reachable from a tangent. The historic bug was not the refinement but
+  // discarding a VALIDATED spot when no extended candidate passed — that
+  // made commit -> reject -> 2 s retry loops never terminate. Refine if a
+  // better-aligned forward spot passes every gate; otherwise keep the plan.
   let found = false;
+  if (c.refined) found = false; else
   for (const forward of [240, 180, 300, 120, 360]) {
     const x = orig.x + fx * forward, y = orig.y + fy * forward, leader = VEH.me;
+    if (c.avoidUntil > runTime && Number.isFinite(c.avoidHX) && Number.isFinite(c.avoidHY) && Math.hypot(x - c.avoidHX, y - c.avoidHY) < 48) continue;
     if (!leader || (x - leader.x) * Math.cos(leader.ang) + (y - leader.y) * Math.sin(leader.ang) > -(v.D + leader.D) * .5 - gap * .35) continue;
     const dh = vehAngDiff(h + Math.sign(c.side || 1) * .5, v.ang);
     let clear = true;
-    for (let j = 1; j <= 10; j++) {
-      const t = j / 10, ang = v.ang + dh * t, px = v.x + (x - v.x) * t, py = v.y + (y - v.y) * t;
-      if (!cvHaltStaticPoseClear(v, px, py, ang) || !cvHaltPoseClear(v, px, py, ang)) {
+    // Do not skip a close neighbor when the target is several hundred
+    // pixels away; check at least as densely as the halt guard's first step.
+    const samples = Math.max(10, Math.ceil(Math.hypot(x - v.x, y - v.y) / 12));
+    for (let j = 1; j <= samples; j++) {
+      const t = j / samples, ang = v.ang + dh * t, px = v.x + (x - v.x) * t, py = v.y + (y - v.y) * t;
+      if (!cvHaltStaticPoseClear(v, px, py, ang) || !cvHaltPoseClear(v, px, py, ang) || !cvTrafficPoseClear(v, px, py, ang, 1)) {
         clear = false; break;
       }
     }
-    if (clear && !cityCircleBlocked(x, y, Math.max(v.L, 40) * .5, false)) {
-      c.hx = x; c.hy = y; found = true; break;
+    // The line-to-target samples above are not the actual early steering
+    // arc. Check both the initial straight movement and the desired turn so
+    // a neighbor close to the starting pose cannot be skipped by the plan.
+    if (clear) {
+      const da = vehAngDiff(Math.atan2(y - v.y, x - v.x), v.ang), steer = Math.max(-1, Math.min(1, da * 2));
+      const wb = Math.max(30 * (v.k || 1), v.D * .62);
+      for (const st of [0, steer]) {
+        const curv = Math.tan(st * v.S.st) / wb;
+        for (let j = 1; j <= 8; j++) {
+          const d = 12 * j, ang = v.ang + curv * d;
+          const px = v.x + Math.cos(v.ang + curv * d * .5) * d, py = v.y + Math.sin(v.ang + curv * d * .5) * d;
+          if (!cvHaltStaticPoseClear(v, px, py, ang) || !cvHaltPoseClear(v, px, py, ang) || !cvTrafficPoseClear(v, px, py, ang, 1)) { clear = false; break; }
+        }
+        if (!clear) break;
+      }
+    }
+    if (clear && cvHaltLaneClear(v, x, y) && !cityCircleBlocked(x, y, Math.max(v.L, 40) * .5, false) && cvHaltPeerTargetClear(v, x, y) && cvHaltApproachClear(v, x, y)) {
+      c.hx = x; c.hy = y; c.refined = 1; c.laneTraffic = typeof TRF !== 'undefined' && !!TRF.on;
+      c.laneBuild = c.laneTraffic ? TRF.stats?.builds : null; found = true; break;
     }
   }
-  if (!found) { c.st = 'column'; c.planRetryAt = runTime + 2; v.ctl.thr = 0; v.ctl.hb = 1; }
+  if (found) c.keepAim = false;
+  else if (c.st === 'herring') {
+    // Keep the committed spot (already validated at plan time) and switch on
+    // the tangent aim point; reset the approach memory for the new pose.
+    c.keepAim = true; c.hAng = h; c.lastApproachD = null; c.orbitT = 0;
+  }
 }
 /* === 5. RIDERS: boarding, gunners on their side, holding groups ===================================================== */
 const mAimT = typeof MAX_MINION !== "undefined" ? new Float32Array(MAX_MINION) : [];

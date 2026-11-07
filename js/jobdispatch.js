@@ -31,16 +31,18 @@ JOB_CORE.historyHooks.medical_history=(a,outcome)=>({recipient:a.data?.recipient
 const JOB_TRACE = "witness_trace";
 jobRegister({id:JOB_TRACE,role:"detective",start:"scene",
   edges:{scene:["clue"],clue:["follow"],follow:["search"],search:["escort"],escort:[]},
-  endings:{lead_filed:{from:["follow"],pay:80},contact_filed:{from:["follow"],pay:80},witness_safe:{from:["escort"],pay:180},witness_supported:{from:["escort"],pay:180},trace_handoff:{from:["clue","follow","search","escort"],pay:25}},
+  endings:{lead_filed:{from:["follow"],pay:80},contact_filed:{from:["follow"],pay:80},witness_safe:{from:["escort"],pay:180},witness_supported:{from:["escort"],pay:180},witness_protected:{from:["escort"],pay:220},trace_handoff:{from:["clue","follow","search","escort"],pay:25}},
   finishGuard:"trace_contact",historyHook:"trace_history"});
-JOB_CORE.guards.trace_contact=(a,outcome)=>outcome==="lead_filed" ? !a.data?.contactMode : outcome==="contact_filed" ? jdContactReady(a) : outcome==="witness_safe" ? jdWitnessSafe(a) : outcome==="witness_supported" ? jdWitnessSupported(a) : true;
+JOB_CORE.guards.trace_contact=(a,outcome)=>outcome==="lead_filed" ? !a.data?.contactMode : outcome==="contact_filed" ? jdContactReady(a) : outcome==="witness_safe" ? jdWitnessSafe(a) : outcome==="witness_supported" ? jdWitnessSupported(a) : outcome==="witness_protected" ? jdWitnessGuarded(a) : true;
 // These are observations, not a finding of guilt or an invented arrest.
 JOB_CORE.historyHooks.trace_history=(a,outcome)=>({
   inquiry: a.data?.inquiry?.status === "spoke" ? "denied" : a.data?.inquiry?.status === "lost" ? "lost" :
     a.data?.inquiry?.status === "open" ? "unresolved" : "not_pursued",
   witness: outcome === "witness_safe" || outcome === "witness_supported" ? "escorted" : a.data?.witnessLost ? "lost" : "unknown",
   support: outcome === "witness_supported" ? "met" : a.data?.support?.status === "lost" ? "lost" : a.data?.support ? "not_met" : "not_requested",
-  witnessCare: a.data?.witnessAid === true ? "first_aid" : "none"
+  witnessCare: a.data?.witnessAid === true ? "first_aid" : "none",
+  response: outcome === "witness_protected" ? "guarded" : a.data?.response?.state === "called" ? "called_unmet" : "not_called",
+  confront: a.data?.inquiry?.confront || "not_attempted"
 });
 const JD_COURIERS = [JOB_DISPATCH.id, JOB_PRIORITY, JOB_MEDICAL];
 const JD_CONTRACTS = [...JD_COURIERS, JOB_TRACE];
@@ -199,6 +201,7 @@ const JD_CONTACT = { actor:null, incident:null, world:null, role:null, saveTimer
 function jdContactClear() {
   const p=JD_CONTACT.actor;
   if(p && typeof TF!=="undefined") {
+    tfJobRelease(p);
     const i=TF.walk.indexOf(p);if(i>=0)TF.walk.splice(i,1);
     if(TF.npc.get(p.id)===p)TF.npc.delete(p.id);
     p.w=null;
@@ -209,6 +212,7 @@ function jdContactClear() {
 // the second person is separately identified and remains physically present.
 function jdContactRelease() {
   const p=JD_CONTACT.actor;
+  if(p)tfJobRelease(p);
   if(p?.alive && p.w) {p.jdContact=null;p.w.jobContact=false;p.w.jobEscort=false;try{tfPickGoal(p,"out");}catch(e){p.w.tx=p.w.x;p.w.ty=p.w.y;}}
   JD_CONTACT.actor=null;JD_CONTACT.incident=null;JD_CONTACT.world=null;JD_CONTACT.role=null;JD_CONTACT.saveTimer=0;
 }
@@ -228,7 +232,7 @@ function jdContactSync(a) {
     if(JD_CONTACT.actor.w)JD_CONTACT.actor.w.jobEscort=role==="witness" && a.phase==="escort";
     return JD_CONTACT.actor;
   }
-  if(JD_CONTACT.actor)jdContactClear();
+  if(JD_CONTACT.actor && !(JD_CONTACT.actor.alive && JD_CONTACT.actor.tfJob && JD_CONTACT.actor.jrec))jdContactClear();
   const target=jobSiteLocal(state || a.data[role==="contact"?"follow":"search"]);
   if(lost || !target || Math.hypot(player.x-target.x,player.y-target.y)>750 || cityCircleBlocked(target.x,target.y,7,false) || (cityFlagsAt(target.x,target.y)&(F_MOVE|F_IN|F_WATER)))return null;
   const id="jd-"+role+"|"+a.world+"|"+a.id;
@@ -236,7 +240,7 @@ function jdContactSync(a) {
   const p=tfPerson(id,tfRng(tfHash(id)),{occ:"unemployed"});
   p.jdContact={incident:a.id,world:a.world,role};
   const W=tfSpawnWalker(p,target.x,target.y,false,null);
-  W.jobContact=true;W.jobEscort=role==="witness" && a.phase==="escort";W.idle=1e6;if(state)W.hp=state.hp;
+  W.jobContact=true;W.jobEscort=role==="witness" && a.phase==="escort";W.idle=1e6;if(state)W.hp=state.hp;tfJobClaim(p,"jd-"+role);
   JD_CONTACT.actor=p;JD_CONTACT.incident=a.id;JD_CONTACT.world=a.world;JD_CONTACT.role=role;
   return p;
 }
@@ -292,6 +296,7 @@ const JD_INQUIRY = { actor:null, incident:null, world:null, saveTimer:0 };
 function jdInquiryClear(release) {
   const p=JD_INQUIRY.actor;
   if(p && typeof TF!=="undefined") {
+    if(p)tfJobRelease(p);
     if(release && p.alive && p.w) {
       p.jdInquiry=null;p.w.jobContact=false;
       try { tfPickGoal(p,"out"); } catch(e) { p.w.tx=p.w.x;p.w.ty=p.w.y; }
@@ -313,12 +318,15 @@ function jdInquirySync(a) {
   const state=q.state;
   if(!jdPersonSnapshotValid(state))return null;
   if(JD_INQUIRY.actor && (JD_INQUIRY.actor.w || !JD_INQUIRY.actor.alive))return JD_INQUIRY.actor;
-  if(JD_INQUIRY.actor)jdInquiryClear(false);
+  // A dehydrated-but-pinned person is 'present off-stream', not gone: keep the
+  // reference and record; the town rehydrates them, or the materialization
+  // below walks the same durable person back in at the site (15.3.1).
+  if(JD_INQUIRY.actor && !(JD_INQUIRY.actor.tfJob && JD_INQUIRY.actor.jrec))jdInquiryClear(false);
   const target=jobSiteLocal(state || q.site);
   if(!target || Math.hypot(player.x-target.x,player.y-target.y)>750 || cityCircleBlocked(target.x,target.y,7,false) || (cityFlagsAt(target.x,target.y)&(F_MOVE|F_IN|F_WATER)))return null;
   const id="jd-inquiry|"+a.world+"|"+a.id;if(tfMem().dead[id])return null;
   const p=tfPerson(id,tfRng(tfHash(id)),{occ:"unemployed"});p.jdInquiry={incident:a.id,world:a.world};
-  const W=tfSpawnWalker(p,target.x,target.y,false,null);W.jobContact=true;W.idle=1e6;if(state)W.hp=state.hp;
+  const W=tfSpawnWalker(p,target.x,target.y,false,null);W.jobContact=true;W.idle=1e6;if(state)W.hp=state.hp;tfJobClaim(p,"jd-inquiry");
   JD_INQUIRY.actor=p;JD_INQUIRY.incident=a.id;JD_INQUIRY.world=a.world;return p;
 }
 function jdInquiryCheckpoint(p) {
@@ -331,6 +339,27 @@ function jdInquiryCheckpoint(p) {
   if(!saved.ok)jdNotice("INTERVIEW CHECKPOINT NOT SAVED · Check storage before leaving.");
   return saved.ok;
 }
+// 15.2.3-part3: an optional single confrontation while an account is open. The
+// reaction is a stable hash of world and incident (deterministic like the rest of
+// this ledger, no rerolls), executed through the existing pedestrian states:
+// walked-off reuses the flee mechanic, the others leave them calm. It is recorded
+// as an observation only; pay, endings and guilt are untouched, and one case gets
+// exactly one confrontation.
+function jdConfront(id) {
+  const read=jobReadState(),a=read.ok&&read.state.active;
+  if(!a||a.id!==id||a.contract!==JOB_TRACE||a.world!==jobWorldKey()||a.phase!=="search"||a.data?.inquiry?.status!=="open"||a.data.inquiry.confront)
+    return {ok:false,why:"There is no open account to put to them."};
+  const p=jdInquirySync(a);
+  if(!jdPersonPresent(p))return {ok:false,why:"Approach the calm person on foot before confronting them."};
+  const hc=Math.imul(((CITY.seed>>>0)^0x2d4a11f7^Math.imul(id%10000,2654435761))>>>0,2654435761)>>>0;
+  const pick=hc>>>13&3;const kind=pick===0?"fled":pick===1?"denied":"quiet";
+  a.data.inquiry.confront=kind;
+  if(kind==="fled")p.w.flee=6;
+  const result=jobCommit(read.state,0);
+  if(result.ok)jdNotice("Confrontation · "+(kind==="fled"?"they heard the account and walked off. A reaction is not evidence.":kind==="denied"?"they denied it to your face. An accusation in the open, not a confession.":"they went quiet. Silence proves nothing either way."));
+  else jdNotice("CONFRONTATION NOT SAVED · Check storage before treating the reaction as recorded.");
+  return result;
+}
 function jdInquiryLost(p) {
   const read=jobReadState(),a=read.ok&&read.state.active,q=a?.data?.inquiry;
   if(!a || a.id!==p.jdInquiry?.incident || a.world!==p.jdInquiry.world || a.world!==jobWorldKey() || a.phase!=="search" || q?.status!=="open")return;
@@ -341,6 +370,14 @@ function jdPersonNear(p) {
   const W=p?.w;
   return !!(p?.alive && W && W.flee<=0 && !W.stun && player && !player.inVehicle && !player.roof && (player.flyAlt||0)<=2 &&
     Math.hypot(player.x-W.x,player.y-W.y)<44 && stClearLine(player.x,player.y,W.x,W.y,3));
+}
+function jdPersonPresent(p) {
+  // same calm-near check as jdPersonNear, but a pinned person whose walker is
+  // mid-rehydration rehydrates from their record first — the witness is not
+  // "absent" merely because a streaming frame has not run yet (15.3.1)
+  if(!p || !p.alive) return null;
+  if(!p.w && p.tfJob && p.jrec) tfJobHydrate(p);
+  return jdPersonNear(p) ? p : null;
 }
 function jdWitnessNear(a) {
   return !!(a && a.phase==="search" && !a.data.witnessLost && jdPersonNear(jdContactSync(a)));
@@ -366,7 +403,7 @@ function jdInquiryChoice(id,action) {
   if(!a || a.id!==id || a.contract!==JOB_TRACE || a.world!==jobWorldKey() || a.phase!=="search" || q?.status!=="open")
     return {ok:false,why:"This interview is no longer available."};
   if(action==="speak") {
-    const p=jdInquirySync(a);if(!jdPersonNear(p))return {ok:false,why:"Approach the person calmly on foot."};
+    const p=jdInquirySync(a);if(!jdPersonPresent(p))return {ok:false,why:"Approach the person calmly on foot."};
     q.status="spoke"; // They deny it; this is a statement, not proof or arrest.
   } else if(action==="leave") q.status=JD_INQUIRY.actor && !JD_INQUIRY.actor.alive ? "lost" : "not_pursued";
   else return {ok:false,why:"This interview is no longer available."};
@@ -405,6 +442,7 @@ function jdSupportOffscreen(x,y) {
 function jdSupportClear(release) {
   const p=JD_SUPPORT.actor;
   if(p && typeof TF!=="undefined") {
+    if(p)tfJobRelease(p);
     if(release && p.alive && p.w) {
       p.jdSupport=null;p.w.jobContact=false;p.w.jobSupport=false;
       try {tfPickGoal(p,"out");} catch(e) {p.w.tx=p.w.x;p.w.ty=p.w.y;}
@@ -418,6 +456,66 @@ function jdSupportClear(release) {
 function jdHasSupport(a) {
   return !!a && ((a.contract===JOB_TRACE && ["search","escort"].includes(a.phase)) || (a.contract===JOB_COURIER_SHIFT && a.phase==="delivery"));
 }
+// 15.2.3-part2: optional guarded handoff. Called responders for the escort meeting
+// point are damageable, unarmed pedestrian walkers on the townsfolk foundation -
+// not PD traffic units, not heat semantics, no custody or arrest procedure. The
+// call persists with the case; actors are runtime-only and re-materialize at their
+// off-screen approach sites (the same policy as assistant and support). A hurt or
+// scattered responder simply makes the guarded outcome unavailable; the case is
+// never blocked by its own responders.
+const JD_RESPONSE = {actors:[],incident:null,world:null};
+function jdHasResponse(a){return !!(a&&a.contract===JOB_TRACE&&a.phase==="escort"&&a.data?.response);}
+function jdResponseClear(release) {
+  for(const p of JD_RESPONSE.actors) {
+    if(typeof TF==="undefined")break;
+    tfJobRelease(p);
+    if(release&&p.alive&&p.w){p.jdResponse=null;p.w.jdResponder=false;p.w.stun=0;try{tfPickGoal(p,"out");}catch(e){p.w.tx=p.w.x;p.w.ty=p.w.y;}}
+    else{const i=TF.walk.indexOf(p);if(i>=0)TF.walk.splice(i,1);if(TF.npc.get(p.id)===p)TF.npc.delete(p.id);p.w=null;}
+  }
+  JD_RESPONSE.actors=[];JD_RESPONSE.incident=null;JD_RESPONSE.world=null;
+}
+function jdResponseSync(a) {
+  const q=jdHasResponse(a)&&a.data.response;
+  if(!q||q.state!=="called"||a.world!==jobWorldKey()||!TF.on){jdResponseClear(!!(TF.on&&runActive&&JD_RESPONSE.actors.some(p=>p.alive&&p.w)&&JD_RESPONSE.world===jobWorldKey()));return null;}
+  if(JD_RESPONSE.incident!==a.id||JD_RESPONSE.world!==a.world)jdResponseClear(false);
+  if(JD_RESPONSE.actors.length)return JD_RESPONSE.actors;
+  const actors=[];
+  for(let i=0;i<q.sites.length;i++) {
+    const p=jobSiteLocal(q.sites[i]);if(!p)continue;
+    const id="jd-response|"+a.world+"|"+a.id+"|"+i;
+    if(tfMem().dead[id])continue;
+    if(!jdSupportOffscreen(p.x,p.y)||cityCircleBlocked(p.x,p.y,7,false)||(cityFlagsAt(p.x,p.y)&(F_MOVE|F_IN|F_WATER)))continue;
+    const person=tfPerson(id,tfRng(tfHash(id)),{occ:"unemployed"});person.jdResponse={incident:a.id,world:a.world};
+    const w=tfSpawnWalker(person,p.x,p.y,false,null);w.jobContact=true;w.jdResponder=true;w.idle=1e6;tfJobClaim(person,"jd-response");
+    actors.push(person);
+  }
+  JD_RESPONSE.actors=actors;JD_RESPONSE.incident=a.id;JD_RESPONSE.world=a.world;
+  return actors.length?actors:null;
+}
+function jdResponseTarget(p) {
+  const a=jdActive();
+  if(!jdHasResponse(a)||a.data.response?.state!=="called"||p?.jdResponse?.incident!==a.id||p.jdResponse.world!==a.world)return null;
+  const w=JD_CONTACT.actor&&JD_CONTACT.actor.w;
+  return w?{x:w.x,y:w.y,stop:34}:null;
+}
+function jdWitnessGuarded(a) {
+  if(!jdWitnessSafe(a)||!jdHasResponse(a)||a.data.response?.state!=="called")return false;
+  const list=jdResponseSync(a);if(!list)return false;
+  const witness=JD_CONTACT.actor&&JD_CONTACT.actor.w;
+  if(!witness||witness.stun||witness.flee>0)return false;
+  return list.some(pp=>pp.alive&&pp.w&&pp.w.flee<=0&&!pp.w.stun&&Math.hypot(pp.w.x-witness.x,pp.w.y-witness.y)<44&&stClearLine(pp.w.x,pp.w.y,witness.x,witness.y,7));
+}
+function jdCallResponders(id) {
+  const read=jobReadState(),a=read.ok&&read.state.active;
+  if(!a||a.id!==id||a.contract!==JOB_TRACE||a.world!==jobWorldKey()||a.phase!=="escort"||a.data?.response||a.data?.witnessLost||!jdPersonNear(jdContactSync(a)))
+    return {ok:false,why:"Stand with the calm witness on open ground before calling responders."};
+  const goal=jobSiteLocal(a.data.safe);if(!goal)return {ok:false,why:"Meeting point unavailable."};
+  const sites=[];const turn=((CITY.seed+(id%10000)*41)%360)*Math.PI/180;
+  for(let k=0;k<2;k++){for(const dist of [450,560,660]){if(sites[k])break;for(let i=0;i<16&&!sites[k];i++){const angle=turn+k*2.1+i*2.399963229728653;const q=cityFindWalkable(goal.x+Math.cos(angle)*dist,goal.y+Math.sin(angle)*dist,24,true);if(!q||Math.hypot(q[0]-goal.x,q[1]-goal.y)>JOB_ROUTE.maxDistance||!jdSupportOffscreen(q[0],q[1])||cityCircleBlocked(q[0],q[1],7,false)||(cityFlagsAt(q[0],q[1])&(F_MOVE|F_IN|F_WATER))||!jobRouteValid(q[0],q[1],goal.x,goal.y))continue;sites[k]={wx:q[0]+CITY.orx,wy:q[1]+CITY.ory};}}}
+  if(!sites.filter(Boolean).length)return {ok:false,why:"No safe off-screen approach is available. The unguarded meeting remains available."};
+  a.data.response={state:"called",sites:sites.filter(Boolean)};const result=jobCommit(read.state,0);
+  if(result.ok)jdResponseSync(a);return result;
+}
 function jdSupportSync(a) {
   const q=jdHasSupport(a) && a.data?.support;
   if(!q || q.status!=="active" || a.world!==jobWorldKey() || !TF.on) {
@@ -428,13 +526,13 @@ function jdSupportSync(a) {
   const state=q.state;
   if(!jdPersonSnapshotValid(state))return null;
   if(JD_SUPPORT.actor && (JD_SUPPORT.actor.w || !JD_SUPPORT.actor.alive))return JD_SUPPORT.actor;
-  if(JD_SUPPORT.actor)jdSupportClear(false);
+  if(JD_SUPPORT.actor && !(JD_SUPPORT.actor.tfJob && JD_SUPPORT.actor.jrec))jdSupportClear(false);
   const p=jobSiteLocal(state || q.site);
   // Never materialize a new live support person in either known camera view.
   if(!p || !jdSupportOffscreen(p.x,p.y) || cityCircleBlocked(p.x,p.y,7,false) || (cityFlagsAt(p.x,p.y)&(F_MOVE|F_IN|F_WATER)))return null;
   const id="jd-support|"+a.world+"|"+a.id+(a.contract===JOB_COURIER_SHIFT ? "|stop"+a.data.stop : "");if(tfMem().dead[id])return null;
   const person=tfPerson(id,tfRng(tfHash(id)),{occ:"unemployed"});person.jdSupport={incident:a.id,world:a.world};
-  const w=tfSpawnWalker(person,p.x,p.y,false,null);w.jobContact=true;w.jobSupport=true;w.idle=1e6;if(state)w.hp=state.hp;
+  const w=tfSpawnWalker(person,p.x,p.y,false,null);w.jobContact=true;w.jobSupport=true;w.idle=1e6;if(state)w.hp=state.hp;tfJobClaim(person,"jd-support");
   JD_SUPPORT.actor=person;JD_SUPPORT.incident=a.id;JD_SUPPORT.world=a.world;return person;
 }
 function jdSupportTarget(p) {
@@ -497,6 +595,7 @@ const JD_CLINIC={actor:null,incident:null,world:null,saveTimer:0,searchAt:0};
 function jdClinicClear(release) {
   const p=JD_CLINIC.actor;
   if(p && typeof TF!=="undefined") {
+    if(p)tfJobRelease(p);
     if(release && p.alive && p.w){p.jdClinic=null;p.w.jobContact=false;p.w.jobClinic=false;try{tfPickGoal(p,"out");}catch(e){p.w.tx=p.w.x;p.w.ty=p.w.y;}}
     else {const i=TF.walk.indexOf(p);if(i>=0)TF.walk.splice(i,1);if(TF.npc.get(p.id)===p)TF.npc.delete(p.id);p.w=null;}
   }
@@ -508,7 +607,7 @@ function jdClinicSync(a) {
   }
   if(JD_CLINIC.incident!==a.id || JD_CLINIC.world!==a.world){jdClinicClear(false);JD_CLINIC.incident=a.id;JD_CLINIC.world=a.world;}
   if(JD_CLINIC.actor && (JD_CLINIC.actor.w || !JD_CLINIC.actor.alive))return JD_CLINIC.actor;
-  if(JD_CLINIC.actor){jdClinicClear(false);JD_CLINIC.incident=a.id;JD_CLINIC.world=a.world;}
+  if(JD_CLINIC.actor && !(JD_CLINIC.actor.alive && JD_CLINIC.actor.tfJob && JD_CLINIC.actor.jrec)){jdClinicClear(false);JD_CLINIC.incident=a.id;JD_CLINIC.world=a.world;}
   let state=a.data.recipientState;
   if(state!=null && (!Number.isFinite(state.wx)||!Number.isFinite(state.wy)||!Number.isFinite(state.hp)||state.hp<=0||state.hp>30))return null;
   const goal=jobSiteLocal(a.data.delivery);if(!goal || !jdMedicalDestination(a))return null;
@@ -535,7 +634,7 @@ function jdClinicSync(a) {
   if(!point || !jdSupportOffscreen(point.x,point.y) || cityCircleBlocked(point.x,point.y,7,false) || (cityFlagsAt(point.x,point.y)&(F_MOVE|F_IN|F_WATER)))return null;
   const id="jd-clinic|"+a.world+"|"+a.id+(a.contract===JOB_COURIER_SHIFT ? "|stop"+a.data.stop : "");if(tfMem().dead[id])return null;
   const person=tfPerson(id,tfRng(tfHash(id)),{occ:"unemployed"});person.jdClinic={incident:a.id,world:a.world};
-  const w=tfSpawnWalker(person,point.x,point.y,false,null);w.jobContact=true;w.jobClinic=true;w.idle=1e6;if(state)w.hp=state.hp;
+  const w=tfSpawnWalker(person,point.x,point.y,false,null);w.jobContact=true;w.jobClinic=true;w.idle=1e6;if(state)w.hp=state.hp;tfJobClaim(person,"jd-clinic");
   JD_CLINIC.actor=person;JD_CLINIC.incident=a.id;JD_CLINIC.world=a.world;return person;
 }
 function jdClinicTarget(p) {
@@ -607,11 +706,13 @@ function jdTraceChoice(id, expected, action) {
     if(result.ok) {W.jobEscort=true;if(typeof MAPV!=="undefined")MAPV.lastSig="";}
     return result;
   }
-  if(action==="safe" && expected==="escort") {const r=jobFinish(id,"witness_safe");if(r.ok){jdContactRelease();jdSupportClear(true);}return r;}
-  if(action==="supported" && expected==="escort") {const r=jobFinish(id,"witness_supported");if(r.ok){jdContactRelease();jdSupportClear(true);}return r;}
+  if(action==="safe" && expected==="escort") {const r=jobFinish(id,"witness_safe");if(r.ok){jdContactRelease();jdSupportClear(true);jdResponseClear(true);}return r;}
+  if(action==="supported" && expected==="escort") {const r=jobFinish(id,"witness_supported");if(r.ok){jdContactRelease();jdSupportClear(true);jdResponseClear(true);}return r;}
+  if(action==="call" && expected==="escort") return jdCallResponders(id);
+  if(action==="guarded" && expected==="escort") {const r=jobFinish(id,"witness_protected");if(r.ok){jdContactRelease();jdSupportClear(true);jdResponseClear(true);}return r;}
   if(action==="handoff") {
     const result=jobFinish(id,"trace_handoff");
-    if(result.ok) {if(JD_CONTACT.actor?.alive)jdContactRelease();if(typeof MAPV!=="undefined")MAPV.lastSig="";}
+    if(result.ok) {if(JD_CONTACT.actor?.alive)jdContactRelease();jdResponseClear(false);if(typeof MAPV!=="undefined")MAPV.lastSig="";}
     return result;
   }
   return {ok:false,why:"This investigation action is no longer available."};
@@ -818,7 +919,7 @@ function jdOpen(message) {
       const section = document.createElement("section"); section.id = "jobHistory";
       const heading = document.createElement("h3"); heading.textContent = "RECENT CALLS"; section.appendChild(heading);
       const list = document.createElement("ul"); list.style.cssText = "padding-left:1.3em;margin:0 0 10px";
-      const outcomes = { delivered: "Delivered", secured: "Secured relay delivered", handoff: "Abstract handoff", lead_filed:"Lead filed; person unlocated", contact_filed:"Contact interviewed; person unlocated", witness_safe:"Missing witness escorted to meeting point", witness_supported:"Witness met unarmed support contact", trace_handoff:"Unresolved lead handed off", completed:"Distribution shift completed", partial:"Distribution shift ended early", declined: "Declined", withdrawn: "Withdrawn" };
+      const outcomes = { delivered: "Delivered", secured: "Secured relay delivered", handoff: "Abstract handoff", lead_filed:"Lead filed; person unlocated", contact_filed:"Contact interviewed; person unlocated", witness_safe:"Missing witness escorted to meeting point", witness_supported:"Witness met unarmed support contact", witness_protected:"Witness passed to called responders at the meeting", trace_handoff:"Unresolved lead handed off", completed:"Distribution shift completed", partial:"Distribution shift ended early", declined: "Declined", withdrawn: "Withdrawn" };
       for (const h of recent) {
         const li = document.createElement("li"), label = h.contract === JOB_COURIER_SHIFT ? "Medical distribution shift" : h.contract === JOB_PRIORITY ? "Priority courier" : h.contract === JOB_MEDICAL ? "Medical courier" : h.contract === JOB_TRACE ? "Witness investigation" : "Supply courier";
         const outcome = Object.prototype.hasOwnProperty.call(outcomes, h.outcome) ? outcomes[h.outcome] : "Recorded outcome";
@@ -844,11 +945,12 @@ function jdOpen(message) {
       text("p", "Your existing job belongs to another world or is unavailable here. Return to its world or withdraw it.");
       button("WITHDRAW JOB", () => { const r=jobWithdraw(a.id); jdOpen(r.ok ? "Job withdrawn; no pay." : r.why); });
     } else if (a.phase === "offer") {
-      text("p", a.contract === JOB_TRACE ? "Witness lead · review a report, inspect a possible lead, and choose whether to survey a follow-up for 80 or hand the unresolved lead off for 25. " + (a.data.contactMode ? "A civilian contact is simulated at the follow-up. An optional later tip may lead to a witness, a second unverified interview and an on-foot escort. You can request an unarmed civilian support contact; no arrest or police response is simulated." : "No missing person, contact, suspect, or responder NPC is simulated in this scenario.") + " This is a short investigation, not a full detective career. No timer. Routes were checked on foot when offered." : a.contract === JOB_MEDICAL ? "Medical courier · collect a case and deliver to " + String(a.data.clinic?.name || "the medical entrance") + ". Full delivery pays 140 and adds up to six medicine to shared town stock (capped). Economy scenario only. " + (a.data.recipientMode ? "A damageable civilian clinic contact must meet you at the entrance; not a doctor or responder. " : "No recipient NPC is simulated. ") + "After pickup you can request an abstract handoff for 35, with no stock effect." : a.contract === JOB_PRIORITY ? "Priority courier · collect a temperature-sensitive case and assess its condition. Choose a direct delivery for 120, or a relay transfer and delivery for 155. No timer; all offered routes were checked on foot. Relay and handoff are abstract, not simulated NPCs." : "Supply courier · collect a case, then deliver it. No timer. Complete delivery for 90; after pickup, request an abstract handoff for 30. Local routes were checked on foot when offered.");
+      text("p", a.contract === JOB_TRACE ? "Witness lead · review a report, inspect a possible lead, and choose whether to survey a follow-up for 80 or hand the unresolved lead off for 25. " + (a.data.contactMode ? "A civilian contact is simulated at the follow-up. An optional later tip may lead to a witness, a second unverified interview and an on-foot escort. You can request an unarmed civilian support contact and, at the meeting point, call pedestrian responders for an optional guarded handoff; no cruiser traffic, custody procedure or arrest is simulated." : "No missing person, contact, suspect, or responder NPC is simulated in this scenario.") + " Completed, filed cases advance the five-stage detective career and its pay bonus; unresolved handoffs and withdrawals never count. No timer. Routes were checked on foot when offered." : a.contract === JOB_MEDICAL ? "Medical courier · collect a case and deliver to " + String(a.data.clinic?.name || "the medical entrance") + ". Full delivery pays 140 and adds up to six medicine to shared town stock (capped). Economy scenario only. " + (a.data.recipientMode ? "A damageable civilian clinic contact must meet you at the entrance; not a doctor or responder. " : "No recipient NPC is simulated. ") + "After pickup you can request an abstract handoff for 35, with no stock effect." : a.contract === JOB_PRIORITY ? "Priority courier · collect a temperature-sensitive case and assess its condition. Choose a direct delivery for 120, or a relay transfer and delivery for 155. No timer; all offered routes were checked on foot. Relay and handoff are abstract, not simulated NPCs." : "Supply courier · collect a case, then deliver it. No timer. Complete delivery for 90; after pickup, request an abstract handoff for 30. Local routes were checked on foot when offered.");
       button("ACCEPT", () => { const r=jobAccept(a.id); if (r.ok) { if(typeof MAPV!=="undefined") MAPV.lastSig=""; jdClose(); jdNotice(a.contract===JOB_TRACE ? "CALL ACCEPTED · Follow the cyan marker to review the report." : "CALL ACCEPTED · Follow the cyan marker to collect supplies."); } else jdOpen(r.why); });
       button("DECLINE", () => { const r=jobWithdraw(a.id); jdOpen(r.ok ? "Call declined; no penalty." : r.why); });
     } else if(a.contract===JOB_TRACE) {
       const objective=a.phase==="search" && a.data.inquiry?.status==="open" ? "find the person the witness described" : a.phase==="scene" ? "review the report" : a.phase==="clue" ? "inspect the possible lead" : a.phase==="follow" ? (a.data.contactMode ? "interview the contact" : "survey the follow-up site") : a.phase==="search" ? "search for the missing witness" : a.phase==="escort" ? "escort the witness to the meeting point" : "review the incident";
+      {const cr=jdCareerPanelRank();const q=text("p","DETECTIVE CAREER · Stage "+cr.rank+"/5 · "+cr.name+(cr.next===null?" · top stage reached":" · "+cr.next+" more completed case"+(cr.next===1?"":"s")+" for the next stage"));q.style.cssText="font-size:12px;opacity:.8";}
       text("p","Witness lead: follow the cyan marker on foot to "+objective+". "+(["search","escort"].includes(a.phase)?"A witness is simulated; any allegation is unverified. Optional support is an unarmed civilian, not police.":"The missing person has not been located; no arrest or responder is simulated."));
       if(a.phase==="follow" && a.data.contactMode) {
         const person=jdContactSync(a);
@@ -857,7 +959,8 @@ function jdOpen(message) {
         else if(person?.w && person.w.flee>0) text("p","The contact is fleeing danger. Move away from the threat and wait until they are calm. If your carry options always aim weapons, change them in Options.");
         else if(jdContactReady(a)) {
           text("p","The contact reports hearing a disturbance near the site but did not see who was involved or where the person went. This is a lead, not a rescue or identification.");
-          button("FILE CONTACT STATEMENT · 80",()=>{const r=jdTraceChoice(a.id,"follow","interview");jdOpen(r.ok ? "Statement filed for 80. The missing person remains unlocated." : r.why);});
+          const cfPay=jdTracePanelPay("contact_filed",80);
+          button("FILE CONTACT STATEMENT · "+cfPay,()=>{const r=jdTraceChoice(a.id,"follow","interview");jdOpen(r.ok ? "Statement filed for "+r.pay+". The missing person remains unlocated." : r.why);});
           button("FOLLOW ANOTHER TIP",()=>{const r=jdTraceChoice(a.id,"follow","search");if(r.ok){jdClose();jdNotice("SEARCH SITE MARKED · Follow the cyan marker.");}else jdOpen(r.why);});
         } else text("p","Approach the civilian contact at the cyan marker to interview them. If the saved location is blocked or unavailable, hand off the unresolved lead.");
       }
@@ -865,8 +968,10 @@ function jdOpen(message) {
         const person=jdContactSync(a);
         if(a.phase==="search" && a.data.inquiry?.status==="open") {
           const other=jdInquirySync(a);
-          text("p","The witness described a person who pressured them. This person is not proven responsible; ask for their account or return to the witness. No arrest is simulated.");
+          text("p","The witness described a person who pressured them. This person is not proven responsible; ask for their account, put it to them face to face once, or return to the witness. No arrest is simulated.");
           if(jdPersonNear(other))button("ASK FOR THEIR ACCOUNT",()=>{const r=jdInquiryChoice(a.id,"speak");jdOpen(r.ok ? "The person denies pressuring the witness. Both accounts remain unverified; return to the witness." : r.why);});
+          if(jdPersonNear(other)&&!a.data.inquiry.confront)button("CONFRONT THEM WITH THE ACCOUNT",()=>{const r=jdConfront(a.id);jdOpen(r.ok?(a.data.inquiry.confront==="fled"?"They heard the account and walked off. A reaction is not evidence.":a.data.inquiry.confront==="denied"?"They denied it to your face. An accusation in the open, not a confession.":"They went quiet. Silence proves nothing either way."):(typeof r==="object"&&r?.why)||r);});
+          else if(a.data.inquiry.confront)text("p","You confronted them once. Their reaction is recorded as an observation, not proof; this case gets no second confrontation.");
           else text("p",other?.w?.flee>0 ? "They are fleeing danger; wait until they are calm." : "Approach the marked person on foot. If unavailable, return to the witness.");
           button("RETURN TO WITNESS · LEAD UNRESOLVED",()=>{const r=jdInquiryChoice(a.id,"leave");jdOpen(r.ok ? "Lead left unresolved. Return to the witness." : r.why);});
         } else if(a.data.witnessLost || (person && !person.alive)) text("p","The witness has died; the case cannot be recorded as a rescue. Hand off unresolved or withdraw.");
@@ -886,14 +991,17 @@ function jdOpen(message) {
           text("p","Walk with the witness to the meeting point. The site is not guarded. They follow on foot and can be hurt or flee. If you get too far away the marker leads back to them; wait if they are behind. No responding officer is simulated.");
           if(!a.data.support && jdPersonNear(person))button("REQUEST UNARMED SUPPORT",()=>{const r=jdSupportRequest(a.id,"escort");jdOpen(r.ok ? "Unarmed civilian support was requested. They must reach the unguarded meeting point on foot." : r.why);});
           else if(a.data.support)text("p",a.data.support.status==="lost" ? "The support contact died; the meeting remains unguarded." : "Unarmed support was requested. They can be hurt, flee or be unable to arrive. After reloading, they return only from off screen; the unguarded meeting is still available.");
-          if(jdWitnessSupported(a))button("HAND OFF TO SUPPORT · 180",()=>{const r=jdTraceChoice(a.id,"escort","supported");jdOpen(r.ok ? "Witness met the unarmed support contact at the meeting point. No guard, police response or arrest is simulated." : r.why);});
+          if(jdWitnessSupported(a))button("HAND OFF TO SUPPORT · "+jdTracePanelPay("witness_supported",180),()=>{const r=jdTraceChoice(a.id,"escort","supported");jdOpen(r.ok ? "Witness met the unarmed support contact at the meeting point."+(a.data?.response?" Called responders were also present.":" No guard, police response or arrest is simulated.") : r.why);});
           if(jdWitnessAidReady(a))button("GIVE FIRST AID · ONCE",()=>{const r=jdWitnessAid(a.id,"escort");jdOpen(r.ok ? "Basic first aid given. The witness is still vulnerable; no medic is simulated." : r.why);});
-          if(jdWitnessSafe(a))button("COMPLETE ESCORT · 180",()=>{const r=jdTraceChoice(a.id,"escort","safe");jdOpen(r.ok ? "Witness escorted to the unguarded meeting point for 180. No handoff to a support contact was recorded." : r.why);});
+          if(jdWitnessGuarded(a))button("GUARDED HANDOFF · "+jdTracePanelPay("witness_protected",220),()=>{const r=jdTraceChoice(a.id,"escort","guarded");jdOpen(r.ok ? "Witness passed to the called responders for "+r.pay+". They are unarmed pedestrians; no custody procedure or arrest is simulated." : r.why);});
+          if(jdWitnessSafe(a))button("COMPLETE ESCORT · "+jdTracePanelPay("witness_safe",180),()=>{const r=jdTraceChoice(a.id,"escort","safe");jdOpen(r.ok ? "Witness escorted to the unguarded meeting point for "+r.pay+". No handoff to a support contact was recorded." : r.why);});
+          if(!a.data?.response&&jdWitnessNear(a)&&jdPersonNear(jdContactSync(a)))button("CALL RESPONDERS",()=>{const r=jdCallResponders(a.id);jdOpen(r.ok?"RESPONDERS CALLED · Damageable, unarmed pedestrians walk to this meeting point. No cruiser traffic or arrest is simulated.":r.why);});
+          if(a.data?.response?.state==="called"&&!jdWitnessGuarded(a))text("p","Responders were called and are walking to the meeting point. If they are hurt or scattered, the unguarded escort and support handoff remain available.");
         } else text("p","Approach the person at the marked site on foot. If they cannot be reached, hand off the unresolved case.");
       }
       if(a.phase==="clue" && jdNear(a)) {
         text("p","The report points toward a possible follow-up location. It is a lead, not proof of where the person is or who was involved.");
-        button(a.data.contactMode ? "MEET CONTACT · 80" : "SURVEY FOLLOW-UP · 80",()=>{const r=jdTraceChoice(a.id,"clue","follow");if(r.ok){jdClose();jdNotice(a.data.contactMode ? "CONTACT SELECTED · Follow the cyan marker." : "FOLLOW-UP SELECTED · Follow the cyan marker.");}else jdOpen(r.why);});
+        button((a.data.contactMode ? "MEET CONTACT · " : "SURVEY FOLLOW-UP · ")+jdTracePanelPay(a.data.contactMode?"contact_filed":"lead_filed",80),()=>{const r=jdTraceChoice(a.id,"clue","follow");if(r.ok){jdClose();jdNotice(a.data.contactMode ? "CONTACT SELECTED · Follow the cyan marker." : "FOLLOW-UP SELECTED · Follow the cyan marker.");}else jdOpen(r.why);});
       }
       if(["clue","follow","search","escort"].includes(a.phase)) button("HAND OFF UNRESOLVED · 25",()=>{const r=jdTraceChoice(a.id,a.phase,"handoff");jdOpen(r.ok ? "Unresolved lead handed off for 25. No responder is simulated." : r.why);});
       text("p",(a.phase==="follow" && a.data.contactMode) || ["search","escort"].includes(a.phase) ? "If a person is unreachable, hand off the unresolved lead or withdraw without penalty." : "If the objective is blocked, find a new site or withdraw without penalty.");
@@ -968,7 +1076,7 @@ function jdScreen(g) {
       const other=jdInquirySync(jdActive());JD_INQUIRY.saveTimer+=dt;
       if(other && other.w && other.alive && JD_INQUIRY.saveTimer>=3) {JD_INQUIRY.saveTimer=0;jdInquiryCheckpoint(other);}
       const support=jdSupportSync(jdActive());JD_SUPPORT.saveTimer+=dt;
-      if(support && support.w && support.alive && JD_SUPPORT.saveTimer>=3) {JD_SUPPORT.saveTimer=0;jdSupportCheckpoint(support);}
+      if(support && support.w && support.alive && !JD_SUPPORT.ride && JD_SUPPORT.saveTimer>=3) {JD_SUPPORT.saveTimer=0;jdSupportCheckpoint(support);} // 15.2.1: never freeze the on-foot anchor to a car seat
       const clinic=jdClinicSync(jdActive());JD_CLINIC.saveTimer+=dt;
       if(clinic && clinic.w && clinic.alive && JD_CLINIC.saveTimer>=3) {JD_CLINIC.saveTimer=0;jdClinicCheckpoint(clinic);}
     } else {jdContactClear();jdInquiryClear(false);jdSupportClear(false);jdClinicClear(false);}

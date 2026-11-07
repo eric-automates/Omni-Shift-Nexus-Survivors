@@ -635,6 +635,7 @@ function pdRadarOpen() {
   for(const [mode,label] of [["front","FRONT"],["rear","REAR"],["both","BOTH"]]){
     const b=document.createElement("button");b.type="button";b.className="btn";b.dataset.sector=mode;b.textContent=label;b.style.cssText="min-width:60px;min-height:44px;margin:2px";b.onclick=()=>{PD_RADAR.mode=mode;pdRadarRefresh();};panel.appendChild(b);
   }
+  if (typeof pdpPanelRow === "function") pdpPanelRow(panel);
   const close=document.createElement("button");close.type="button";close.className="btn";close.textContent="CLOSE";close.style.cssText="min-width:60px;min-height:44px;margin:2px";close.onclick=pdRadarClose;panel.appendChild(close);
   for(const ev of ["pointerdown","touchstart"])panel.addEventListener(ev,e=>e.stopPropagation(),{passive:true});
   document.body.appendChild(panel);PD_RADAR.panel=panel;PD_RADAR.next=0;pdRadarRefresh();
