@@ -4,7 +4,7 @@
 > Runtime/gameplay code is the `15.4.3-LOCKED` build. `15.4.4` is a documented stopping point, not a new gameplay release.  
 > **v15 overall: 71% · T21: 50% · next planned series: 15.5.1 (not started).**
 
-This is the GitHub-ready project overview and Mermaid flowchart. GitHub renders the diagrams below directly. Update this file when a feature ships, changes state, or is deferred.
+This is the GitHub-ready project overview and Mermaid flowchart. The diagrams use Mermaid's broadly supported `graph` syntax with color-coded status classes. Update this file when a feature ships, changes state, or is deferred.
 
 ## Status key
 
@@ -23,7 +23,7 @@ The diagrams also use Mermaid classes for color. The prose/table legend is retai
 ## 1. Whole-game flow
 
 ```mermaid
-flowchart TD
+graph TD
   classDef system fill:#ddf4ff,stroke:#0969da,color:#1f2328,stroke-width:2px;
   classDef shipped fill:#dafbe1,stroke:#1a7f37,color:#1f2328,stroke-width:2px;
   classDef partial fill:#fff8c5,stroke:#9a6700,color:#1f2328,stroke-width:2px;
@@ -63,7 +63,7 @@ flowchart TD
 ## 2. Simulation and combat pipeline
 
 ```mermaid
-flowchart TD
+graph TD
   classDef system fill:#ddf4ff,stroke:#0969da,color:#1f2328;
   classDef shipped fill:#dafbe1,stroke:#1a7f37,color:#1f2328;
   classDef partial fill:#fff8c5,stroke:#9a6700,color:#1f2328;
@@ -118,7 +118,7 @@ flowchart TD
 ## 3. World, map, stealth and traffic flow
 
 ```mermaid
-flowchart LR
+graph LR
   classDef system fill:#ddf4ff,stroke:#0969da,color:#1f2328;
   classDef shipped fill:#dafbe1,stroke:#1a7f37,color:#1f2328;
   classDef partial fill:#fff8c5,stroke:#9a6700,color:#1f2328;
@@ -159,7 +159,7 @@ flowchart LR
 ## 4. Mission, career and dispatch flow
 
 ```mermaid
-flowchart TD
+graph TD
   classDef system fill:#ddf4ff,stroke:#0969da,color:#1f2328;
   classDef shipped fill:#dafbe1,stroke:#1a7f37,color:#1f2328;
   classDef partial fill:#fff8c5,stroke:#9a6700,color:#1f2328;
@@ -204,7 +204,7 @@ flowchart TD
 ## 5. Fireteam, vehicle and squad-navigation flow (T21)
 
 ```mermaid
-flowchart TD
+graph TD
   classDef system fill:#ddf4ff,stroke:#0969da,color:#1f2328;
   classDef shipped fill:#dafbe1,stroke:#1a7f37,color:#1f2328;
   classDef partial fill:#fff8c5,stroke:#9a6700,color:#1f2328;
@@ -245,7 +245,7 @@ flowchart TD
 ## 6. Persistence, save and recovery flow
 
 ```mermaid
-flowchart LR
+graph LR
   classDef system fill:#ddf4ff,stroke:#0969da,color:#1f2328;
   classDef shipped fill:#dafbe1,stroke:#1a7f37,color:#1f2328;
   classDef partial fill:#fff8c5,stroke:#9a6700,color:#1f2328;
@@ -283,7 +283,7 @@ Persistence is browser-local and fail-closed in tested paths; this diagram does 
 ### Career reservations J01–J15
 
 ```mermaid
-flowchart LR
+graph LR
   classDef partial fill:#fff8c5,stroke:#9a6700,color:#1f2328;
   classDef future fill:#ffebe9,stroke:#cf222e,color:#1f2328;
   classDef shipped fill:#dafbe1,stroke:#1a7f37,color:#1f2328;
@@ -308,7 +308,7 @@ flowchart LR
 ### Shared systems T16–T31
 
 ```mermaid
-flowchart TD
+graph TD
   classDef partial fill:#fff8c5,stroke:#9a6700,color:#1f2328;
   classDef future fill:#ffebe9,stroke:#cf222e,color:#1f2328;
   classDef parked fill:#fbefff,stroke:#8250df,color:#1f2328;
@@ -338,7 +338,7 @@ flowchart TD
 ### Current ratchet stop
 
 ```mermaid
-flowchart LR
+graph LR
   classDef shipped fill:#dafbe1,stroke:#1a7f37,color:#1f2328;
   classDef parked fill:#fbefff,stroke:#8250df,color:#1f2328;
   classDef future fill:#ffebe9,stroke:#cf222e,color:#1f2328;
