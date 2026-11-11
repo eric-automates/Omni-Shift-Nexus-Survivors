@@ -692,13 +692,15 @@ function townsLights(push) {
 // treated independently. It is not a prediction for blasts, ricochets,
 // utilities, unknown civilians or every weapon effect.
 const TF_AUTO_FIRE = { context: null, heldUntil: 0 };
-function tfAutoFireAllowed(x, y, vx, vy, life, rad, style, enemy, sourceKind) {
+function tfAutoFireAllowed(x, y, vx, vy, life, rad, style, enemy, sourceKind, damage, wpnId) {
   const context = TF_AUTO_FIRE.context;
   if (!context || enemy || (sourceKind != null && sourceKind !== 0) || (style !== 3 && style !== 4 && style !== 5) ||
       !TF.on || !CITY.on || !player || (typeof flyGroundSeparated === "function" && flyGroundSeparated())) return true;
   const speed = Math.hypot(vx, vy);
   if (!(speed > 1) || !(life > 0) || !Number.isFinite(rad)) return true;
   const ux = vx / speed, uy = vy / speed, reach = Math.min(1000, speed * life + 20);
+  const prof = typeof stHeroProfile === "function" ? stHeroProfile(wpnId) : [160, "g", 1];
+  const kinetic = !!(prof && prof[1] === "g"), energy = Number.isFinite(damage) ? Math.max(0, damage) : 10;
   for (const p of TF.walk) {
     const q = p && p.w; if (!p || !p.alive || !q || !(q.hp > 0)) continue;
     const dx = q.x - x, dy = q.y - y, along = dx * ux + dy * uy;
@@ -706,11 +708,17 @@ function tfAutoFireAllowed(x, y, vx, vy, life, rad, style, enemy, sourceKind) {
     // The projectile appears 20 px ahead, but its body may already overlap a
     // person whose centre is slightly behind that muzzle point.
     if (along < Math.max(0, 20 - bodyRadius) || along > reach + bodyRadius || Math.abs(-dx * uy + dy * ux) > bodyRadius) continue;
-    // Sight is a conservative knowledge test; F_SHOT matches the current
-    // solid-wall stop rule, while unblocked windows remain traversable.
-    if (!cityLOS(player.x, player.y, q.x, q.y)) continue;
     const beforePerson = Math.max(20, along - bodyRadius);
-    if (cityRay(x + ux * 20, y + uy * 20, x + ux * beforePerson, y + uy * beforePerson, F_SHOT, 900).hit) continue;
+    // Use the same per-material resistance and damage attenuation as the live
+    // projectile. A civilian behind penetrable material is still in the path.
+    const trace = typeof cityDamageTraceShot === "function"
+      ? cityDamageTraceShot(x + ux * 20, y + uy * 20, x + ux * beforePerson, y + uy * beforePerson, energy, kinetic, style, 0)
+      : { reaches: !cityRay(x + ux * 20, y + uy * 20, x + ux * beforePerson, y + uy * beforePerson, F_SHOT, 900).hit, energy };
+    if (!trace.reaches) continue;
+    // Don't claim an unobserved civilian is in the lane unless an intervening
+    // penetrable material actually altered the projectile path. Penetration
+    // remains a genuine risk even when the civilian is hidden from sight.
+    if (typeof cityLOS === "function" && !cityLOS(x, y, q.x, q.y) && !(Number.isFinite(trace.energy) && trace.energy < energy)) continue;
     context.blocked++;
     TF_AUTO_FIRE.heldUntil = runTime + .9;
     return false;

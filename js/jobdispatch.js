@@ -29,6 +29,8 @@ JOB_CORE.historyHooks.medical_history=(a,outcome)=>({recipient:a.data?.recipient
 // A small investigative lead, not the full Missing Witness career arc.
 // Optional search locates a witness; an additional interview is unverified. Support is an unarmed civilian, not police.
 const JOB_TRACE = "witness_trace";
+const JOB_SCENE_CASE = "detective_scene_case";
+const JOB_POI_FOLLOWUP = "detective_poi_followup";
 jobRegister({id:JOB_TRACE,role:"detective",start:"scene",
   edges:{scene:["clue"],clue:["follow"],follow:["search"],search:["escort"],escort:[]},
   endings:{lead_filed:{from:["follow"],pay:80},contact_filed:{from:["follow"],pay:80},witness_safe:{from:["escort"],pay:180},witness_supported:{from:["escort"],pay:180},witness_protected:{from:["escort"],pay:220},trace_handoff:{from:["clue","follow","search","escort"],pay:25}},
@@ -45,7 +47,7 @@ JOB_CORE.historyHooks.trace_history=(a,outcome)=>({
   confront: a.data?.inquiry?.confront || "not_attempted"
 });
 const JD_COURIERS = [JOB_DISPATCH.id, JOB_PRIORITY, JOB_MEDICAL];
-const JD_CONTRACTS = [...JD_COURIERS, JOB_TRACE];
+const JD_CONTRACTS = [...JD_COURIERS, JOB_TRACE, JOB_SCENE_CASE, JOB_POI_FOLLOWUP];
 function jdActive() {
   const a = meta && meta.jobState && meta.jobState.active;
   if (!a || !JD_CONTRACTS.includes(a.contract) || !v15JobEnabled(a) || a.world !== jobWorldKey() || !a.data) return null;
@@ -71,6 +73,7 @@ function jdTarget(a) {
     if(["follow","search"].includes(a.phase) && a.data.contactMode && JD_CONTACT.actor?.alive && JD_CONTACT.actor.w && JD_CONTACT.incident===a.id && JD_CONTACT.world===a.world) return {x:JD_CONTACT.actor.w.x,y:JD_CONTACT.actor.w.y};
     return jobSiteLocal(a.phase==="follow" && a.data.contactMode && a.data.contactState ? a.data.contactState : a.phase==="search" && a.data.witnessState ? a.data.witnessState : a.data[a.phase]);
   }
+  if((a.contract===JOB_SCENE_CASE||a.contract===JOB_POI_FOLLOWUP) && typeof jdDetectiveTarget==="function")return jdDetectiveTarget(a);
   if (jdCaseDropped(a)) return jobSiteLocal(a.data.caseDrop);
   if (a.contract===JOB_COURIER_SHIFT && a.data.support?.carrying) {
     const worker=JD_SUPPORT.incident===a.id && JD_SUPPORT.world===a.world && JD_SUPPORT.actor?.alive ? JD_SUPPORT.actor.w : null;
@@ -217,6 +220,7 @@ function jdContactRelease() {
   JD_CONTACT.actor=null;JD_CONTACT.incident=null;JD_CONTACT.world=null;JD_CONTACT.role=null;JD_CONTACT.saveTimer=0;
 }
 function jdContactRole(a) {
+  if(a && a.contract==="fire_structure" && a.data?.civilianMode && ["rescue","escort"].includes(a.phase))return "witness";
   return a && a.contract===JOB_TRACE && a.data?.contactMode ? a.phase==="follow" ? "contact" : ["search","escort"].includes(a.phase) ? "witness" : null : null;
 }
 function jdContactSync(a) {
@@ -234,12 +238,15 @@ function jdContactSync(a) {
   }
   if(JD_CONTACT.actor && !(JD_CONTACT.actor.alive && JD_CONTACT.actor.tfJob && JD_CONTACT.actor.jrec))jdContactClear();
   const target=jobSiteLocal(state || a.data[role==="contact"?"follow":"search"]);
-  if(lost || !target || Math.hypot(player.x-target.x,player.y-target.y)>750 || cityCircleBlocked(target.x,target.y,7,false) || (cityFlagsAt(target.x,target.y)&(F_MOVE|F_IN|F_WATER)))return null;
+  const fireCall=a.contract==="fire_structure",inside=fireCall&&typeof j04Building==="function"?j04Building(a):null;
+  if(lost || (fireCall&&!inside) || !target || Math.hypot(player.x-target.x,player.y-target.y)>750 || cityCircleBlocked(target.x,target.y,7,false))return null;
+  const flags=cityFlagsAt(target.x,target.y),spawnInside=!!(inside&&(flags&F_IN));
+  if((flags&(F_MOVE|F_WATER)) || ((flags&F_IN)&&!inside) || (fireCall&&a.phase==="rescue"&&!state&&!spawnInside))return null;
   const id="jd-"+role+"|"+a.world+"|"+a.id;
   if(tfMem().dead[id])return null;
   const p=tfPerson(id,tfRng(tfHash(id)),{occ:"unemployed"});
   p.jdContact={incident:a.id,world:a.world,role};
-  const W=tfSpawnWalker(p,target.x,target.y,false,null);
+  const W=tfSpawnWalker(p,target.x,target.y,spawnInside,spawnInside?inside:null);
   W.jobContact=true;W.jobEscort=role==="witness" && a.phase==="escort";W.idle=1e6;if(state)W.hp=state.hp;tfJobClaim(p,"jd-"+role);
   JD_CONTACT.actor=p;JD_CONTACT.incident=a.id;JD_CONTACT.world=a.world;JD_CONTACT.role=role;
   return p;
@@ -269,6 +276,7 @@ window.tfHurt=function(p,dmg,how,by,origin,danger) {
   if(p?.jdInquiry && p.alive)jdInquiryCheckpoint(p);
   if(p?.jdSupport && p.alive)jdSupportCheckpoint(p);
   if(p?.jdClinic && p.alive)jdClinicCheckpoint(p);
+  if(p?.jdPoi && p.alive && typeof jdPoiCheckpoint==="function")jdPoiCheckpoint(p);
   return result;
 };
 // Persist fatal loss with the existing townsfolk death memory. If storage
@@ -282,12 +290,14 @@ window.tfDie=function(p,how,by,origin) {
     if(a && a.id===p.jdContact.incident && a.world===p.jdContact.world && jdContactRole(a)===p.jdContact.role) {
       a.data[p.jdContact.role+"Lost"]=true;
       const saved=jobCommit(read.state,0);
-      jdNotice(saved.ok ? "CONTACT LOST · The lead can still be handed off." : "CONTACT LOST · Could not save; check storage before leaving.");
+      const fire=a.contract==="fire_structure";
+      jdNotice(saved.ok ? (fire?"CIVILIAN LOST · A partial fire-call outcome is available; no clean success can be claimed.":"CONTACT LOST · The lead can still be handed off.") : (fire?"CIVILIAN LOST · Could not save; check storage before leaving.":"CONTACT LOST · Could not save; check storage before leaving."));
     }
   }
   if(wasAlive && p?.jdInquiry)jdInquiryLost(p);
   if(wasAlive && p?.jdSupport)jdSupportLost(p);
   if(wasAlive && p?.jdClinic)jdClinicLost(p);
+  if(wasAlive && p?.jdPoi && typeof jdPoiLost==="function")jdPoiLost(p);
   return result;
 };
 // Optional second interview. This is a person the witness describes, not a
@@ -670,6 +680,8 @@ function jdClinicDeliver(id) {
 // because the player is nearby. Movement still uses the civilian pathfinder.
 function jdEscortTarget(p) {
   const a=jdActive(),safe=a && a.phase==="escort" && p?.jdContact?.role==="witness" && p.jdContact.incident===a.id ? jobSiteLocal(a.data.safe) : null;
+  const station=a&&a.contract===JOB_POI_FOLLOWUP&&a.phase==="custody"&&p?.jdPoi?.incident===a.id&&p.jdPoi.world===a.world?jobSiteLocal(a.data.station):null;
+  if(station)return {x:station.x,y:station.y,stop:24};
   return safe && Math.hypot(player.x-safe.x,player.y-safe.y)<70 ? {x:safe.x,y:safe.y,stop:25} : {x:player.x,y:player.y,stop:48};
 }
 function jdWitnessSafe(a) {
@@ -799,6 +811,7 @@ function jdReplan(id, expected) {
       !JD_CONTRACTS.includes(a.contract) || !a.data)
     return { ok: false, why: "This objective is no longer available." };
   if (jdCaseDropped(a)) return { ok:false, why:"Recover your case before moving the objective." };
+  if((a.contract===JOB_SCENE_CASE||a.contract===JOB_POI_FOLLOWUP) && typeof jdDetectiveReplan==="function")return jdDetectiveReplan(a);
   if (a.contract===JOB_TRACE && a.phase==="follow" && a.data.contactMode) return {ok:false,why:"The contact cannot be moved. Hand off the unresolved lead or withdraw."};
   const fields = { pickup: "pickup", assessment: "assessment", relay: "relay", delivery: "delivery", secured_delivery: "delivery", scene:"scene", clue:"clue", follow:"follow" };
   const field = Object.prototype.hasOwnProperty.call(fields, a.phase) ? fields[a.phase] : null;
@@ -861,6 +874,7 @@ function jdArrive() {
     else {jdNotice("LEAD FILED · "+result.pay+" added. The missing person remains unlocated.");JOB_DISPATCH.message="Lead filed for "+result.pay+". The missing person remains unlocated; no rescue or responder is simulated.";}
     return true;
   }
+  if((a.contract===JOB_SCENE_CASE||a.contract===JOB_POI_FOLLOWUP) && typeof jdDetectiveArrive==="function")return jdDetectiveArrive(a);
   if (jdCaseDropped(a)) { const r=jdRecoverCase(); if(!r.ok) { jdNotice("Dispatch: "+r.why+". Check storage and retry."); return false; } jdNotice("CASE RECOVERED · Follow the cyan objective marker."); return true; }
   if (a.contract === JOB_PRIORITY && a.phase === "assessment") { jdOpen(); return true; }
   if (a.contract === JOB_MEDICAL && a.phase === "delivery" && a.data.recipientMode) { jdOpen(); return true; }
@@ -911,6 +925,8 @@ function jdOpen(message) {
     if(v15ContractEnabled(JOB_MEDICAL)) button("MEDICAL DELIVERY", () => { const r = jdOffer(JOB_MEDICAL); jdOpen(r.ok ? "A medical delivery is available." : r.why); });
     if(v15ContractEnabled(JOB_MEDICAL) && (v15CareerEnabled("J09") || v15FeatureEnabled("J09.MEDICAL_CONTACT"))) button("MEDICAL DELIVERY + CONTACT", () => { const r = jdOffer(JOB_MEDICAL,true); jdOpen(r.ok ? "A medical delivery with a clinic contact is available." : r.why); });
     if(v15ContractEnabled(JOB_TRACE)) button("WITNESS LEAD", () => { const r=jdTraceOffer(); jdOpen(r.ok ? "An investigative lead is available." : r.why); });
+    if(v15ContractEnabled(JOB_SCENE_CASE)) button("CRIME-SCENE CASE", () => { const r=jdcSceneOffer(); jdOpen(r.ok ? "A crime-scene evidence case is available." : r.why); });
+    if(v15ContractEnabled(JOB_POI_FOLLOWUP)) button("PERSON-OF-INTEREST FOLLOW-UP", () => { const r=jdPoiOffer(); jdOpen(r.ok ? "A follow-up linked to a returning witness is available." : r.why); });
     // A small debrief survives a reload via the existing bounded incident history.
     // Only show facts the incident system recorded; no invented NPC or world effect.
     const history = jobReadState();
@@ -919,10 +935,10 @@ function jdOpen(message) {
       const section = document.createElement("section"); section.id = "jobHistory";
       const heading = document.createElement("h3"); heading.textContent = "RECENT CALLS"; section.appendChild(heading);
       const list = document.createElement("ul"); list.style.cssText = "padding-left:1.3em;margin:0 0 10px";
-      const outcomes = { delivered: "Delivered", secured: "Secured relay delivered", handoff: "Abstract handoff", lead_filed:"Lead filed; person unlocated", contact_filed:"Contact interviewed; person unlocated", witness_safe:"Missing witness escorted to meeting point", witness_supported:"Witness met unarmed support contact", witness_protected:"Witness passed to called responders at the meeting", trace_handoff:"Unresolved lead handed off", completed:"Distribution shift completed", partial:"Distribution shift ended early", declined: "Declined", withdrawn: "Withdrawn" };
+      const outcomes = { delivered: "Delivered", secured: "Secured relay delivered", handoff: "Abstract handoff", lead_filed:"Lead filed; person unlocated", contact_filed:"Contact interviewed; person unlocated", witness_safe:"Missing witness escorted to meeting point", witness_supported:"Witness met unarmed support contact", witness_protected:"Witness passed to called responders at the meeting", trace_handoff:"Unresolved lead handed off", scene_filed:"Crime-scene lead filed", scene_handoff:"Crime-scene lead handed off", poi_filed:"Person-of-interest statement filed", poi_handoff:"Person-of-interest lead handed off", completed:"Distribution shift completed", partial:"Distribution shift ended early", debriefed:"Tactical shift debriefed", casualty_lost:"Casualty lost", scene_unsafe:"Scene unsafe", patient_lost_in_transport:"Patient lost in transport", suspect_escaped:"Suspect escaped", civilian_harmed:"Civilian harmed", suspect_harmed:"Suspect harmed", forced_entry_failed:"Forced entry failed", declined: "Declined", withdrawn: "Withdrawn" };
       for (const h of recent) {
-        const li = document.createElement("li"), label = h.contract === JOB_COURIER_SHIFT ? "Medical distribution shift" : h.contract === JOB_PRIORITY ? "Priority courier" : h.contract === JOB_MEDICAL ? "Medical courier" : h.contract === JOB_TRACE ? "Witness investigation" : "Supply courier";
-        const outcome = Object.prototype.hasOwnProperty.call(outcomes, h.outcome) ? outcomes[h.outcome] : "Recorded outcome";
+        const li = document.createElement("li"), label = h.contract === JOB_COURIER_SHIFT ? "Medical distribution shift" : h.contract === JOB_PRIORITY ? "Priority courier" : h.contract === JOB_MEDICAL ? "Medical courier" : h.contract === JOB_TRACE ? "Witness investigation" : h.contract === JOB_SCENE_CASE ? "Crime-scene case" : h.contract === JOB_POI_FOLLOWUP ? "Person-of-interest follow-up" : h.contract === "tactical_barricade" ? "Tactical response" : h.contract === "paramedic_incident" ? "Paramedic response" : "Supply courier";
+        const outcome = h.contract === "paramedic_incident" && h.outcome === "debriefed" ? "Paramedic response debriefed" : Object.prototype.hasOwnProperty.call(outcomes, h.outcome) ? outcomes[h.outcome] : "Recorded outcome";
         const pay = Number.isSafeInteger(h.pay) && h.pay >= 0 ? String(h.pay) : "unknown";
         li.textContent = label + " · " + outcome + " · pay " + pay + (h.contract===JOB_MEDICAL && h.outcome==="delivered" && Number.isFinite(h.restock) && h.restock>=0 ? " · town medicine +"+h.restock : "") + (h.world !== jobWorldKey() ? " · another world" : "");
         if(h.contract===JOB_MEDICAL && h.recipient==="met")li.textContent+=" · accepted by clinic contact";
@@ -945,8 +961,8 @@ function jdOpen(message) {
       text("p", "Your existing job belongs to another world or is unavailable here. Return to its world or withdraw it.");
       button("WITHDRAW JOB", () => { const r=jobWithdraw(a.id); jdOpen(r.ok ? "Job withdrawn; no pay." : r.why); });
     } else if (a.phase === "offer") {
-      text("p", a.contract === JOB_TRACE ? "Witness lead · review a report, inspect a possible lead, and choose whether to survey a follow-up for 80 or hand the unresolved lead off for 25. " + (a.data.contactMode ? "A civilian contact is simulated at the follow-up. An optional later tip may lead to a witness, a second unverified interview and an on-foot escort. You can request an unarmed civilian support contact and, at the meeting point, call pedestrian responders for an optional guarded handoff; no cruiser traffic, custody procedure or arrest is simulated." : "No missing person, contact, suspect, or responder NPC is simulated in this scenario.") + " Completed, filed cases advance the five-stage detective career and its pay bonus; unresolved handoffs and withdrawals never count. No timer. Routes were checked on foot when offered." : a.contract === JOB_MEDICAL ? "Medical courier · collect a case and deliver to " + String(a.data.clinic?.name || "the medical entrance") + ". Full delivery pays 140 and adds up to six medicine to shared town stock (capped). Economy scenario only. " + (a.data.recipientMode ? "A damageable civilian clinic contact must meet you at the entrance; not a doctor or responder. " : "No recipient NPC is simulated. ") + "After pickup you can request an abstract handoff for 35, with no stock effect." : a.contract === JOB_PRIORITY ? "Priority courier · collect a temperature-sensitive case and assess its condition. Choose a direct delivery for 120, or a relay transfer and delivery for 155. No timer; all offered routes were checked on foot. Relay and handoff are abstract, not simulated NPCs." : "Supply courier · collect a case, then deliver it. No timer. Complete delivery for 90; after pickup, request an abstract handoff for 30. Local routes were checked on foot when offered.");
-      button("ACCEPT", () => { const r=jobAccept(a.id); if (r.ok) { if(typeof MAPV!=="undefined") MAPV.lastSig=""; jdClose(); jdNotice(a.contract===JOB_TRACE ? "CALL ACCEPTED · Follow the cyan marker to review the report." : "CALL ACCEPTED · Follow the cyan marker to collect supplies."); } else jdOpen(r.why); });
+      text("p", a.contract === JOB_TRACE ? "Witness lead · review a report, inspect a possible lead, and choose whether to survey a follow-up for 80 or hand the unresolved lead off for 25. " + (a.data.contactMode ? "A civilian contact is simulated at the follow-up. An optional later tip may lead to a witness, a second unverified interview and an on-foot escort. You can request an unarmed civilian support contact and, at the meeting point, call pedestrian responders for an optional guarded handoff; no cruiser traffic, custody procedure or arrest is simulated." : "No missing person, contact, suspect, or responder NPC is simulated in this scenario.") + " Completed, filed cases advance the five-stage detective career and its pay bonus; unresolved handoffs and withdrawals never count. No timer. Routes were checked on foot when offered." : a.contract === JOB_SCENE_CASE ? "Crime-scene case · visit a real parked vehicle, document its observed make and location, then file the lead. A scene observation is not proof of ownership or guilt. Unresolved leads may be handed off; no timer." : a.contract === JOB_POI_FOLLOWUP ? "Person-of-interest follow-up · review a returning witness lead, interview the named person, and file their statement without presuming guilt. Unresolved handoff is available; no timer." : a.contract === JOB_MEDICAL ? "Medical courier · collect a case and deliver to " + String(a.data.clinic?.name || "the medical entrance") + ". Full delivery pays 140 and adds up to six medicine to shared town stock (capped). Economy scenario only. " + (a.data.recipientMode ? "A damageable civilian clinic contact must meet you at the entrance; not a doctor or responder. " : "No recipient NPC is simulated. ") + "After pickup you can request an abstract handoff for 35, with no stock effect." : a.contract === JOB_PRIORITY ? "Priority courier · collect a temperature-sensitive case and assess its condition. Choose a direct delivery for 120, or a relay transfer and delivery for 155. No timer; all offered routes were checked on foot. Relay and handoff are abstract, not simulated NPCs." : "Supply courier · collect a case, then deliver it. No timer. Complete delivery for 90; after pickup, request an abstract handoff for 30. Local routes were checked on foot when offered.");
+      button("ACCEPT", () => { const r=jobAccept(a.id); if (r.ok) { if(typeof MAPV!=="undefined") MAPV.lastSig=""; jdClose(); jdNotice(a.contract===JOB_TRACE ? "CALL ACCEPTED · Follow the cyan marker to review the report." : a.contract===JOB_SCENE_CASE ? "CASE ACCEPTED · Follow the cyan marker to the parked vehicle." : a.contract===JOB_POI_FOLLOWUP ? "FOLLOW-UP ACCEPTED · Follow the cyan marker to review the returning witness lead." : "CALL ACCEPTED · Follow the cyan marker to collect supplies."); } else jdOpen(r.why); });
       button("DECLINE", () => { const r=jobWithdraw(a.id); jdOpen(r.ok ? "Call declined; no penalty." : r.why); });
     } else if(a.contract===JOB_TRACE) {
       const objective=a.phase==="search" && a.data.inquiry?.status==="open" ? "find the person the witness described" : a.phase==="scene" ? "review the report" : a.phase==="clue" ? "inspect the possible lead" : a.phase==="follow" ? (a.data.contactMode ? "interview the contact" : "survey the follow-up site") : a.phase==="search" ? "search for the missing witness" : a.phase==="escort" ? "escort the witness to the meeting point" : "review the incident";
@@ -1007,6 +1023,8 @@ function jdOpen(message) {
       text("p",(a.phase==="follow" && a.data.contactMode) || ["search","escort"].includes(a.phase) ? "If a person is unreachable, hand off the unresolved lead or withdraw without penalty." : "If the objective is blocked, find a new site or withdraw without penalty.");
       if(!((a.phase==="follow" && a.data.contactMode) || ["search","escort"].includes(a.phase))) button("FIND NEW OBJECTIVE SITE",()=>{const r=jdReplan(a.id,a.phase);jdOpen(r.ok ? "New objective saved. Follow the cyan marker." : r.why);});
       button("WITHDRAW · NO PAY",()=>{const r=jobWithdraw(a.id);if(r.ok && typeof MAPV!=="undefined")MAPV.lastSig="";jdOpen(r.ok ? "Investigation withdrawn; no pay." : r.why);});
+    } else if((a.contract===JOB_SCENE_CASE||a.contract===JOB_POI_FOLLOWUP) && typeof jdDetectivePanel==="function") {
+      jdDetectivePanel(a,{text,button});
     } else {
       const dropped = jdCaseDropped(a);
       const objective = dropped ? "recover your case" : a.phase === "pickup" ? "collect the case" : a.phase === "assessment" ? "assess the case" : a.phase === "relay" ? "transfer to insulated packaging" : "deliver the case";
@@ -1052,7 +1070,7 @@ function jdWorld(g) {
   }
   if (Math.hypot(player.x-p.x,player.y-p.y)>800) return;
   g.save(); g.translate(p.x,p.y);g.strokeStyle="#21d4ef";g.lineWidth=2;g.beginPath();g.arc(0,0,14+2*Math.sin(runTime*3),0,7);g.stroke();
-  if(!(a.contract===JOB_TRACE && ["follow","search"].includes(a.phase) && a.data.contactMode)) {
+  if(!(a.contract===JOB_POI_FOLLOWUP&&a.phase==="approach")&&!(a.contract===JOB_TRACE && ["follow","search"].includes(a.phase) && a.data.contactMode)) {
     g.fillStyle=a.contract===JOB_TRACE ? "#e9f7ec" : "#204656";g.fillRect(-9,-13,18,13);g.strokeRect(-9,-13,18,13);g.fillStyle=a.contract===JOB_TRACE ? "#215160" : "#a6f7ff";g.fillRect(-5,-10,10,2);
   }g.restore();
 }
@@ -1067,7 +1085,7 @@ function jdScreen(g) {
 }
 (function jdWire() {
   const fit=window.findInteractTarget,twi=window.triggerWorldInteract;
-  window.findInteractTarget=function(){const a=jdActive(),p=jdTarget(a);if(a&&p&&jdNear(a))return {kind:"jobSupply",x:p.x,y:p.y,label:a.contract===JOB_TRACE?(a.phase==="scene"?"REVIEW REPORT":a.phase==="clue"?"INSPECT LEAD":a.phase==="search"?(a.data.inquiry?.status==="open"?"TALK TO PERSON":"TALK TO WITNESS"):a.phase==="escort"?"ESCORT STATUS":a.data.contactMode?"TALK TO CONTACT":"SURVEY SITE"):jdCaseDropped(a)?"RECOVER CASE":a.phase==="pickup"?"COLLECT SUPPLIES":a.phase==="assessment"?"ASSESS SUPPLIES":a.phase==="relay"?"TRANSFER SUPPLIES":"DELIVER SUPPLIES"};if(jdWitnessAidReady(a)){const w=JD_CONTACT.actor.w;return {kind:"jobSupply",x:w.x,y:w.y,label:"HELP WITNESS"};}return fit.apply(this,arguments);};
+  window.findInteractTarget=function(){const a=jdActive(),p=jdTarget(a);if(a&&p&&jdNear(a))return {kind:"jobSupply",x:p.x,y:p.y,label:a.contract===JOB_TRACE?(a.phase==="scene"?"REVIEW REPORT":a.phase==="clue"?"INSPECT LEAD":a.phase==="search"?(a.data.inquiry?.status==="open"?"TALK TO PERSON":"TALK TO WITNESS"):a.phase==="escort"?"ESCORT STATUS":a.data.contactMode?"TALK TO CONTACT":"SURVEY SITE"):(a.contract===JOB_SCENE_CASE||a.contract===JOB_POI_FOLLOWUP)?jdDetectiveLabel(a):jdCaseDropped(a)?"RECOVER CASE":a.phase==="pickup"?"COLLECT SUPPLIES":a.phase==="assessment"?"ASSESS SUPPLIES":a.phase==="relay"?"TRANSFER SUPPLIES":"DELIVER SUPPLIES"};if(jdWitnessAidReady(a)){const w=JD_CONTACT.actor.w;return {kind:"jobSupply",x:w.x,y:w.y,label:"HELP WITNESS"};}return fit.apply(this,arguments);};
   window.triggerWorldInteract=function(){const a=jdActive();if(a&&jdNear(a)){jdArrive();return;}if(jdWitnessAidReady(a)){jdOpen();return;}return twi.apply(this,arguments);};
   V10.onStep.push(dt=>{
     if(CITY.on&&runActive&&player) {
@@ -1079,11 +1097,13 @@ function jdScreen(g) {
       if(support && support.w && support.alive && !JD_SUPPORT.ride && JD_SUPPORT.saveTimer>=3) {JD_SUPPORT.saveTimer=0;jdSupportCheckpoint(support);} // 15.2.1: never freeze the on-foot anchor to a car seat
       const clinic=jdClinicSync(jdActive());JD_CLINIC.saveTimer+=dt;
       if(clinic && clinic.w && clinic.alive && JD_CLINIC.saveTimer>=3) {JD_CLINIC.saveTimer=0;jdClinicCheckpoint(clinic);}
+      const poi=typeof jdPoiSync==="function"?jdPoiSync(jdActive()):null;if(typeof JD_POI!=="undefined")JD_POI.saveTimer+=dt;
+      if(poi&&poi.w&&poi.alive&&typeof JD_POI!=="undefined"&&JD_POI.saveTimer>=3){JD_POI.saveTimer=0;jdPoiCheckpoint(poi);}
     } else {jdContactClear();jdInquiryClear(false);jdSupportClear(false);jdClinicClear(false);}
   });
   V10.onRenderWorld.push(g=>{if(CITY.on&&runActive&&player){try{JD_SUPPORT.view=camView(0);}catch(e){JD_SUPPORT.view=null;}jdWorld(g);}});
   V10.onRenderScreen.push(g=>{if(CITY.on&&runActive&&player)jdScreen(g);});
-  V10.onRunReset.push(()=>{if(JD_CONTACT.actor?.alive)jdContactCheckpoint(JD_CONTACT.actor);if(JD_INQUIRY.actor?.alive)jdInquiryCheckpoint(JD_INQUIRY.actor);if(JD_SUPPORT.actor?.alive)jdSupportCheckpoint(JD_SUPPORT.actor);if(JD_CLINIC.actor?.alive)jdClinicCheckpoint(JD_CLINIC.actor);jdClose();jdContactClear();jdInquiryClear(false);jdSupportClear(false);jdClinicClear(false);JD_SUPPORT.view=null;JOB_DISPATCH.message="";});
+  V10.onRunReset.push(()=>{if(JD_CONTACT.actor?.alive)jdContactCheckpoint(JD_CONTACT.actor);if(JD_INQUIRY.actor?.alive)jdInquiryCheckpoint(JD_INQUIRY.actor);if(JD_SUPPORT.actor?.alive)jdSupportCheckpoint(JD_SUPPORT.actor);if(JD_CLINIC.actor?.alive)jdClinicCheckpoint(JD_CLINIC.actor);if(typeof JD_POI!=="undefined"&&JD_POI.actor?.alive)jdPoiCheckpoint(JD_POI.actor);jdClose();jdContactClear();jdInquiryClear(false);jdSupportClear(false);jdClinicClear(false);if(typeof JD_POI!=="undefined")jdPoiClear(false);JD_SUPPORT.view=null;JOB_DISPATCH.message="";});
   V10.onRunStart.push(p=>{const seed=runSeed; setTimeout(()=>jdMaybeStartPreferred(p,seed),600);});
   window.addEventListener("keydown", e => { if(e.key === "Escape" && JOB_DISPATCH.panel) { e.preventDefault(); e.stopImmediatePropagation(); jdClose(); } }, true);
 })();

@@ -43,7 +43,7 @@ const JD_RANKS = [
   {name:"Lead investigator", cases:9, bonus:0.15},
   {name:"Homicide consultant", cases:12, bonus:0.2}
 ];
-const JD_COUNTED = ["lead_filed","contact_filed","witness_safe","witness_supported","witness_protected"];
+const JD_COUNTED = ["lead_filed","contact_filed","witness_safe","witness_supported","witness_protected","scene_filed","poi_filed","poi_surrendered","poi_arrested"];
 function jdCareerCases(state) {
   const c = state && state.career, o = c && typeof c === "object" && !Array.isArray(c) ? c.detective : null;
   const n = o && typeof o === "object" && !Array.isArray(o) ? o.cases : null;
@@ -69,14 +69,31 @@ function jdCareerPanelRank() {
   const r = jobReadState();
   return jdCareerRank(r.ok ? r.state : null);
 }
+function jdCareerFinish(s,outcome,pay){
+  const counting=JD_COUNTED.includes(outcome),rank=jdCareerRank(s);
+  if(counting){
+    const prev=s.career&&typeof s.career==="object"&&!Array.isArray(s.career)?s.career:{};
+    s.career=Object.assign({},prev,{detective:{cases:jdCareerCases(s)+1}});
+  }
+  return {pay:counting?Math.round(pay*(1+rank.bonus)):pay};
+}
 JOB_CORE.finishHooks = Object.assign(JOB_CORE.finishHooks || {}, {
   [JOB_TRACE]: (s, a, outcome, pay) => {
-    const counting = JD_COUNTED.includes(outcome), rank = jdCareerRank(s);
-    if (counting) {
-      const prev = s.career && typeof s.career === "object" && !Array.isArray(s.career) ? s.career : {};
-      s.career = Object.assign({}, prev, {detective: {cases: jdCareerCases(s) + 1}});
-    }
-    return {pay: counting ? Math.round(pay * (1 + rank.bonus)) : pay};
+    const result=jdCareerFinish(s,outcome,pay);
+    const secured=["witness_safe","witness_supported","witness_protected"].includes(outcome);
+    if(secured&&!jdRememberWitness(s,a,outcome))throw new Error("witness memory could not be saved");
+    if(outcome==="trace_handoff"&&a.data?.witnessState&&JD_CONTACT.role==="witness")jdRememberWitness(s,a,outcome);
+    return result;
+  },
+  [JOB_SCENE_CASE]: (s, a, outcome, pay) => {
+    const result=jdCareerFinish(s,outcome,pay);
+    if(outcome==="scene_filed"&&!jdRecordSceneEvidence(s,a,outcome))throw new Error("linked scene evidence could not be saved");
+    return result;
+  },
+  [JOB_POI_FOLLOWUP]: (s, a, outcome, pay) => {
+    const result=jdCareerFinish(s,outcome,pay);
+    if(["poi_filed","poi_escaped","poi_surrendered","poi_arrested"].includes(outcome)&&!jdRecordPoiAccountability(s,a,outcome))throw new Error("accountability record could not be saved");
+    return result;
   }
 });
 jobRegister({id:JOB_COURIER_SHIFT,role:"courier",start:"pickup",
