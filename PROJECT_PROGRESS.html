@@ -1,0 +1,1971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omni-Shift v15 — Project Progress</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --border:#30363d;
+    --text:#e6edf3; --muted:#8b949e; --dim:#6e7681;
+    --blue:#58a6ff; --green:#3fb950; --amber:#d29922; --red:#f85149;
+    --orange:#f0883e; --purple:#bc8cff;
+    --past:#3d444d; --track:#21262d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 18px 80px}
+
+  /* ---------- masthead ---------- */
+  .mast{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px 24px;margin-bottom:22px}
+  .mast-top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;flex-wrap:wrap}
+  h1{font-size:21px;margin:0 0 4px;font-weight:650;letter-spacing:-.01em}
+  .sub{color:var(--muted);font-size:13px;margin:0}
+  .sub b{color:var(--text);font-weight:600}
+  .score{text-align:right;white-space:nowrap}
+  .score-num{font-size:38px;font-weight:700;color:var(--green);line-height:1;letter-spacing:-.02em}
+  .score-lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-top:4px}
+  .scorebar{height:10px;background:var(--track);border-radius:6px;overflow:hidden;margin:18px 0 16px;position:relative}
+  .scorebar-fill{height:100%;background:linear-gradient(90deg,#238636,var(--green));border-radius:6px;transition:width .5s ease}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  button{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:7px;
+    padding:7px 13px;font-size:12.5px;cursor:pointer;font-family:inherit;transition:.15s}
+  button:hover{background:#262c36;border-color:#484f58}
+  button.on{border-color:var(--blue);color:var(--blue)}
+
+  /* ---------- legend ---------- */
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:16px;padding-top:15px;border-top:1px solid var(--border);
+    font-size:11.5px;color:var(--muted)}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .swatch{width:16px;height:8px;border-radius:2px;display:inline-block}
+
+  /* ---------- group ---------- */
+  .group{margin-bottom:14px}
+  .group-h{font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);
+    margin:26px 0 10px;padding-left:2px;font-weight:600}
+
+  /* ---------- node ---------- */
+  details.node{border:none;margin:0}
+  details.node>summary{
+    list-style:none;cursor:pointer;display:grid;
+    grid-template-columns:18px minmax(0,1fr) 92px 128px 54px;
+    align-items:center;gap:10px;
+    padding:9px 12px;border-radius:8px;border:1px solid transparent;
+    transition:background .12s,border-color .12s;
+  }
+  details.node>summary::-webkit-details-marker{display:none}
+  details.node>summary:hover{background:var(--panel);border-color:var(--border)}
+  details.node>summary:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+  .caret{color:var(--dim);font-size:10px;transition:transform .15s;user-select:none;display:inline-block}
+  details[open]>summary>.caret{transform:rotate(90deg)}
+  .caret.leaf{visibility:hidden}
+
+  .title{min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .title .t{font-weight:550;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .node.lvl0 .title .t{font-size:15.5px;font-weight:650}
+  .node.lvl1 .title .t{font-size:14.5px}
+  .node.lvl2 .title .t{font-size:13.5px;font-weight:450;color:#c9d1d9}
+  .id{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;color:var(--dim)}
+
+  .badge{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;padding:2px 6px;border-radius:4px;
+    border:1px solid;font-weight:700;white-space:nowrap;line-height:1.4}
+  .b-locked{color:var(--green);border-color:#238636;background:#12261a}
+  .b-complete{color:var(--green);border-color:#238636;background:#12261a}
+  .b-progress{color:var(--blue);border-color:#1f6feb;background:#0d1b2e}
+  .b-next{color:var(--bg);border-color:var(--blue);background:var(--blue)}
+  .b-blocked{color:var(--red);border-color:#8b2b25;background:#2a1214}
+  .b-open{color:var(--orange);border-color:#8a4b1d;background:#2a1a0f}
+  .b-deferred{color:var(--amber);border-color:#7d5a10;background:#241d0a}
+  .b-not-started{color:var(--dim);border-color:#30363d;background:#161b22}
+  .b-pending{color:var(--purple);border-color:#5c3d99;background:#1a1229}
+
+  /* ---------- bar ---------- */
+  .barwrap{position:relative;height:20px;display:flex;align-items:center}
+  .bar{position:relative;height:9px;width:100%;background:var(--track);border-radius:5px;overflow:visible}
+  .bar-past{position:absolute;left:0;top:0;height:100%;background:var(--past);border-radius:5px 0 0 5px}
+  .bar-new{position:absolute;top:0;height:100%;border-radius:0 5px 5px 0}
+  .bar-solo{position:absolute;left:0;top:0;height:100%;border-radius:5px}
+  .tick{position:absolute;top:-3px;width:2px;height:15px;background:#6e7681;border-radius:1px;opacity:.75}
+  .tick:hover{background:var(--text);opacity:1}
+  .tick::after{
+    content:attr(data-tip);position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+    background:#010409;border:1px solid var(--border);color:var(--text);font-size:10.5px;
+    padding:3px 7px;border-radius:5px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .12s;z-index:20}
+  .tick:hover::after{opacity:1}
+  .pct{font-variant-numeric:tabular-nums;font-weight:700;font-size:13.5px;text-align:right}
+  .pct.full{color:var(--green)}
+  .pct.zero{color:var(--dim);font-weight:500}
+  .pct.mid{color:var(--blue)}
+
+  /* ---------- meta line ---------- */
+  .meta{grid-column:2 / -1;display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--dim);
+    margin-top:-3px;padding-bottom:2px}
+  .meta .hist{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--muted)}
+  .meta .delta{color:var(--green);font-weight:700}
+  .note{grid-column:2 / -1;font-size:12.5px;color:var(--muted);padding:2px 0 4px;max-width:78ch}
+
+  .children{margin-left:26px;padding-left:14px;border-left:1px solid var(--border)}
+
+  /* ---------- footer ---------- */
+  .foot{margin-top:34px;padding-top:16px;border-top:1px solid var(--border);
+    font-size:11.5px;color:var(--dim);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+  @media (max-width:760px){
+    .wrap{padding:16px 10px 60px}
+    details.node>summary{grid-template-columns:16px minmax(0,1fr) 46px;grid-template-areas:"c t p" ". b b";row-gap:6px}
+    .caret{grid-area:c}.title{grid-area:t}.pct{grid-area:p}
+    .barwrap{grid-area:b;height:14px}
+    .meta,.note{grid-column:1/-1}
+    .children{margin-left:12px;padding-left:10px}
+    .score-num{font-size:30px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="mast">
+    <div class="mast-top">
+      <div>
+        <h1 id="pj-title">—</h1>
+        <p class="sub" id="pj-sub"></p>
+      </div>
+      <div class="score">
+        <div class="score-num" id="score-num">—</div>
+        <div class="score-lbl" id="score-lbl">overall</div>
+      </div>
+    </div>
+    <div class="scorebar"><div class="scorebar-fill" id="scorebar-fill" style="width:0%"></div></div>
+    <div class="controls">
+      <button id="btn-expand">Expand all</button>
+      <button id="btn-collapse">Collapse all</button>
+      <button id="btn-sort" class="on">Sort: recent first</button>
+      <button id="btn-full">Show complete only</button>
+    </div>
+    <div class="legend">
+      <span><i class="swatch" style="background:#3d444d"></i> already done before this report</span>
+      <span><i class="swatch" style="background:#58a6ff"></i> added since last report</span>
+      <span><i class="swatch" style="background:#3fb950"></i> complete</span>
+      <span><i class="swatch" style="background:#6e7681;width:2px;height:14px"></i> past checkpoint (hover)</span>
+    </div>
+  </div>
+
+  <main id="root"></main>
+
+  <div class="foot">
+    <span id="foot-gen"></span>
+    <span>Rendered from embedded JSON · edit only the <code>&lt;script id="data"&gt;</code> block</span>
+  </div>
+
+</div>
+
+<!-- ================================================================
+     DATA BLOCK — the builder replaces everything between these tags.
+     Schema + rules: BUILDER_SPEC_PROGRESS_PAGE.md
+     ================================================================ -->
+<script type="application/json" id="data">
+
+
+
+{
+  "meta": {
+    "project": "Omni-Shift Nexus Survivors",
+    "series": "15.6 — Core careers",
+    "score": 92,
+    "scoreLabel": "fixed-weight v15",
+    "generated": "2026-10-27",
+    "commit": "aa5f7ee",
+    "tag": "15.6-SERIES-LOCKED",
+    "strikes": "2/3 used (locked record)",
+    "note": "15.6 is locked at 92%; 16.0 is the next major revision, planning only."
+  },
+  "groups": [
+    {
+      "name": "Active series — 15.6",
+      "items": [
+        {
+          "id": "15.6",
+          "title": "Core careers",
+          "status": "locked",
+          "lastTouched": "2026-10-27",
+          "note": "15.6.1–15.6.6 are locked; the committed-tree suite passed 482/482 and 15.6-SERIES-LOCKED is tagged. 16.0 is the next major revision; planning only, no implementation begun.",
+          "children": [
+            {
+              "id": "15.6.1",
+              "title": "Patrol career (J01)",
+              "status": "locked",
+              "pct": 100,
+              "lastTouched": "2026-10-27",
+              "note": "J01 patrol-career implementation is locked. The 100% is implementation completeness; separate pursuit and logistics work remains deferred.",
+              "children": [
+                {
+                  "id": "a",
+                  "title": "J01.PATROL feature flag",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.1-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "b",
+                  "title": "Five-stage ladder (Cadet → Watch Commander)",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.1-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "c",
+                  "title": "Progression pay in the single finish transaction",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.1-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "d",
+                  "title": "Shift structure — on duty, calls, off-duty debrief",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.1-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "e",
+                  "title": "Persistence + old-save migration to Cadet",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.1-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "f",
+                  "title": "Gate — staged shift runs end to end, advances once per booked stop",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.1-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "g",
+                  "title": "Gate — 15.3.2 / 15.3.3 fixtures still pass unchanged",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.1-LOCKED"
+                    }
+                  ]
+                }
+              ],
+              "history": [
+                {
+                  "date": "2026-10-27",
+                  "pct": 100,
+                  "note": "15.6.1-LOCKED"
+                }
+              ]
+            },
+            {
+              "id": "15.6.2",
+              "title": "Fire & structure damage (foundation)",
+              "status": "locked",
+              "pct": 100,
+              "lastTouched": "2026-10-27",
+              "note": "The bounded fire and structure-damage foundation is locked, including persistence, repair, route checks and guarded MI-1 evidence.",
+              "children": [
+                {
+                  "id": "a",
+                  "title": "Material profiles (walls, floors, doors)",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.2-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "b",
+                  "title": "Penetration + shot continuation by material",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.2-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "c",
+                  "title": "Bounded structural damage (no full collapse)",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.2-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "d",
+                  "title": "Fire hazard — spreads in bounds, damages, extinguishable",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.2-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "e",
+                  "title": "Persistence + repair, no unreachable mission sites",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.2-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "f",
+                  "title": "Gate — no frame-time regression under MI-1 quiescence",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.2-LOCKED"
+                    }
+                  ]
+                }
+              ],
+              "history": [
+                {
+                  "date": "2026-10-27",
+                  "pct": 100,
+                  "note": "15.6.2-LOCKED"
+                }
+              ]
+            },
+            {
+              "id": "15.6.3",
+              "title": "Firefighter career (J04)",
+              "status": "locked",
+              "pct": 100,
+              "lastTouched": "2026-10-27",
+              "note": "J04 firefighter call is locked. J04.FIRE remains OFF until the staged 15.6 release.",
+              "children": [
+                {
+                  "id": "a",
+                  "title": "J04.FIRE flag + career ladder",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.3-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "b",
+                  "title": "Structure-fire call: assess → rescue → extinguish → hand off",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.3-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "c",
+                  "title": "Civilian rescue via existing J02 escort system",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.3-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "d",
+                  "title": "Equipment interactions on the existing fire engine",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.3-LOCKED"
+                    }
+                  ]
+                },
+                {
+                  "id": "e",
+                  "title": "Defined failure endings",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.3-LOCKED"
+                    }
+                  ]
+                }
+              ],
+              "history": [
+                {
+                  "date": "2026-10-27",
+                  "pct": 100,
+                  "note": "15.6.3-LOCKED"
+                }
+              ]
+            },
+            {
+              "id": "15.6.4",
+              "title": "Tactical response (J03)",
+              "status": "locked",
+              "lastTouched": "2026-11-10",
+              "note": "Playable J03 tactical response is locked; J03.TACTICAL is ON after the 21/21 focused gate. Full v15: 258/259; H36 remains a reproduced baseline red.",
+              "children": [
+                {
+                  "id": "a",
+                  "title": "J03.TACTICAL flag + five-stage career ladder",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-11-10",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.4-part1 foundation"
+                    },
+                    {
+                      "date": "2026-11-10",
+                      "pct": 100,
+                      "note": "15.6.4-LOCKED · J03.TACTICAL enabled after the gate"
+                    }
+                  ],
+                  "note": "J03.TACTICAL is ON after the acceptance gate; the five-stage ladder and save guards are tested."
+                },
+                {
+                  "id": "b",
+                  "title": "Validated barricaded-building call plan, exterior route and perimeter checkpoint",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-11-10",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 0,
+                      "note": "Reviewed; still not started"
+                    },
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.4-part2 · validated call planning and perimeter"
+                    },
+                    {
+                      "date": "2026-11-10",
+                      "pct": 100,
+                      "note": "15.6.4-LOCKED · live call uses validated real-site plan"
+                    }
+                  ],
+                  "note": "Real residence, exterior door, reachable perimeter and interior positions are validated for the call."
+                },
+                {
+                  "id": "c",
+                  "title": "Negotiation with peaceful, forced-entry and escalation outcomes",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-11-10",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 0,
+                      "note": "Reviewed; still not started"
+                    },
+                    {
+                      "date": "2026-11-10",
+                      "pct": 100,
+                      "note": "15.6.4-LOCKED · Negotiation, forced entry and delayed-escape outcomes accepted"
+                    }
+                  ],
+                  "note": "Peaceful surrender and final-warning forced entry work; delay can trigger reachable suspect escape."
+                },
+                {
+                  "id": "d",
+                  "title": "Entry reuses existing squad movement; no pathfinding rebuild",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-11-10",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 0,
+                      "note": "Reviewed; still not started"
+                    },
+                    {
+                      "date": "2026-11-10",
+                      "pct": 100,
+                      "note": "15.6.4-LOCKED · Existing movement and same-site squad entry accepted"
+                    }
+                  ],
+                  "note": "Entry uses existing on-foot movement and the real door; an existing squad member reaches the same building."
+                },
+                {
+                  "id": "e",
+                  "title": "Civilian safety reuses warning and shot-attribution systems",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-11-10",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 0,
+                      "note": "Reviewed; still not started"
+                    },
+                    {
+                      "date": "2026-11-10",
+                      "pct": 100,
+                      "note": "15.6.4-LOCKED · Civilian safety and harm attribution integrated"
+                    }
+                  ],
+                  "note": "Pinned occupants use existing warning and damage attribution; civilian harm blocks clean-call credit."
+                },
+                {
+                  "id": "f",
+                  "title": "Failure outcome schema and partial pay; no clean-call credit",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-11-10",
+                  "note": "Named partial outcomes preserve partial pay and block clean-call credit.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.4-part1 outcome schema"
+                    },
+                    {
+                      "date": "2026-11-10",
+                      "pct": 100,
+                      "note": "15.6.4-LOCKED · partial outcome schema connected to live triggers"
+                    }
+                  ]
+                },
+                {
+                  "id": "g",
+                  "title": "Live failure triggers are reachable from the actual call",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-11-10",
+                  "note": "Civilian harm, suspect harm, physical suspect escape and forced-entry failure are reachable from the live call.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 0,
+                      "note": "Reviewed; live trigger not started"
+                    },
+                    {
+                      "date": "2026-11-10",
+                      "pct": 100,
+                      "note": "15.6.4-LOCKED · Live failure triggers accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "h",
+                  "title": "Atomic clean debrief payout and career-call count",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-11-10",
+                  "note": "Clean payout and career count commit once; duplicates are refused and earlier receipts remain valid.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.4-part1 debrief foundation"
+                    },
+                    {
+                      "date": "2026-11-10",
+                      "pct": 100,
+                      "note": "15.6.4-LOCKED · atomic finish verified in playable flow"
+                    }
+                  ]
+                },
+                {
+                  "id": "i",
+                  "title": "Player-facing debrief, continuation and checkpoint/reload gate",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-11-10",
+                  "note": "Player-facing debrief, continuation and reload/checkpoint acceptance pass without duplicate actors or debrief.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 0,
+                      "note": "Reviewed; live continuation not started"
+                    },
+                    {
+                      "date": "2026-11-10",
+                      "pct": 100,
+                      "note": "15.6.4-LOCKED · Debrief, continuation and checkpoint/reload accepted"
+                    }
+                  ]
+                }
+              ],
+              "history": [
+                {
+                  "date": "2026-10-27",
+                  "pct": 33,
+                  "note": "15.6.4-part1 career foundation; full call remains open"
+                },
+                {
+                  "date": "2026-10-27",
+                  "pct": 44,
+                  "note": "15.6.4-part2 · validated call planner and perimeter"
+                },
+                {
+                  "date": "2026-11-10",
+                  "pct": 100,
+                  "note": "15.6.4-LOCKED · playable tactical response accepted"
+                }
+              ],
+              "pct": 100
+            },
+            {
+              "id": "15.6.5",
+              "title": "Paramedic (J05)",
+              "status": "locked",
+              "pct": 100,
+              "lastTouched": "2026-10-27",
+              "note": "J05 EMT is complete and released after the full acceptance gate: multi-casualty response, triage, treatment, ambulance transport, validated hospital handoff, partial failure paths, reload-safe debrief and shift continuation.",
+              "children": [
+                {
+                  "id": "a",
+                  "title": "J05.EMT flag + career ladder",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "J05.EMT and J05 career gates are ON after acceptance; the five-stage career ladder and fail-closed save handling are verified.",
+                  "history": [
+                    {
+                      "date": "2026-11-10",
+                      "pct": 100,
+                      "note": "15.6.5-part1 · J05 EMT ladder and gate tested"
+                    },
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.5-LOCKED · full J05 acceptance passed; release gates ON"
+                    }
+                  ]
+                },
+                {
+                  "id": "b",
+                  "title": "Multi-casualty incident call",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Two real reachable incident vehicles and three unique, safe casualty sites are planned and persisted.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.5-LOCKED · full J05 acceptance passed; release gates ON"
+                    }
+                  ]
+                },
+                {
+                  "id": "c",
+                  "title": "Triage ordering with a real cost for getting it wrong",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Severity-ordered triage persists across reload; wrong-first response records a cost and blocks clean credit.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.5-LOCKED · full J05 acceptance passed; release gates ON"
+                    }
+                  ]
+                },
+                {
+                  "id": "d",
+                  "title": "Treatment + transport to a validated hospital",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Treatment, patient loading, ambulance transport and J09-validated hospital handoff run end to end.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.5-LOCKED · full J05 acceptance passed; release gates ON"
+                    }
+                  ]
+                },
+                {
+                  "id": "e",
+                  "title": "Ambulance on the existing emergency-vehicle pattern",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "A real controllable ambulance is established, rendered and used for transport and handoff.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.5-LOCKED · full J05 acceptance passed; release gates ON"
+                    }
+                  ]
+                },
+                {
+                  "id": "f",
+                  "title": "Failure paths — casualty lost, unsafe scene, patient lost in transport",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Each reachable partial outcome is separately recorded, pays correctly and blocks clean career credit.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.5-LOCKED · full J05 acceptance passed; release gates ON"
+                    }
+                  ]
+                },
+                {
+                  "id": "g",
+                  "title": "Debrief, atomic payout, career credit and shift continuation",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Clean payout and completed-call credit commit once; a second distinct call preserves prior receipts and promotes once.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.5-LOCKED · full J05 acceptance passed; release gates ON"
+                    }
+                  ]
+                },
+                {
+                  "id": "h",
+                  "title": "Checkpoint reload and duplicate-safe acceptance gate",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Response through debrief checkpoints survive reload without duplicate patients, payouts or career credit.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.5-LOCKED · full J05 acceptance passed; release gates ON"
+                    }
+                  ]
+                }
+              ],
+              "history": [
+                {
+                  "date": "2026-11-10",
+                  "pct": 0,
+                  "note": "Next after 15.6.4-LOCKED; implementation not started"
+                },
+                {
+                  "date": "2026-11-10",
+                  "pct": 20,
+                  "note": "15.6.5-part1 · career foundation; playable call remains ahead"
+                },
+                {
+                  "date": "2026-10-27",
+                  "pct": 100,
+                  "note": "15.6.5-LOCKED · full J05 acceptance passed; release gates ON"
+                }
+              ]
+            },
+            {
+              "id": "15.6.6",
+              "title": "Detective completion (J02)",
+              "status": "locked",
+              "pct": 100,
+              "lastTouched": "2026-10-27",
+              "history": [
+                {
+                  "date": "2026-11-05",
+                  "pct": 24,
+                  "note": "witness investigation enabled"
+                },
+                {
+                  "date": "2026-11-05",
+                  "pct": 55,
+                  "note": "five-stage career + guarded handoff shipped at 15.2.3-LOCKED"
+                },
+                {
+                  "date": "2026-10-27",
+                  "pct": 100,
+                  "note": "J02 scene and person-of-interest follow-up is locked. Scene/POI gates are ON; parent J02 remains OFF. Allegations and observations are not proof or guilt findings."
+                },
+                {
+                  "date": "2026-10-27",
+                  "pct": 100,
+                  "note": "15.6.6-LOCKED · J02A–H accepted; parent J02 remains OFF"
+                }
+              ],
+              "note": "J02 scene and person-of-interest follow-up is locked. Scene/POI gates are ON; parent J02 remains OFF. Allegations and observations are not proof or guilt findings.",
+              "children": [
+                {
+                  "id": "a",
+                  "title": "Parked-vehicle scene record: presence only, no ownership or guilt inference",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Filed scene observations link to a location and vehicle without identifying an owner or establishing guilt.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · scene observation accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "b",
+                  "title": "Cross-case witness and scene linkage; repeat interviews and distinct outcomes",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Durable case records preserve identity and linked observations across the scoped follow-ups.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · linked case records accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "d",
+                  "title": "Witness investigation and guarded handoff from the earlier J02 scope",
+                  "pct": 100,
+                  "status": "locked",
+                  "lastTouched": "2026-10-27",
+                  "note": "Earlier witness investigation and handoff remain part of the completed detective career."
+                },
+                {
+                  "id": "e",
+                  "title": "Five-stage detective career ladder; eligible filed cases only",
+                  "pct": 100,
+                  "status": "locked",
+                  "lastTouched": "2026-10-27",
+                  "note": "Career progression and rank pay retain their accepted transaction and corrupt-save guards."
+                },
+                {
+                  "id": "f",
+                  "title": "Person-of-interest interview, denial, escape and follow-up outcomes",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "A denial remains a denial; escaped leads can be approached in a later follow-up.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "g",
+                  "title": "Voluntary station handoff and investigation-only arrest are distinct outcomes",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "An investigative arrest requires a secured witness lead and linked scene observation; it is not a court finding.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "h",
+                  "title": "Outcome linkage survives save/reload and only eligible records earn career credit",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Unresolved handoffs, escapes and withdrawals do not earn clean-case credit.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "i",
+                  "title": "Acceptance: J02A–H 8/8; witness regressions 24/24; detective ladder 6/6",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Focused acceptance and unchanged witness regressions passed; prior first failures remain retained.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "id": "15.6.7",
+              "title": "Series lock",
+              "status": "locked",
+              "pct": 100,
+              "lastTouched": "2026-10-27",
+              "note": "Series lock completed: 482/482 committed-tree gate, 15.6 tags applied, recovery bundle verified, archive checksummed, report issued.",
+              "children": [
+                {
+                  "id": "a",
+                  "title": "Committed-tree in-scope gate: 482/482; zero failures or deferrals",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "MI-1 guarded V17/D01 measurements passed on in-limit attempts; refusals remain DEFERRED.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "b",
+                  "title": "Consolidated 15.6.1–15.6.6 changelog and acceptance record",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Scope, acceptance results, omissions and boundaries are recorded in CHANGELOG_v15.md and the ceremony report.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "c",
+                  "title": "Cache-bumped committed tree verified (78 script cache keys)",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Committed-tree source manifest was unchanged; cache keys are 15.6.6-locked.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "d",
+                  "title": "15.6-SERIES-LOCKED and 15.6.6-LOCKED tags applied at aa5f7ee",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "The v15 branch points to the same tested commit; worktree is clean.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "e",
+                  "title": "Recovery bundle backed up, refreshed and verified",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "The pre-retirement 15.6.5-part1 SHA is preserved in the changelog and recovery bundle.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "f",
+                  "title": "Series archive created and SHA-256 manifest verified",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "Archive contains the committed source, gate reports, focused evidence, bundle and ceremony report.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                },
+                {
+                  "id": "g",
+                  "title": "Ceremony report issued; score advanced from 85% to 92%",
+                  "pct": 100,
+                  "status": "complete",
+                  "lastTouched": "2026-10-27",
+                  "note": "S10/R20 remain intentional omissions; Trunks remains PARTIAL and OPEN.",
+                  "history": [
+                    {
+                      "date": "2026-10-27",
+                      "pct": 100,
+                      "note": "15.6.6-LOCKED · accepted"
+                    }
+                  ]
+                }
+              ],
+              "history": [
+                {
+                  "date": "2026-10-27",
+                  "pct": 100,
+                  "note": "Series lock completed: 482/482 committed-tree gate, 15.6 tags applied, recovery bundle verified, archive checksummed, report issued."
+                },
+                {
+                  "date": "2026-10-27",
+                  "pct": 100,
+                  "note": "15.6-SERIES-LOCKED · gate, tags, bundle, archive and report complete"
+                }
+              ]
+            }
+          ],
+          "history": [
+            {
+              "date": "2026-10-27",
+              "pct": 55,
+              "note": "15.6.4-part1 started; fixed-weight score unchanged"
+            },
+            {
+              "date": "2026-10-27",
+              "pct": 57,
+              "note": "15.6.4-part2 · planning/perimeter checkpoint added; overall score unchanged"
+            },
+            {
+              "date": "2026-11-10",
+              "pct": 65,
+              "note": "15.6.4-LOCKED · J03 complete; fixed-weight score unchanged"
+            },
+            {
+              "date": "2026-11-10",
+              "pct": 68,
+              "note": "15.6.5-part1 · J05 foundation accepted; fixed-weight score unchanged"
+            },
+            {
+              "date": "2026-10-27",
+              "pct": 100,
+              "note": "15.6.1–15.6.6 are locked; the committed-tree suite passed 482/482 and 15.6-SERIES-LOCKED is tagged. 16.0 is the next major revision; planning only, no implementation begun."
+            }
+          ],
+          "pct": 100
+        }
+      ]
+    },
+    {
+      "name": "Open items — carried forward",
+      "items": [
+        {
+          "id": "TRUNKS",
+          "title": "Trunks startup crash (user-reported)",
+          "status": "open",
+          "pct": 90,
+          "lastTouched": "2026-10-27",
+          "history": [
+            {
+              "date": "2026-11-08",
+              "pct": 25,
+              "note": "5s smoke — no crash"
+            },
+            {
+              "date": "2026-11-08",
+              "pct": 60,
+              "note": "natural unlock + reload probe"
+            },
+            {
+              "date": "2026-11-08",
+              "pct": 90,
+              "note": "12-window matrix: 9 valid Trunks windows, 330s, zero errors"
+            },
+            {
+              "date": "2026-10-27",
+              "pct": 90,
+              "note": "Reconfirmed PARTIAL / OPEN; full assigned matrix remains unrun"
+            }
+          ],
+          "note": "Still PARTIAL and OPEN. The 12-window startup matrix did not validly complete (only 9/12 launches were Trunks); 348 music-resource 404s across 29 URLs remain diagnostic, not proof of resolution.",
+          "children": [
+            {
+              "id": "a",
+              "title": "Cold-cache roster test (11-R)",
+              "pct": 0,
+              "status": "next",
+              "lastTouched": "2026-11-08"
+            },
+            {
+              "id": "b",
+              "title": "9 gameplay windows × 30s, zero errors",
+              "pct": 100,
+              "status": "complete",
+              "lastTouched": "2026-11-08"
+            },
+            {
+              "id": "c",
+              "title": "29×404 cause identified — music catalog, not scripts",
+              "pct": 100,
+              "status": "complete",
+              "lastTouched": "2026-11-08"
+            },
+            {
+              "id": "d",
+              "title": "Long-play soak",
+              "pct": 0,
+              "status": "deferred",
+              "lastTouched": "2026-11-08"
+            }
+          ]
+        },
+        {
+          "id": "MI-1",
+          "title": "MI-1 host-integrity harness",
+          "status": "in-progress",
+          "pct": 80,
+          "lastTouched": "2026-10-27",
+          "history": [
+            {
+              "date": "2026-11-08",
+              "pct": 0,
+              "note": "diagnosis: contended host produced false reds"
+            },
+            {
+              "date": "2026-11-08",
+              "pct": 80,
+              "note": "telemetry + blocking quiescence gate shipped"
+            },
+            {
+              "date": "2026-10-27",
+              "pct": 80,
+              "note": "Guard remains gating; process-tree normalized metric remains non-gating"
+            }
+          ],
+          "note": "The loadavg(1)/CPU-count ≤0.7 refusal gate remains authoritative before every performance assertion. Process-tree CPU-normalized metrics are UNVALIDATED and non-gating; raw assertions remain authoritative.",
+          "children": [
+            {
+              "id": "a",
+              "title": "Contention telemetry in every timing JSON",
+              "pct": 100,
+              "status": "complete",
+              "lastTouched": "2026-11-08"
+            },
+            {
+              "id": "b",
+              "title": "Blocking quiescence gate (HOST_CONTENDED)",
+              "pct": 100,
+              "status": "complete",
+              "lastTouched": "2026-11-08"
+            },
+            {
+              "id": "c",
+              "title": "Three quiescent runs within ±10%",
+              "pct": 100,
+              "status": "complete",
+              "lastTouched": "2026-11-08"
+            },
+            {
+              "id": "d",
+              "title": "Process-tree CPU-normalised metric",
+              "pct": 0,
+              "status": "pending",
+              "lastTouched": "2026-10-27",
+              "note": "UNVALIDATED and non-gating; raw performance readings remain the assertion source.",
+              "history": [
+                {
+                  "date": "2026-10-27",
+                  "pct": 0,
+                  "note": "UNVALIDATED; explicitly non-gating"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "DOC-1",
+          "title": "J01 ledger row understates shipped work",
+          "status": "complete",
+          "pct": 100,
+          "lastTouched": "2026-10-27",
+          "note": "Historical 10% is retained; the current J01 implementation-completeness figure is documented separately.",
+          "history": [
+            {
+              "date": "2026-10-27",
+              "pct": 100,
+              "note": "Confirmed resolved in 15.6.1 documentation"
+            }
+          ]
+        },
+        {
+          "id": "DOC-2",
+          "title": "Tracker pointer cites a frozen snapshot",
+          "status": "complete",
+          "pct": 100,
+          "lastTouched": "2026-10-27",
+          "note": "The tracker is marked historical; current status authority is the deferred index and ratchet ledger.",
+          "history": [
+            {
+              "date": "2026-10-27",
+              "pct": 100,
+              "note": "Confirmed resolved in 15.6.1 documentation"
+            }
+          ]
+        },
+        {
+          "id": "DISC",
+          "title": "Disk headroom",
+          "status": "complete",
+          "pct": 100,
+          "lastTouched": "2026-10-27",
+          "note": "15.6.7 archive completed. Persisted workspace measured 105M after archiving, below the 118M trigger and 128M snapshot cap."
+        }
+      ]
+    },
+    {
+      "name": "Completed series — most recent first",
+      "items": [
+        {
+          "id": "15.5",
+          "title": "Touch driving & responsive HUD",
+          "status": "locked",
+          "pct": 100,
+          "lastTouched": "2026-11-08",
+          "history": [
+            {
+              "date": "2026-11-07",
+              "pct": 0,
+              "note": "15.5.1 touch baseline"
+            },
+            {
+              "date": "2026-11-07",
+              "pct": 60,
+              "note": "15.5.2–15.5.5 levers"
+            },
+            {
+              "date": "2026-11-08",
+              "pct": 100,
+              "note": "15.5.6-SERIES-LOCKED · 440/440"
+            }
+          ],
+          "note": "Historically locked at 85% overall. The later 15.6-SERIES-LOCKED milestone advances the current fixed-weight v15 score to 92%."
+        },
+        {
+          "id": "15.4",
+          "title": "Squad motion — curb sense, formations, routing",
+          "status": "locked",
+          "pct": 100,
+          "lastTouched": "2026-11-07",
+          "history": [
+            {
+              "date": "2026-11-07",
+              "pct": 33,
+              "note": "15.4.1 curb sense · T21 25→34"
+            },
+            {
+              "date": "2026-11-07",
+              "pct": 66,
+              "note": "15.4.2 file formations · T21 34→42"
+            },
+            {
+              "date": "2026-11-07",
+              "pct": 100,
+              "note": "15.4.5-LOCKED · T21 42→50"
+            }
+          ],
+          "note": "Three slices of T21 plus the integration lock. Pack 240/240, gauntlet 19/19. Overall 71% → 78%."
+        },
+        {
+          "id": "15.3",
+          "title": "Dispatch, patrol and booking",
+          "status": "locked",
+          "pct": 100,
+          "lastTouched": "2026-11-06",
+          "history": [
+            {
+              "date": "2026-11-06",
+              "pct": 33,
+              "note": "15.3.1 durable actors · T19 32→55"
+            },
+            {
+              "date": "2026-11-06",
+              "pct": 66,
+              "note": "15.3.2 traffic stops"
+            },
+            {
+              "date": "2026-11-06",
+              "pct": 100,
+              "note": "15.3.3-LOCKED driven dispatch unit · T18 28→60"
+            }
+          ],
+          "note": "The whole stop machine: radar, signal, pull-over, walk-up, custody, booking, tow, and a driven unit with an honest collector."
+        },
+        {
+          "id": "15.2",
+          "title": "Careers — couriers and detective",
+          "status": "locked",
+          "pct": 100,
+          "lastTouched": "2026-11-05",
+          "history": [
+            {
+              "date": "2026-11-05",
+              "pct": 33,
+              "note": "15.2.1 loaner vehicles"
+            },
+            {
+              "date": "2026-11-05",
+              "pct": 66,
+              "note": "15.2.2 courier ladder · J09 59→80"
+            },
+            {
+              "date": "2026-11-05",
+              "pct": 100,
+              "note": "15.2.3-LOCKED detective career · J02 24→55"
+            }
+          ],
+          "note": "J02 and J09 shipped. These two are the working template the 15.6 careers will follow."
+        },
+        {
+          "id": "15.1",
+          "title": "Convoy and stability",
+          "status": "locked",
+          "pct": 100,
+          "lastTouched": "2026-11-04",
+          "note": "Convoy parking solved, T22 switched on at 15.1.4-LOCKED, 19/19 gauntlet. Overall 50% → 57%."
+        },
+        {
+          "id": "15.0",
+          "title": "Baseline and Omega breakpoint",
+          "status": "locked",
+          "pct": 100,
+          "lastTouched": "2026-11-03",
+          "note": "The 15.0.99-OMEGA verification breakpoint. Fixed-weight baseline of 50%."
+        }
+      ]
+    },
+    {
+      "name": "Feature ledger — current standing",
+      "items": [
+        {
+          "id": "T21",
+          "title": "Squad and faction tactics/navigation",
+          "status": "in-progress",
+          "pct": 50,
+          "lastTouched": "2026-11-07",
+          "history": [
+            {
+              "date": "2026-11-04",
+              "pct": 25,
+              "note": "baseline"
+            },
+            {
+              "date": "2026-11-07",
+              "pct": 34,
+              "note": "15.4.1 curb sense"
+            },
+            {
+              "date": "2026-11-07",
+              "pct": 42,
+              "note": "15.4.2 file formations"
+            },
+            {
+              "date": "2026-11-07",
+              "pct": 50,
+              "note": "15.4.3 sidewalk marching"
+            }
+          ],
+          "note": "Faction pace/interval profiles, cover routing, doors and mount/dismount safety remain deferred."
+        },
+        {
+          "id": "T18",
+          "title": "Police escalation, patrol and logistics",
+          "status": "in-progress",
+          "pct": 60,
+          "lastTouched": "2026-11-06",
+          "history": [
+            {
+              "date": "2026-11-03",
+              "pct": 28,
+              "note": "baseline"
+            },
+            {
+              "date": "2026-11-06",
+              "pct": 60,
+              "note": "15.3.2 + 15.3.3 patrol machine"
+            }
+          ],
+          "note": "Pursuit escalation, multi-unit tactics and impound logistics remain deferred."
+        },
+        {
+          "id": "J02",
+          "title": "Detective career",
+          "status": "in-progress",
+          "pct": 55,
+          "lastTouched": "2026-10-27",
+          "history": [
+            {
+              "date": "2026-11-03",
+              "pct": 24,
+              "note": "baseline"
+            },
+            {
+              "date": "2026-11-05",
+              "pct": 55,
+              "note": "15.2.3-LOCKED"
+            }
+          ],
+          "note": "15.6.6 scoped detective additions are locked; the broader full-item feature estimate remains 55%, and parent J02 is still OFF."
+        },
+        {
+          "id": "J09",
+          "title": "Courier career",
+          "status": "in-progress",
+          "pct": 80,
+          "lastTouched": "2026-11-05",
+          "history": [
+            {
+              "date": "2026-11-03",
+              "pct": 59,
+              "note": "baseline"
+            },
+            {
+              "date": "2026-11-05",
+              "pct": 80,
+              "note": "15.2.2-LOCKED ladder + 7–12 min arc"
+            }
+          ],
+          "note": "Remaining call types stay deferred."
+        },
+        {
+          "id": "T19",
+          "title": "Actor identity and accountability",
+          "status": "in-progress",
+          "pct": 55,
+          "lastTouched": "2026-10-27",
+          "history": [
+            {
+              "date": "2026-11-03",
+              "pct": 32,
+              "note": "baseline"
+            },
+            {
+              "date": "2026-11-06",
+              "pct": 55,
+              "note": "15.3.1-LOCKED durable actors"
+            }
+          ],
+          "note": "15.6.6 shipped linked cross-case witness/scene records; broader actor-identity and accountability work remains open at the existing 55% estimate."
+        },
+        {
+          "id": "J01",
+          "title": "Patrol career",
+          "status": "complete",
+          "pct": 100,
+          "lastTouched": "2026-10-27",
+          "note": "15.6.1 career implementation is complete; 100% means implementation completeness only. Pursuit, multi-unit tactics and extended impound remain deferred.",
+          "history": [
+            {
+              "date": "2026-10-27",
+              "pct": 100,
+              "note": "15.6.1-LOCKED · implementation completeness"
+            }
+          ]
+        },
+        {
+          "id": "T22",
+          "title": "Convoy safety and recovery",
+          "status": "in-progress",
+          "pct": 24,
+          "lastTouched": "2026-11-04",
+          "note": "Enabled in the current profile since 15.1.4. Enabled is not the same as complete."
+        },
+        {
+          "id": "T26",
+          "title": "Touch driving, cruise and tire behaviour",
+          "status": "in-progress",
+          "pct": 70,
+          "lastTouched": "2026-11-08",
+          "note": "Held at 70% under the full-item estimate rule. The five 15.5 verification levers do not complete the original scope."
+        },
+        {
+          "id": "T29",
+          "title": "Performance and vehicle travel",
+          "status": "in-progress",
+          "pct": 35,
+          "lastTouched": "2026-10-27",
+          "note": "The committed-tree D01 performance assertion passed on an MI-1 in-limit attempt; broader performance and vehicle-travel scope remains open."
+        },
+        {
+          "id": "T23",
+          "title": "Material-aware destruction and repair",
+          "status": "not-started",
+          "pct": 5,
+          "lastTouched": "2026-10-27",
+          "note": "15.6.2 shipped the bounded fire and material-damage foundation; broader material-aware destruction/repair remains incomplete at the existing 5% estimate."
+        },
+        {
+          "id": "T17",
+          "title": "Career progression and living-world consequences",
+          "status": "not-started",
+          "pct": 11,
+          "lastTouched": "2026-11-05",
+          "children": [
+            {
+              "id": "c",
+              "title": "Accountability depth across cases (T17 base)",
+              "pct": 10,
+              "status": "not-started",
+              "lastTouched": "2026-11-08",
+              "note": "Broader accountability work remains separate from the scoped J02 outcomes locked in 15.6.6."
+            }
+          ]
+        },
+        {
+          "id": "T30",
+          "title": "Whole-game regression and acceptance gates",
+          "status": "not-started",
+          "pct": 21,
+          "lastTouched": "2026-11-08",
+          "note": "Potential 16.0 integration/release work; not yet approved."
+        },
+        {
+          "id": "T31",
+          "title": "Assets, merged-site verification and final release",
+          "status": "not-started",
+          "pct": 38,
+          "lastTouched": "2026-11-08",
+          "note": "Potential 16.0 integration/release work; not yet approved."
+        },
+        {
+          "id": "J03",
+          "title": "Tactical response career",
+          "status": "locked",
+          "pct": 100,
+          "lastTouched": "2026-11-10",
+          "note": "J03 tactical response is locked and J03.TACTICAL is enabled; focused acceptance passed 21/21.",
+          "history": [
+            {
+              "date": "2026-10-27",
+              "pct": 0,
+              "note": "15.6.4-part1 foundation started; full-scope estimate unchanged"
+            },
+            {
+              "date": "2026-10-27",
+              "pct": 0,
+              "note": "15.6.4-part2 planner/perimeter; full-scope estimate unchanged"
+            },
+            {
+              "date": "2026-11-10",
+              "pct": 100,
+              "note": "15.6.4-LOCKED · implementation complete, switch ON"
+            }
+          ]
+        },
+        {
+          "id": "J04",
+          "title": "Firefighter career",
+          "status": "locked",
+          "pct": 100,
+          "lastTouched": "2026-10-27",
+          "note": "15.6.3 J04 call is locked; J04.FIRE stays OFF until the staged 15.6 release.",
+          "history": [
+            {
+              "date": "2026-10-27",
+              "pct": 100,
+              "note": "15.6.3-LOCKED · implementation complete, switch OFF"
+            }
+          ]
+        },
+        {
+          "id": "J05",
+          "title": "Paramedic career",
+          "status": "locked",
+          "pct": 100,
+          "lastTouched": "2026-10-27",
+          "note": "15.6.5-LOCKED. Full J05 EMT scope is implemented and accepted; both release gates are ON. 100% is implementation completeness; fixed-weight project score remains 85%.",
+          "history": [
+            {
+              "date": "2026-11-10",
+              "pct": 0,
+              "note": "15.6.5-part1 foundation only; full-scope estimate unchanged"
+            },
+            {
+              "date": "2026-10-27",
+              "pct": 100,
+              "note": "15.6.5-LOCKED · full EMT response accepted; release gates ON"
+            }
+          ]
+        },
+        {
+          "id": "J06–J08",
+          "title": "SAR, rescue pilot, mechanic/tow",
+          "status": "not-started",
+          "pct": 0,
+          "lastTouched": "2026-11-08",
+          "note": "Candidate 16.0 work; not yet implemented or released."
+        },
+        {
+          "id": "J10–J15",
+          "title": "Bounty hunter, security, heist, smuggler, mercenary, universe profiles",
+          "status": "not-started",
+          "pct": 0,
+          "lastTouched": "2026-11-08",
+          "note": "Candidate 16.0 work; not yet implemented or released."
+        }
+      ]
+    }
+  ]
+}
+
+
+
+</script>
+
+<script>
+(function(){
+  var DATA = JSON.parse(document.getElementById('data').textContent);
+  var root = document.getElementById('root');
+
+  var STATUS_LABEL = {
+    'locked':'locked','complete':'complete','in-progress':'in progress','next':'next',
+    'blocked':'blocked','open':'open','deferred':'deferred','not-started':'not started','pending':'pending'
+  };
+
+  var sortMode = 'recent';
+  var showCompleteOnly = false;
+
+  /* ---------- helpers ---------- */
+  function num(v){ return typeof v === 'number' ? v : null; }
+  function clamp(v){ return Math.max(0, Math.min(100, v)); }
+
+  // rollup: explicit pct wins, else mean of children
+  function effectivePct(node){
+    if (num(node.pct) !== null) return clamp(node.pct);
+    if (node.children && node.children.length){
+      var sum = 0, n = 0;
+      node.children.forEach(function(c){ sum += effectivePct(c); n++; });
+      return n ? Math.round(sum / n) : 0;
+    }
+    return 0;
+  }
+
+  function newestChildDate(node){
+    var best = node.lastTouched || '';
+    (node.children || []).forEach(function(c){
+      var d = newestChildDate(c);
+      if (d > best) best = d;
+    });
+    return best;
+  }
+
+  function historyOf(node){
+    var h = (node.history || []).slice();
+    if (!h.length) return h;
+    h.sort(function(a,b){ return (a.date||'') < (b.date||'') ? -1 : 1; });
+    return h;
+  }
+
+  function prevPct(node){
+    var h = historyOf(node);
+    if (h.length < 2) return null;
+    return clamp(h[h.length-2].pct);
+  }
+
+  function colorFor(pct, status){
+    if (pct >= 100) return 'var(--green)';
+    if (status === 'blocked') return 'var(--red)';
+    if (status === 'open') return 'var(--orange)';
+    if (status === 'deferred') return 'var(--amber)';
+    if (pct === 0) return '#484f58';
+    return 'var(--blue)';
+  }
+
+  function el(tag, cls, txt){
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (txt !== undefined && txt !== null) e.textContent = txt;
+    return e;
+  }
+
+  /* ---------- bar ---------- */
+  function buildBar(node, pct){
+    var wrap = el('div','barwrap');
+    var bar = el('div','bar');
+
+    // ticks for each historical checkpoint
+    var h = historyOf(node);
+    var seen = 0;
+    h.forEach(function(pt){
+      var p = clamp(pt.pct);
+      if (p === 0 || p === seen) return;
+      seen = p;
+      var t = el('div','tick');
+      t.style.left = 'calc(' + p + '% - 1px)';
+      t.setAttribute('data-tip', (pt.date || '') + ' · ' + p + '%' + (pt.note ? ' — ' + pt.note : ''));
+      bar.appendChild(t);
+    });
+
+    var prev = prevPct(node);
+    var col = colorFor(pct, node.status);
+
+    if (prev !== null && prev > 0 && prev < pct && pct < 100){
+      var past = el('div','bar-past'); past.style.width = prev + '%'; bar.appendChild(past);
+      var nu = el('div','bar-new');
+      nu.style.left = prev + '%'; nu.style.width = (pct - prev) + '%';
+      nu.style.background = col; bar.appendChild(nu);
+    } else {
+      var solo = el('div','bar-solo');
+      solo.style.width = pct + '%';
+      solo.style.background = col;
+      bar.appendChild(solo);
+    }
+
+    wrap.appendChild(bar);
+    return wrap;
+  }
+
+  /* ---------- node ---------- */
+  function renderNode(node, level){
+    var pct = Math.round(effectivePct(node));
+    var hasKids = !!(node.children && node.children.length);
+
+    if (showCompleteOnly && pct < 100 && !hasIncompleteDescendant(node)) return null;
+
+    var d = el('details','node lvl' + level);
+    d.open = true;
+
+    var s = el('summary','row');
+
+    var caret = el('span','caret' + (hasKids ? '' : ' leaf'), '▶');
+    s.appendChild(caret);
+
+    var title = el('div','title');
+    if (node.id) title.appendChild(el('span','id', node.id));
+    title.appendChild(el('span','t', node.title || ''));
+    if (node.status && STATUS_LABEL[node.status]){
+      var cls = node.next ? 'b-next' : ('b-' + node.status.replace(/\s+/g,'-'));
+      title.appendChild(el('span','badge ' + cls, STATUS_LABEL[node.status]));
+    }
+    s.appendChild(title);
+
+    s.appendChild(buildBar(node, pct));
+
+    var p = el('div','pct ' + (pct >= 100 ? 'full' : pct === 0 ? 'zero' : 'mid'), pct + '%');
+    s.appendChild(p);
+
+    // meta line
+    var meta = el('div','meta');
+    if (node.lastTouched) meta.appendChild(el('span','', 'last touched ' + node.lastTouched));
+    var h = historyOf(node);
+    if (h.length > 1){
+      var strip = h.map(function(x){ return x.pct; }).join(' → ');
+      meta.appendChild(el('span','hist', strip + ' %'));
+      var prev = prevPct(node);
+      if (prev !== null && pct > prev){
+        meta.appendChild(el('span','delta','+' + (pct - prev) + ' since last report'));
+      }
+    }
+    if (meta.childNodes.length) s.appendChild(meta);
+
+    if (node.note) s.appendChild(el('div','note', node.note));
+
+    d.appendChild(s);
+
+    if (hasKids){
+      var kids = node.children.slice();
+      kids = sortKids(kids);
+      var box = el('div','children');
+      kids.forEach(function(c){
+        var rendered = renderNode(c, Math.min(level + 1, 2));
+        if (rendered) box.appendChild(rendered);
+      });
+      if (box.childNodes.length) d.appendChild(box);
+    }
+    return d;
+  }
+
+  function hasIncompleteDescendant(node){
+    if (Math.round(effectivePct(node)) < 100) return true;
+    return false;
+  }
+
+  function sortKids(kids){
+    if (sortMode === 'recent'){
+      return kids.slice().sort(function(a,b){
+        var da = newestChildDate(a), db = newestChildDate(b);
+        if (db !== da) return db < da ? -1 : 1;
+        return 0;
+      });
+    }
+    return kids.slice().sort(function(a,b){
+      return String(a.id).localeCompare(String(b.id), undefined, {numeric:true});
+    });
+  }
+
+  /* ---------- render ---------- */
+  function render(){
+    var m = DATA.meta || {};
+    document.getElementById('pj-title').textContent = m.project || 'Project';
+    var subBits = [];
+    if (m.series) subBits.push(m.series);
+    if (m.tag) subBits.push(m.tag);
+    if (m.commit) subBits.push(m.commit);
+    if (m.strikes) subBits.push('strikes ' + m.strikes);
+    var sub = document.getElementById('pj-sub');
+    sub.innerHTML = '';
+    subBits.forEach(function(b, i){
+      if (i) sub.appendChild(document.createTextNode(' · '));
+      sub.appendChild(el('b','', b));
+    });
+
+    var score = typeof m.score === 'number' ? m.score : 0;
+    document.getElementById('score-num').textContent = score + '%';
+    document.getElementById('score-lbl').textContent = m.scoreLabel || 'overall';
+    document.getElementById('scorebar-fill').style.width = score + '%';
+    document.getElementById('foot-gen').textContent = 'Generated ' + (m.generated || '—') + (m.note ? ' · ' + m.note : '');
+
+    root.innerHTML = '';
+    (DATA.groups || []).forEach(function(g){
+      var wrap = el('div','group');
+      wrap.appendChild(el('div','group-h', g.name || ''));
+      var items = sortKids(g.items || []);
+      var any = false;
+      items.forEach(function(it){
+        var node = renderNode(it, 0);
+        if (node){ wrap.appendChild(node); any = true; }
+      });
+      if (any) root.appendChild(wrap);
+    });
+
+    if (!root.childNodes.length){
+      root.appendChild(el('p','sub','Nothing to show at this filter.'));
+    }
+  }
+
+  /* ---------- controls ---------- */
+  document.getElementById('btn-expand').addEventListener('click', function(){
+    document.querySelectorAll('details.node').forEach(function(d){ d.open = true; });
+  });
+  document.getElementById('btn-collapse').addEventListener('click', function(){
+    document.querySelectorAll('details.node').forEach(function(d){ d.open = false; });
+  });
+  var sortBtn = document.getElementById('btn-sort');
+  sortBtn.addEventListener('click', function(){
+    sortMode = sortMode === 'recent' ? 'sequence' : 'recent';
+    sortBtn.textContent = 'Sort: ' + (sortMode === 'recent' ? 'recent first' : 'plan order');
+    sortBtn.classList.toggle('on', sortMode === 'recent');
+    render();
+  });
+  var fullBtn = document.getElementById('btn-full');
+  fullBtn.addEventListener('click', function(){
+    showCompleteOnly = !showCompleteOnly;
+    fullBtn.classList.toggle('on', showCompleteOnly);
+    fullBtn.textContent = showCompleteOnly ? 'Show everything' : 'Show incomplete only';
+    render();
+  });
+
+  render();
+})();
+</script>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5814ae20a18111e',t:'MTc5NDI3NDIzMg=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5814ae20a18111e',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
