@@ -48,6 +48,7 @@ function cityRunStart(p) {
   cityRT.chunks.clear(); cityRT.last = null; cityRT.lastKey = -1; cityRT.doors.clear(); cityRT.broken.clear();
   cityRT.used.clear(); cityRT.dyn.length = 0; cityRT.spawnState.clear(); cityRT.nearDoors = []; cityRT.visGen++;
   if (cityRT.gopen) cityRT.gopen.clear(); if (cityRT.fenceBroken) cityRT.fenceBroken.clear();
+  if (typeof cityDamageRunStart === "function") cityDamageRunStart();
   // find a walkable outdoor spot at the drop zone and make it local (256, 256)
   const d = cityPickDrop();
   CITY.orx = d[0] - 256; CITY.ory = d[1] - 256;

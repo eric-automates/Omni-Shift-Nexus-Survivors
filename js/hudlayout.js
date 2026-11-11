@@ -75,20 +75,22 @@ function hudSolve() {
   const density = Math.max(0.78, Math.min(1, Math.min(Wd, Hd) / 640));
   const user = Math.max(0.55, Math.min(1.4, (H.scale || 1) * density));
   // Wrap auto-fit touch strips at any chosen HUD size; do not change the
-  // player’s scale, protected elements or manual-layout settings. The larger
-  // default touch target floor still applies only at the default HUD size.
+  // player’s scale, protected elements or manual-layout settings. At the
+  // default touch HUD size, keep both the minimap strip and vehicle controls
+  // at native scale so their finger targets are not reduced below 44 CSS px.
   const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
   const wrapTouchStrip = coarse && H.auto;
   const largeTouchStrip = wrapTouchStrip && H.scale === 1;
+  const largeVehicleTouch = wrapTouchStrip && H.scale === 1;
   const touchStrip = document.getElementById("mmCtl");
   if (touchStrip) {
     touchStrip.classList.toggle("mmTouchLarge", largeTouchStrip);
     touchStrip.classList.toggle("mmTouchWrap", wrapTouchStrip);
     touchStrip.style.maxWidth = wrapTouchStrip ? Math.max(1, Math.floor((Wd - 16) / user)) + "px" : "";
   }
-  const hudFloor = d => (d.id === "mmctl" && largeTouchStrip ? 1 : d.min) * user;
+  const hudFloor = d => d.id === "veh" && largeVehicleTouch ? 1 : (d.id === "mmctl" && largeTouchStrip ? 1 : d.min * user);
   const sc = {}, hid = {};
-  for (const d of HUDL_DEF) { sc[d.id] = user; hid[d.id] = !!H.hide[d.id]; }
+  for (const d of HUDL_DEF) { sc[d.id] = d.id === "veh" && largeVehicleTouch ? 1 : user; hid[d.id] = !!H.hide[d.id]; }
   // natural (unscaled) sizes
   const nat = {};
   for (const d of HUDL_DEF) {
@@ -112,13 +114,17 @@ function hudSolve() {
     const right = !flip, xR = (w) => right ? Wd - m - w : m, xL = (w) => right ? m : Wd - m - w;
     // bottom-left: dev row (Debug · Music · FPS pill) → toast → vehicle gauge
     let yL = Hd - m;
-    if (nat.dev && !hid.dev) { const w = nat.dev.w * sc.dev, h = nat.dev.h * sc.dev; R.dev = { x: xL(w + (nat.perf && !hid.perf ? nat.perf.w * sc.perf + 6 : 0)), y: yL - h, w, h }; if (nat.perf && !hid.perf) { const pw = nat.perf.w * sc.perf, ph = nat.perf.h * sc.perf; R.perf = { x: right ? R.dev.x + w + 6 : R.dev.x - 6 - pw, y: yL - ph - (h - ph) / 2, w: pw, h: ph }; } yL = R.dev.y - 6; }
+    if (nat.dev && !hid.dev) { const w = nat.dev.w * sc.dev, h = nat.dev.h * sc.dev; R.dev = { x: xL(w + (nat.perf && !hid.perf ? nat.perf.w * sc.perf + 6 : 0)), y: yL - h, w, h }; if (nat.perf && !hid.perf) { const pw = nat.perf.w * sc.perf, ph = nat.perf.h * sc.perf; R.perf = { x: right ? R.dev.x + w + 6 : R.dev.x - 6 - pw, y: yL - ph - (h - ph) / 2, w: pw, h: ph }; } yL = Math.min(R.dev.y, R.perf ? R.perf.y : R.dev.y) - 16; }
     else if (nat.perf && !hid.perf) { const w = nat.perf.w * sc.perf, h = nat.perf.h * sc.perf; R.perf = { x: xL(w), y: yL - h, w, h }; yL = R.perf.y - 6; }
     if (nat.toast && !hid.toast) { const w = nat.toast.w * sc.toast, h = nat.toast.h * sc.toast; R.toast = { x: xL(w), y: yL - h, w, h }; yL = R.toast.y - 6; }
     if (nat.veh && !hid.veh) { const w = nat.veh.w * sc.veh, h = nat.veh.h * sc.veh; R.veh = { x: xL(w), y: yL - h, w, h }; yL = R.veh.y - 6; }
     // bottom-right: minimap → its buttons → district banner; squad radio sits beside the minimap
     let yR = Hd - m;
     if (nat.minimap && !hid.minimap) { const S = Math.round((nat.minimap.w - 8) * sc.minimap); R.minimap = { x: xR(S + 8), y: yR - S - 8, w: S + 8, h: S + 8, S }; yR = R.minimap.y - 4; }
+    // The touch-sized vehicle controls can make the left gauge taller than the
+    // minimap on portrait phones. If their side stacks intersect, lift the gauge
+    // above the minimap before the minimap-control strip is positioned.
+    if (R.veh && R.minimap && hudRectOverlap(R.veh, R.minimap)) R.veh.y = R.minimap.y - R.veh.h - 8;
     if (nat.mmctl && !hid.mmctl) {
       const w = nat.mmctl.w * sc.mmctl, h = nat.mmctl.h * sc.mmctl;
       const r = { x: xR(w), y: yR - h, w, h };

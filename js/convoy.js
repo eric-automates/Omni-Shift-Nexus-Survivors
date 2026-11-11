@@ -528,12 +528,17 @@ function cvDriveNormal(v, dt, sTarget, gap, i) {
   // car and the real column compresses in front of them (15.1.3 evidence: err
   // -246/-485 with the cars parked beside the leader). Both select windows must
   // span the compressed column or no released car can ever re-plan.
-  // The compressed-column windows apply ONLY to a car that just released a
-  // pinned spot (pinFails): CONVOY.halted is still true for the first frames of
-  // a fresh drive, and a blanket wide window had followers parking mid-lane as
-  // the leader pulled away (top speed 385 -> 186 px/s, herringbone 0).
-  const eligBand = c.pinFails ? 2.4 : 0.8;
+  // A stable halt (not merely the sticky first frames after pulling away) also
+  // needs the compressed-column window: the stopped leader cannot pull a late
+  // follower back to its nominal slot. Require both a settled halt timer and
+  // near-zero leader speed so fresh-drive followers do not park mid-lane.
+  const settledHalt = CONVOY.halted && CONVOY.haltT > 3.2 && lead < 25;
+  const eligBand = c.pinFails || settledHalt ? 2.4 : 0.8;
   if (CONVOY.halted && c.st !== "herring" && err < -gap * eligBand) c.st = "rejoin";
+  // A follower already marked rejoin during the moving-to-stopped transition
+  // must be released back into the halt planner once the leader is settled and
+  // the compressed column is within this same bounded selection window.
+  if (settledHalt && c.st === "rejoin" && Math.abs(err) < gap * eligBand) c.st = "go";
   // halted: herringbone - pull off alternately right / left at ~45°, road kept clear
   if (CONVOY.halted && c.st !== "rejoin") {
     if (c.st !== "herring" && Math.abs(vf) < 30 && Math.abs(err) < gap * eligBand) {

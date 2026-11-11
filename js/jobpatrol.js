@@ -5,12 +5,11 @@
      siren PULL OVER on a *legal-basis* reading only, a traffic driver who acknowledges (or plausibly
      branches to the next junction before stopping, or refuses once — refusal carries no penalty you can
      invent from a radar blip), and a stop log that survives reload.
-   • A stopped car is an ordinary traffic car asked to move right and halt. Nothing here damages, rams,
-     boxes in or arrests anyone: walk-up citation, search and arrest are later parts; until then a stop is
-     recorded as "stopped, awaiting the window".
-   • Once per car per shift: no unlimited tickets to the same plate. Traffic itself is a runtime sim — the
-     CAR is not saved; the shift log (attempts, refusals, stops) is, through jobcore's single-transaction
-     checkpoint like every other contract.
+   • A stopped car is ordinary traffic asked to move right and halt. This feature now includes the walk-up,
+     warning/ticket, lawful-search, evidence-based custody/booking and dispatch/tow paths. The traffic car is
+     runtime-only; the stop and shift records persist through jobcore's checkpoints.
+   • 15.6.1 adds the durable patrol career ladder around this existing stop machine; it must not rebuild or
+     weaken the stop behavior. Only completed legal stop outcomes count toward progression.
    ============================================================================================================ */
 const JOB_PATROL = "patrol_traffic";
 jobRegister({ id: JOB_PATROL, role: "officer", start: "patrol",
@@ -23,12 +22,70 @@ JOB_CORE.historyHooks.j01pd = function (a) {
   const pd = a.data && a.data.pd; if (!pd || !Array.isArray(pd.stops)) return null;
   return { stops: pd.stops.map(s => ({ cid: s.cid, mph: s.mph, lim: s.lim, state: s.state, resolved: s.resolved || null, custody: s.custody || null, towed: s.towed || 0 })) };
 };
-JOB_CORE.finishHooks[JOB_PATROL] = function (s, a, outcome, pay) {
-  const pd = a.data && a.data.pd; let bonus = 0;
-  if (pd && Array.isArray(pd.stops)) for (const st of pd.stops) {
-    if (st.resolved === "warn") bonus += 5; else if (st.resolved === "ticket") bonus += 25; else if (st.resolved === "booked") bonus += 60;
+// 15.6.1: J01's traffic-stop machine predates its durable career ladder. Rank is
+// derived from a saved count of unique, resolved legal stops—not from capped history
+// length or attempted stops—so reloads and malformed/partial records fail closed.
+const PDP_RANKS = [
+  { name: "Cadet", stops: 0, bonus: 0 },
+  { name: "Patrol Officer", stops: 9, bonus: 0.05 },
+  { name: "Senior Officer", stops: 18, bonus: 0.10 },
+  { name: "Sergeant", stops: 27, bonus: 0.15 },
+  { name: "Watch Commander", stops: 36, bonus: 0.20 }
+];
+const PDP_COUNTED_RESOLUTIONS = new Set(["warn", "ticket", "booked"]);
+function pdpCareerStops(state) {
+  const c = state && state.career;
+  const p = c && typeof c === "object" && !Array.isArray(c) ? c.patrol : null;
+  const n = p && typeof p === "object" && !Array.isArray(p) ? p.stops : null;
+  return Number.isSafeInteger(n) && n >= 0 ? n : 0;
+}
+function pdpCareerRank(state) {
+  const stops = pdpCareerStops(state); let i = 0;
+  for (let k = 0; k < PDP_RANKS.length; k++) if (stops >= PDP_RANKS[k].stops) i = k;
+  const next = PDP_RANKS[i + 1] ? PDP_RANKS[i + 1].stops - stops : null;
+  return { rank: i + 1, name: PDP_RANKS[i].name, bonus: PDP_RANKS[i].bonus, stops, next };
+}
+function pdpCountedStops(a) {
+  const pd = a && a.data && a.data.pd;
+  if (!pd || !Array.isArray(pd.stops) || pd.stops.length > 12) return [];
+  const seen = new Set(), counted = [];
+  for (const st of pd.stops) {
+    if (!st || typeof st !== "object" || Array.isArray(st) ||
+        !Number.isSafeInteger(st.cid) || st.cid < 0 || st.state !== "resolved" ||
+        !PDP_COUNTED_RESOLUTIONS.has(st.resolved) || !Number.isFinite(st.mph) ||
+        !Number.isFinite(st.lim) || st.lim <= 0 || st.mph - st.lim <= Math.max(10, st.lim * 0.2) ||
+        seen.has(st.cid)) continue;
+    seen.add(st.cid); counted.push(st);
   }
-  return { pay: pay + Math.min(bonus, 240) };
+  return counted;
+}
+function pdpEnsureCareerRecord(state) {
+  const c0 = state && state.career;
+  const c = c0 && typeof c0 === "object" && !Array.isArray(c0) ? c0 : {};
+  const p0 = c.patrol;
+  const p = p0 && typeof p0 === "object" && !Array.isArray(p0) ? p0 : {};
+  if (Number.isSafeInteger(p.stops) && p.stops >= 0) return { changed: false };
+  state.career = Object.assign({}, c, { patrol: Object.assign({}, p, { stops: 0 }) });
+  return { changed: true };
+}
+JOB_CORE.finishHooks[JOB_PATROL] = function (s, a, outcome, pay) {
+  const pd = a.data && a.data.pd; let stopBonus = 0;
+  if (pd && Array.isArray(pd.stops)) for (const st of pd.stops) {
+    if (st.resolved === "warn") stopBonus += 5; else if (st.resolved === "ticket") stopBonus += 25; else if (st.resolved === "booked") stopBonus += 60;
+  }
+  const counted = outcome === "debriefed" ? pdpCountedStops(a) : [];
+  const rank = pdpCareerRank(s), previous = pdpCareerStops(s);
+  const total = previous + counted.length;
+  const nextStops = Number.isSafeInteger(total) ? total : Number.MAX_SAFE_INTEGER;
+  const c0 = s.career;
+  const c = c0 && typeof c0 === "object" && !Array.isArray(c0) ? c0 : {};
+  const p0 = c.patrol;
+  const p = p0 && typeof p0 === "object" && !Array.isArray(p0) ? p0 : {};
+  s.career = Object.assign({}, c, { patrol: Object.assign({}, p, { stops: nextStops }) });
+  const resolvedPay = pay + Math.min(stopBonus, 240);
+  // Like J02, a stage bonus is earned at the rank held before this debrief and
+  // only when at least one completed, lawful stop is being recorded.
+  return { pay: counted.length ? Math.round(resolvedPay * (1 + rank.bonus)) : resolvedPay };
 };
 const PDP = { car: null, id: null, st: "idle", sigT: 0, over: 0, lim: 0 };
 function pdpSay(t) { if (typeof vehToast === "function") vehToast(t); }
@@ -81,6 +138,8 @@ function pdpStartShift() {
   const me = typeof VEH !== "undefined" ? VEH.me : null;
   if (!me || player.inVehicle !== 3 || me.kind !== "police" || me.dead) return { ok: false, why: "Sit in a working police cruiser to sign on." };
   if (!pdpStationDoor(player.x, player.y, 200)) return { ok: false, why: "Start the shift at the police station doors — the cruiser bay is where the log opens." };
+  const migration = pdpEnsureCareerRecord(read.state);
+  if (migration.changed) { const saved = jobCommit(read.state, 0); if (!saved.ok) return saved; }
   const off = jobOffer(JOB_PATROL, { pd: { attempts: {}, refused: {}, stops: [] } });
   if (!off.ok) return off;
   const acc = jobAccept(off.incident); if (!acc.ok) return acc;
@@ -854,6 +913,12 @@ function pdpCustodyPanel(st) {
 // The radar panel grows its enforcement row here; the functions live with the shift, so a stale button
 // always re-scans instead of acting on an old blip.
 function pdpPanelRow(panel) {
+  const read = jobReadState(), rank = pdpCareerRank(read.ok ? read.state : null);
+  const line = document.createElement("div");
+  line.textContent = "PATROL CAREER · Stage " + rank.rank + "/5 · " + rank.name + " · " + rank.stops + " completed stop" + (rank.stops === 1 ? "" : "s") +
+    (rank.next === null ? " · top stage reached" : " · " + rank.next + " to next stage");
+  line.style.cssText = "font-size:12px;line-height:1.3;opacity:.82;padding:3px 2px";
+  panel.appendChild(line);
   const mk = (label, fn) => {
     const b = document.createElement("button");
     b.type = "button"; b.className = "btn"; b.textContent = label;

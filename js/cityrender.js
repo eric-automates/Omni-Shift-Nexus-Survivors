@@ -678,6 +678,22 @@ function crVehicle(g, kind, L, D, v, h, themed, wreck) {
       }
       break;
     }
+    case "ambulance": {   // J05: high-visibility EMT response vehicle built on the existing SUV sprite
+      const ns = crVehicle.noShadow, prev = crVehicle.col;
+      crVehicle.noShadow = true; crVehicle.col = wreck ? "#555555" : "#f4f4f0";
+      try { crVehicle(g, "suv", L, D, 2, h, false, wreck); }
+      finally { crVehicle.noShadow = ns; crVehicle.col = prev || null; }
+      if (!wreck) {
+        g.fillStyle = "#d32f2f"; g.fillRect(x0 + 2, y0 + D * 0.51, L - 4, Math.max(2, D * 0.07));
+        g.fillRect(x0 + L * 0.2, y0 + D * 0.15, L * 0.6, Math.max(1.5, D * 0.025));
+        g.fillStyle = "#ffffff"; g.fillRect(-2, y0 + D * 0.49, 4, Math.max(3, D * 0.11));
+        g.fillRect(x0 + L * 0.2, y0 + D * 0.11, L * 0.6, Math.max(2, D * 0.11));
+        g.fillStyle = "#d32f2f"; g.fillRect(-0.8, y0 + D * 0.495, 1.6, Math.max(2, D * 0.10));
+        g.fillRect(x0 + L * 0.45, y0 + D * 0.115, L * 0.1, Math.max(1, D * 0.10));
+        g.fillStyle = "#e53935"; g.fillRect(x0 + 3, y0 + D * 0.98, 4, 2); g.fillRect(x0 + L - 7, y0 + D * 0.98, 4, 2);
+      }
+      break;
+    }
     case "pickup": {   // v14.1: cab + open bed (riders can stand in it)
       g.fillStyle = crSh(col, -0.35); crRR(g, x0, y0, L, D, L * 0.22); g.fill();
       g.fillStyle = col; crRR(g, x0 + 1, y0 + 1, L - 2, D * 0.55, L * 0.2); g.fill();

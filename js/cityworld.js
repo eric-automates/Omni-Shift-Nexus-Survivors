@@ -29,6 +29,8 @@ const cityRT = {
   chunks: new Map(), last: null, lastKey: -1,
   doors: new Map(),            // door id -> runtime door
   broken: new Set(),           // broken window tile keys
+  damage: new Map(),           // 15.6.2: bounded structural/floor damage by world tile
+  fires: new Map(),            // 15.6.2: bounded active fire tiles by world tile
   used: new Set(),             // used / removed prop keys (cars you drove off, looted caches)
   gopen: new Set(),            // v14.1: buildings whose garage doors are rolled up / smashed
   fenceBroken: new Set(),      // v14.1: fence tiles a vehicle smashed through
@@ -171,7 +173,7 @@ function cityBuildChunk(cx, cy) {
           if (xx < x0 || yy < y0 || xx >= x0 + CH || yy >= y0 + CH) continue;
           const i = ((yy - y0) << 7) | (xx - x0);
           C.doors.set(i, D);
-          if (D.open < 0.5) C.flags[i] |= F_SIGHT; else C.flags[i] &= ~F_SIGHT;
+          if (D.broken || D.open >= 0.5) C.flags[i] &= ~(F_SIGHT | F_SHOT); else C.flags[i] |= F_SIGHT | F_SHOT;
         }
       });
       // supply caches (looted ones are remembered)
@@ -207,6 +209,7 @@ function cityBuildChunk(cx, cy) {
   }
   // dynamic props (vehicles left behind)
   for (const d of cityRT.dyn) if (inC(d.x, d.y, d.w, d.h)) { C.props.push(d); stamp(d.x, d.y, d.w, d.h, (d.t === "haybale" || d.t === "busstop") ? F_MOVE | F_LOW : F_MOVE | F_SHOT, (d.t === "haybale" || d.t === "busstop") ? K_POLE : K_CAR, true); }
+  if (typeof cityDamageApplyChunk === "function") cityDamageApplyChunk(C);
   cityRT.built++;
   if (t0) cityRT.buildMs = performance.now() - t0;
   return C;
@@ -341,7 +344,7 @@ function cityDoorSetFlags(D, closed) {
     const key = (xx >> 7) * 4096 + (yy >> 7), C = cityRT.chunks.get(key);
     if (!C) continue;
     const i = ((yy & CH_MASK) << 7) | (xx & CH_MASK);
-    if (closed) C.flags[i] |= F_SIGHT; else C.flags[i] &= ~F_SIGHT;
+    if (D.broken || !closed) C.flags[i] &= ~(F_SIGHT | F_SHOT); else C.flags[i] |= F_SIGHT | F_SHOT;
   }
   cityRT.visGen++;
 }
@@ -355,6 +358,7 @@ function cityDoorsStep(dt) {
     for (const D of cityRT.doors.values()) { const cx = D.x + (D.axis === "x" ? D.len / 2 : 0.5), cy = D.y + (D.axis === "x" ? 0.5 : D.len / 2); if (Math.abs(cx - ptx) < 110 && Math.abs(cy - pty) < 110) near.push(D); }
   }
   for (const D of near) {
+    if (D.broken) { D.open = D.target = 1; continue; }
     const cx = D.x + (D.axis === "x" ? D.len / 2 : 0.5), cy = D.y + (D.axis === "x" ? 0.5 : D.len / 2);
     if (Math.abs(cx - ptx) > 100 || Math.abs(cy - pty) > 100) continue;
     const near = Math.abs(cx - (player.x + CITY.orx) / 16) < 2.6 && Math.abs(cy - (player.y + CITY.ory) / 16) < 2.6;
