@@ -761,7 +761,7 @@ function projectileShotOrigin(i) {
 function spawnProj(x, y, vx, vy, dmg, life, rad, prc, style, sup, isEnemy = 0, wpnId = -1, sourceKind = null) {
   // Only the player's current automatic-weapon invocation is eligible; squad,
   // hostile, utility and area-effect projectiles retain their normal behavior.
-  if (typeof tfAutoFireAllowed === "function" && !tfAutoFireAllowed(x, y, vx, vy, life, rad, style, isEnemy, sourceKind)) return;
+  if (typeof tfAutoFireAllowed === "function" && !tfAutoFireAllowed(x, y, vx, vy, life, rad, style, isEnemy, sourceKind, dmg, wpnId)) return;
   for (let i = 0; i < MAX_P; i++) {
     if (!pAct[i]) {
       const spd = Math.hypot(vx, vy);

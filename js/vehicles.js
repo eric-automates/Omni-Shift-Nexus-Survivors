@@ -21,6 +21,7 @@ const VPX = 32, VGRAV = 9.81 * 32, VGRAV_D = VGRAV;   // px per metre, g in px/s
 const VSEATS = {
   car5:    [[-0.24, 0.06, "d", -1], [0.24, 0.06, "w", 1], [-0.24, -0.2, "w", -1], [0.24, -0.2, "w", 1], [0, -0.2, "m", 0]],
   car4:    [[-0.24, 0.06, "d", -1], [0.24, 0.06, "w", 1], [-0.22, -0.2, "w", -1], [0.22, -0.2, "w", 1]],
+  ambulance:[[-0.24, 0.12, "d", -1], [0.24, 0.12, "w", 1], [-0.24, -0.08, "w", -1], [0.24, -0.08, "w", 1]],
   suv:     [[-0.24, 0.12, "d", -1], [0.24, 0.12, "w", 1], [-0.24, -0.08, "w", -1], [0.24, -0.08, "w", 1], [0, -0.08, "m", 0], [-0.22, -0.3, "w", -1], [0.22, -0.3, "w", 1]],
   pickup:  [[-0.24, 0.14, "d", -1], [0.24, 0.14, "w", 1], [-0.28, -0.24, "b", -1], [0.28, -0.24, "b", 1], [-0.28, -0.4, "b", -1], [0.28, -0.4, "b", 1]],
   two:     [[-0.2, 0.0, "d", -1], [0.2, 0.0, "w", 1]],
@@ -71,7 +72,7 @@ const VK = {
 const VEH_FUEL_NAME = { modern: "FUEL", neon: "CHARGE", galactic: "FUEL CELL", coruscant: "REPULSOR FUEL", starship: "DEUTERIUM", colony: "HYDROGEN",
   frontier: "FUEL", western: "HORSES", desert: "FUEL", pharaoh: "NAQUADAH", gothic: "LAMP OIL", wasteland: "GUZZOLINE", medieval: "HORSE", wizard: "PETROL" };
 const VEH_PROP_T = new Set(["car", "bus", "trailer", "armytruck", "tractor"]);
-const VEH_FURN_T = new Set(["car", "firetruck", "forklift", "tractor"]);
+const VEH_FURN_T = new Set(["car", "firetruck", "ambulance", "forklift", "tractor"]);
 
 /* === 2. STATE ====================================================================================================== */
 const VEH = {
