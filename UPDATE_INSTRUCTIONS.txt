@@ -1,0 +1,22 @@
+15.6.6 GAME SNAPSHOT — SIMPLE REPLACEMENT INSTRUCTIONS
+
+This ZIP contains the current game project files at 15.6.6-LOCKED / 15.6-SERIES-LOCKED (source commit aa5f7ee). It intentionally contains no QA folder, old changelogs/ledgers, Git history, map data payloads, or music directory.
+
+BEFORE YOU COPY
+1. Back up the existing project.
+2. In the project root, keep the entire existing music/ folder unchanged.
+3. Keep all existing map-data folders/files unchanged (including data/realmap/ if present, and any additional custom map packs).
+4. Remove the other old project files/folders if you want a clean replacement. Do not remove the preserved music or map data.
+
+COPY
+5. Extract the ZIP directly into the project root, not into a new nested folder.
+6. Allow overwrite of matching files. The archive supplies index.html, css/, js/, tools/, .gitignore, README.md, CREDITS.md, flowchart.md, CURRENT_REVISION.md and this instruction file.
+7. The archive intentionally has no music/ or map-data payloads, so extracting it will not overwrite those assets. It does include current map-loading and world-generation code under js/; replace that code with the archive's js/ files.
+
+QA / BUILD
+- No QA folder is needed for the playable game; QA packs/runners are only for development and acceptance testing.
+- No compile/build step is needed for normal play. Serve the project root as a static website (for example, run `python3 -m http.server 8000` there and open http://localhost:8000/).
+- Verify `index.html` is at the root and `js/jobemt.js` exists. This revision's index loads it as `js/jobemt.js?v=15.6.6-locked`, and J05.EMT is enabled. If an old “EMT job missing” message remains, inspect the browser Network panel for a 404 at that exact path, then hard-reload/clear the site's cached files.
+- Keep the three current notes files (README.md, CURRENT_REVISION.md, flowchart.md) and CREDITS.md. Old version changelogs, QA records, and project ledgers are deliberately omitted.
+
+This is a file snapshot only. It does not contain .git or modify GitHub tags/history. The 15.6 lock tags in the source repository still refer to aa5f7ee.
