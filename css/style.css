@@ -583,3 +583,11 @@ h2 {
 #cityHud, #cityHud b, #cityHud span { white-space: nowrap; }
 #vehHud .vh-btns { display: flex; flex-direction: column; gap: 4px; margin-left: 2px; }
 #vehHud .vh-btns .btn { padding: 4px 7px; font-size: 12px; min-width: 34px; touch-action: none; }
+/* Keep touch driving targets finger-sized without adding a third vertical row
+   to the vehicle HUD on small screens. The compact horizontal strip leaves the
+   lower HUD stacks room to fit without moving the map controls over the stick. */
+@media (pointer: coarse) {
+  #vehHud .vh-btns { flex-direction: row; align-items: center; gap: 4px; }
+  #vehHud .vh-btns .btn { min-width: 44px; min-height: 44px; padding: 3px 4px; font-size: 10px; }
+  #vehHud .vh-btns .vh-hb, #vehHud .vh-btns .vh-cruise { min-width: 44px; min-height: 44px; }
+}
