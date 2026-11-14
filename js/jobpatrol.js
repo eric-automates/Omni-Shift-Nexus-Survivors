@@ -130,7 +130,7 @@ function pdpStationDoor(x, y, maxD) {   // a real police-station door within rea
   return false;
 }
 function pdpStartShift() {
-  if (!v15ContractEnabled(JOB_PATROL)) return { ok: false, why: "Patrol shifts are unavailable in this revision." };
+  if (!v15ContractOfferEnabled(JOB_PATROL)) return { ok: false, why: "Patrol shifts are unavailable for this character in this revision." };
   if (!pdpAvailable()) return { ok: false, why: "Patrol needs live traffic on a modern town map in the economy scenario." };
   if (!runActive || !player) return { ok: false, why: "No active run." };
   const read = jobReadState(); if (!read.ok) return read;
@@ -930,5 +930,20 @@ function pdpPanelRow(panel) {
   mk("LIGHTS — PULL OVER", pdpSignal);
   mk(pdpShift() ? "END SHIFT — DEBRIEF" : "START SHIFT (station cruiser)", pdpShift() ? pdpEndShift : pdpStartShift);
 }
+(function pdpDispatchWire() {
+  const previousOpen = window.jdOpen;
+  if (typeof previousOpen !== "function") return;
+  window.jdOpen = function(message) {
+    previousOpen(message);
+    const panel = JOB_DISPATCH.panel, read = jobActive();
+    if (!panel || !read.ok || read.active || !v15ContractOfferEnabled(JOB_PATROL)) return;
+    const close = Array.from(panel.querySelectorAll("button")).find(b => b.textContent === "CLOSE");
+    const button = document.createElement("button"); button.type = "button"; button.className = "btn";
+    button.textContent = "START TRAFFIC PATROL SHIFT · POLICE STATION";
+    button.style.cssText = "min-height:48px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";
+    button.onclick = () => { const r = pdpStartShift(); jdOpen(r.ok ? "Traffic patrol shift started. Take a marked cruiser and follow the radar." : r.why); };
+    panel.insertBefore(button, close || null);
+  };
+})();
 if (typeof V10 !== "undefined") V10.onStep.push(dt => { try { pdpStep(dt); } catch (e) { window.__pdpErr = String((e && e.stack) || e).slice(0, 400); pdpRelease(); } });
 // EOF:js/jobpatrol.js

@@ -22,7 +22,7 @@
    ========================================================================= */
 "use strict";
 
-const KI = { ki: 0, charging: false, form: 0, formT: 0, cdT: 0, touch: 0, itCd: 0, itPose: null, it: null, absorbed: [], lightT: 0, pulseT: 0, auraT: 0, msgT: -99 };
+const KI = { ki: 0, charging: false, form: 0, formT: 0, cdT: 0, touch: 0, itCd: 0, itPose: null, it: null, absorbed: [], lightT: 0, pulseT: 0, auraT: 0, msgT: -99, deathBall: null, coreImpact: null, planetDecay: 0 };
 const KI_HEROES = new Set([34, 35, 36, 37, 38, 84, 85, 86, 87, 88]);
 const KI_SAIYAN = new Set([34, 35, 37, 38]);
 const KI_ANDROID = new Set([86, 87, 88]);
@@ -235,7 +235,77 @@ function kiLeaveForm() {
   KI.buff = null; KI.form = 0; KI.cdT = runTime + 20;
   if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 30, "…back to base", "#b0bec5", 1.4);
 }
+function kiDeathBallReady() {
+  return !!(player && player.cid === 84 && KI.form && runTime < KI.formT && !KI.deathBall && !KI.planetDecay);
+}
+function kiCastDeathBall() {
+  if (!kiDeathBallReady()) {
+    if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 28, "MAX KI + FULL POWER REQUIRED", "#e1bee7", 1.5);
+    return false;
+  }
+  const a = Number.isFinite(player.aim) ? player.aim : 0, speed = 720;
+  KI.deathBall = { x: player.x + Math.cos(a) * 26, y: player.y + Math.sin(a) * 26, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, hit: false, postHit: 0, age: 0 };
+  if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 32, "DEATH BALL — PLANET BREAKER!", "#ce93d8", 2.1);
+  if (typeof fxShake === "function") fxShake(8, 0.35);
+  if (typeof sfx === "function") sfx(95, 42, 0.42, "sawtooth", 0.28);
+  return true;
+}
+function kiPlanetDecayStart() {
+  if (KI.planetDecay) return false;
+  KI.planetDecay = 1;
+  // On the generated city world, redress the same streamed map as a wasteland.
+  // The next cityRunStart applies the selected universe theme again, so this is run-local.
+  if (typeof CITY !== "undefined" && CITY && CITY.on && typeof cityApplyTheme === "function") {
+    cityApplyTheme("wasteland");
+    if (typeof cityRenderReset === "function") cityRenderReset();
+  }
+  if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 42, "PLANET CORE DESTABILIZED — WORLD DECAYING", "#ff7043", 3.0);
+  if (typeof fxShake === "function") fxShake(18, 1.1);
+  if (typeof sfx === "function") sfx(72, 28, 0.9, "sawtooth", 0.4);
+  return true;
+}
+function kiDeathBallStep(dt) {
+  const b = KI.deathBall;
+  if (!b) {
+    if (KI.coreImpact) {
+      KI.coreImpact.t -= dt;
+      if (KI.coreImpact.t <= 0) { KI.coreImpact = null; kiPlanetDecayStart(); }
+    }
+    return;
+  }
+  if (!player) return;
+  b.age += dt;
+  const ox = b.x, oy = b.y;
+  b.x += b.vx * dt; b.y += b.vy * dt;
+  if (!b.hit) {
+    for (let i = 0; i < MAX_E; i++) {
+      if (!eAct[i] || allyIs(i) || (typeof sdIgnore === "function" && sdIgnore(i))) continue;
+      const dx = eX[i] - b.x, dy = eY[i] - b.y;
+      if (dx * dx + dy * dy > 34 * 34) continue;
+      b.hit = true; b.postHit = 0;
+      const dmg = Math.max(360, 620 * player.might);
+      eHP[i] -= dmg; eStun[i] = Math.max(eStun[i], 1.1);
+      if (typeof spawnDmg === "function") spawnDmg(eX[i], eY[i], dmg, true);
+      if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, false, null, "#ce93d8", "player", player);
+      if (typeof spawnParticles === "function") spawnParticles(eX[i], eY[i], 14);
+      if (typeof sfx === "function") sfx(210, 90, 0.18, "triangle", 0.2);
+      break;
+    }
+  } else {
+    b.postHit += Math.hypot(b.x - ox, b.y - oy);
+    // After visibly passing through a target, descend into the planet-core
+    // sequence. The cinematic is intentionally local/short, not a 64-km raycast.
+    if (b.postHit >= 430) {
+      KI.deathBall = null; KI.coreImpact = { x: b.x, y: b.y, t: 0.85 };
+      if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 42, "CRUST BREACHED — CORE IMPACT…", "#ff8a65", 1.7);
+      if (typeof fxShake === "function") fxShake(11, 0.65);
+    }
+  }
+  if (b && b.age > 3.2) KI.deathBall = null;
+}
+
 function kiStep(dt) {
+  kiDeathBallStep(dt);
   if (!kiIs()) return;
   const holding = keys.KeyR || KI.touch;
   if (KI.form && runTime > KI.formT) kiLeaveForm();
@@ -278,6 +348,29 @@ function kiAuraBack(g, x, y) {
   g.restore();
 }
 function kiRender(g) {
+  if (!g) return;
+  if (KI.planetDecay && g.canvas) {
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 0.16; g.fillStyle = "#6b3329"; g.fillRect(0, 0, g.canvas.width, g.canvas.height);
+    g.globalAlpha = 0.24; g.strokeStyle = "#ff7043"; g.lineWidth = 2;
+    const w = g.canvas.width, h = g.canvas.height;
+    for (let k = 0; k < 5; k++) { const x0 = ((k * 197 + 53) % Math.max(1, w)), y0 = ((k * 113 + 71) % Math.max(1, h)); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x0 + 15, y0 + 23); g.lineTo(x0 + 7, y0 + 41); g.lineTo(x0 + 28, y0 + 64); g.stroke(); }
+    g.restore();
+  }
+  const b = KI.deathBall;
+  if (b) {
+    g.save(); g.globalCompositeOperation = "lighter";
+    g.strokeStyle = "rgba(206,147,216,0.75)"; g.lineWidth = 7; g.beginPath(); g.moveTo(b.x - b.vx * 0.035, b.y - b.vy * 0.035); g.lineTo(b.x, b.y); g.stroke();
+    const r = 15 + 3 * Math.sin(runTime * 22); const gr = g.createRadialGradient(b.x - 4, b.y - 4, 1, b.x, b.y, r + 9);
+    gr.addColorStop(0, "#fff"); gr.addColorStop(0.28, "#e1bee7"); gr.addColorStop(0.68, "#9c27b0"); gr.addColorStop(1, "rgba(103,0,126,0)");
+    g.fillStyle = gr; g.beginPath(); g.arc(b.x, b.y, r + 9, 0, Math.PI * 2); g.fill(); g.restore();
+  }
+  const core = KI.coreImpact;
+  if (core) {
+    const f = Math.max(0, Math.min(1, core.t / 0.85)), pulse = 1 + 0.25 * Math.sin(runTime * 38);
+    g.save(); g.globalCompositeOperation = "lighter"; g.globalAlpha = 0.35 + (1 - f) * 0.45;
+    g.strokeStyle = "#ff7043"; g.lineWidth = 3 + (1 - f) * 4; g.beginPath(); g.ellipse(core.x, core.y + 8, 30 * pulse, 10 * pulse, 0, 0, Math.PI * 2); g.stroke();
+    g.strokeStyle = "#ffd180"; g.lineWidth = 1.5; g.beginPath(); g.ellipse(core.x, core.y + 8, 52 * pulse, 17 * pulse, 0, 0, Math.PI * 2); g.stroke(); g.restore();
+  }
   if (!kiIs() || !player) return;
   const t = runTime, x = player.x, y = player.y, strength = kiAuraStrength();
   if (strength > 0) {   // in front of the hero: only a thin flickering rim, rising motes and (in a form) crackling sparks
@@ -427,9 +520,9 @@ function kiAbsorbStep(dt) {
   if (!KI.absorbed.length) return;
   for (const a of KI.absorbed) {
     if ((a.k === "lightning" || a.k === "burn" || a.k === "freeze") && typeof flyGroundSeparated === "function" && flyGroundSeparated()) continue;
-    if (a.k === "lightning") { a.t = (a.t || 0) - dt; if (a.t <= 0) { a.t = 2.4; let n = a.v; for (let j = 0; j < MAX_E && n > 0; j++) if (eAct[j] && Math.hypot(eX[j] - player.x, eY[j] - player.y) < 260) { eHP[j] -= 40 * (player.might || 1); if (typeof spawnParticles === "function") spawnParticles(eX[j], eY[j], 3, 8); if (eHP[j] <= 0) killEnemy(j); n--; } } }
-    else if (a.k === "burn") { for (let j = 0; j < MAX_E; j++) if (eAct[j] && Math.hypot(eX[j] - player.x, eY[j] - player.y) < 90) { eHP[j] -= a.v * dt * (player.might || 1); if (eHP[j] <= 0) killEnemy(j); } }
-    else if (a.k === "freeze") { a.t = (a.t || 0) - dt; if (a.t <= 0) { a.t = 4; for (let j = 0; j < MAX_E; j++) if (eAct[j] && Math.hypot(eX[j] - player.x, eY[j] - player.y) < 130) eStun[j] = Math.max(eStun[j], 0.8); } }
+    if (a.k === "lightning") { a.t = (a.t || 0) - dt; if (a.t <= 0) { a.t = 2.4; let n = a.v; for (let j = 0; j < MAX_E && n > 0; j++) if (eAct[j] && !allyIs(j) && Math.hypot(eX[j] - player.x, eY[j] - player.y) < 260) { eHP[j] -= 40 * (player.might || 1); if (typeof spawnParticles === "function") spawnParticles(eX[j], eY[j], 3, 8); if (eHP[j] <= 0) killEnemy(j); n--; } } }
+    else if (a.k === "burn") { for (let j = 0; j < MAX_E; j++) if (eAct[j] && !allyIs(j) && Math.hypot(eX[j] - player.x, eY[j] - player.y) < 90) { eHP[j] -= a.v * dt * (player.might || 1); if (eHP[j] <= 0) killEnemy(j); } }
+    else if (a.k === "freeze") { a.t = (a.t || 0) - dt; if (a.t <= 0) { a.t = 4; for (let j = 0; j < MAX_E; j++) if (eAct[j] && !allyIs(j) && Math.hypot(eX[j] - player.x, eY[j] - player.y) < 130) eStun[j] = Math.max(eStun[j], 0.8); } }
     else if (a.k === "rage") { const on = player.hp < player.maxHp * 0.5; if (on && !a.on) { player.might += a.v; a.on = 1; } else if (!on && a.on) { player.might -= a.v; a.on = 0; } }
   }
 }
@@ -503,6 +596,12 @@ const KI_PALM = { 34: "#4fc3f7", 35: "#ffd54f", 36: "#ffd54f", 38: "#4fc3f7", 84
     const o = triggerUtility;
     window.triggerUtility = triggerUtility = function (uIdx) {
       const u = player && player.utils && player.utils[uIdx];
+      if (u && player && player.cid === 84 && u.name === "Death Ball") {
+        if (u.cd > 0 || !kiDeathBallReady()) { if (!kiDeathBallReady()) kiCastDeathBall(); return; }
+        if (kiCastDeathBall()) u.cd = u.cdMax * (player.utilCdrMul || 1);
+        if (typeof updateHUD === "function") updateHUD();
+        return;
+      }
       if (u && (u.type === "kiIT" || u.type === "kiAbsorb" || u.type === "kiRegen")) {
         if (u.type === "kiAbsorb" && typeof flyGroundSeparated === "function" && flyGroundSeparated()) { if (typeof flyTip === "function") flyTip("⬇ DESCEND TO REACH THE GROUND"); return; }
         if (u.cd > 0) return;
@@ -510,7 +609,7 @@ const KI_PALM = { 34: "#4fc3f7", 35: "#ffd54f", 36: "#ffd54f", 38: "#4fc3f7", 84
         else if (u.type === "kiRegen") { player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.4); if (player.limbs) for (let i = 0; i < player.limbs.length; i++) player.limbs[i] = 100; spawnSpeech(player.x, player.y - 30, "REGENERATE!", "#76ff03", 1.8); u.cd = u.cdMax * (player.utilCdrMul || 1); }
         else {   // the tail strike
           let best = -1, bd = 150;
-          for (let j = 0; j < MAX_E; j++) if (eAct[j]) { const d = Math.hypot(eX[j] - player.x, eY[j] - player.y); if (d < bd) { bd = d; best = j; } }
+          for (let j = 0; j < MAX_E; j++) if (eAct[j] && !allyIs(j)) { const d = Math.hypot(eX[j] - player.x, eY[j] - player.y); if (d < bd) { bd = d; best = j; } }
           if (best < 0) { spawnSpeech(player.x, player.y - 26, "Nothing to absorb…", "#90a4ae", 1.4); return; }
           const rival = eType[best] === 98 && eRivalCid[best] >= 0, weak = eHP[best] < eMax[best] * 0.4;
           if (rival && !weak) { eHP[best] -= eMax[best] * 0.15; spawnSpeech(eX[best], eY[best] - 24, "NOT WEAK ENOUGH YET", "#ffab40", 1.4); }
@@ -527,7 +626,7 @@ const KI_PALM = { 34: "#4fc3f7", 35: "#ffd54f", 36: "#ffd54f", 38: "#4fc3f7", 84
   if (typeof spawnSpeech === "function") { const o = spawnSpeech; window.spawnSpeech = spawnSpeech = function (x, y, text) { if (player && player.cid === 85 && KI.absorbed.some(a => a.k === "levitate" && a.v) && typeof text === "string" && Math.abs(x - player.x) < 4 && /^[A-Z]/.test(text) && /[a-z]/.test(text) && !/^[A-Z][A-Z0-9 '.\-]+:/.test(text) && text.split(" ").length >= 3) arguments[2] = kiYodaSpeak(text); return o.apply(this, arguments); }; }
   window.addEventListener("keydown", e => { if (e.code === "KeyT" && !e.repeat && runActive && !runPaused && kiCanIT()) kiITOpen(); else if (e.code === "Escape" && KI.it) kiITClose(); });
   if (typeof V10 !== "undefined") {
-    V10.onRunStart.push(() => { KI.ki = 0; KI.form = 0; KI.buff = null; KI.cdT = 0; KI.itCd = 0; KI.itPose = null; KI.absorbed = []; kiITClose(); kiHud(); });
+    V10.onRunStart.push(() => { KI.ki = 0; KI.form = 0; KI.buff = null; KI.cdT = 0; KI.itCd = 0; KI.itPose = null; KI.absorbed = []; KI.deathBall = null; KI.coreImpact = null; KI.planetDecay = 0; kiITClose(); kiHud(); });
     V10.onStep.push(kiStep);
     V10.onRenderWorld.push(kiRender);
     V10.onRunReset.push(() => { kiITClose(); const b = document.getElementById("kiBtns"); if (b) b.style.display = "none"; const h = document.getElementById("hudKi"); if (h) h.style.display = "none"; });

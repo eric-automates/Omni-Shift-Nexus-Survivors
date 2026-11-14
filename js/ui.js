@@ -981,6 +981,7 @@ function renderOpts() {
     ["Screen Shake & Hit-Stop", opts.shake !== false ? "ON" : "OFF", () => { opts.shake = opts.shake === false; }],
     ["Run Telemetry Pill (FPS / Bodies)", opts.perfHud !== false ? "ON" : "OFF", () => { opts.perfHud = opts.perfHud === false; }],
     ["Biome Weather FX", opts.weather !== false ? "ON" : "OFF", () => { opts.weather = opts.weather === false; }],
+    ["🎨 Character Cel Shading", opts.cellShade !== false ? "ON (DIRECTIONAL LIGHT)" : "OFF (FLAT SPRITES)", () => { opts.cellShade = opts.cellShade === false; }],
     ["Camera Zoom", opts.zoom.toFixed(2) + "x", () => { opts.zoom = opts.zoom >= 1.75 ? 0.5 : +(opts.zoom + 0.25).toFixed(2); }],
     ["Floating Damage / Speech", opts.dmgNums ? "ON" : "OFF", () => { opts.dmgNums = !opts.dmgNums; }],
     ["Screen Flash Effects", opts.flash ? "ON" : "OFF", () => { opts.flash = !opts.flash; }],
@@ -1011,49 +1012,63 @@ async function renderHealth() {
     <div class="health-row"><b>Live Render Load & Gore Telemetry:</b><br>${fpsCount} FPS • ${frameMs}ms/frame • Corpses: ${activeCorpseCount}/${opts.persistCount}<div class="meter"><div class="meter-fill"></div></div></div>`;
 }
 
-/* === 6. FLOATING JOYSTICK + DOUBLE-TAP DISTANT GROUND DASH DETECTOR === */
+/* === 6. FLOATING JOYSTICK + INDEPENDENT SECOND-POINTER FIRE === */
 let lastCanvasTapTime = 0, lastCanvasTapX = 0, lastCanvasTapY = 0;
-
 if (typeof cv !== "undefined") {
+  const canvasCoords = e => {
+    const r = cv.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / Math.max(1, r.width)), y: (e.clientY - r.top) * (H / Math.max(1, r.height)) };
+  };
+  const worldPoint = e => {
+    const p = canvasCoords(e), cam = typeof fxCamera === "function" ? fxCamera() : null;
+    const z = (opts.zoom || 1) * (cam && cam.zoom || 1);
+    return {
+      x: player.x + (cam && cam.fx || 0) + (p.x - W * 0.5 - (cam && cam.sx || 0)) / z,
+      y: player.y + (cam && cam.fy || 0) + (p.y - H * 0.5 - (cam && cam.sy || 0)) / z
+    };
+  };
+  const beginManualFire = (e, held) => {
+    const p = worldPoint(e); touchFireBegin(p.x, p.y, held); touchFire.pointerId = held ? e.pointerId : -1;
+    if (held && cv.setPointerCapture) { try { cv.setPointerCapture(e.pointerId); } catch (_) {} }
+  };
   cv.addEventListener("pointerdown", e => {
-    const now = performance.now();
-    const cx = e.clientX || 0, cy = e.clientY || 0;
-
-    if (runActive && !runPaused && player && opts.doubleTapDash !== false && typeof executeHeroDash === "function") {
-      const dtTap = now - lastCanvasTapTime;
-      const tapDrift = Math.hypot(cx - lastCanvasTapX, cy - lastCanvasTapY);
-      const distFromCenter = Math.hypot(cx - W * 0.5, cy - H * 0.5);
-      if (dtTap < 330 && tapDrift < 75 && distFromCenter >= 48) {
-        const worldX = player.x + (cx - W * 0.5) / (opts.zoom || 1);
-        const worldY = player.y + (cy - H * 0.5) / (opts.zoom || 1);
-        if (executeHeroDash(worldX, worldY)) {
-          lastCanvasTapTime = 0;
-          return;
-        }
-      }
-      lastCanvasTapTime = now;
-      lastCanvasTapX = cx;
-      lastCanvasTapY = cy;
+    const now = performance.now(), p = canvasCoords(e), cx = e.clientX || 0, cy = e.clientY || 0;
+    if (!runActive || runPaused || !player) return;
+    // A second touch owns aim/fire only; it never recenters or releases movement.
+    if (e.pointerType === "touch" && joy.act && e.pointerId !== joy.id) {
+      if (!touchFire.active) beginManualFire(e, true);
+      e.preventDefault(); return;
     }
-
-    // FIX: the stick is owned by ONE pointer. A second finger touching the canvas used to re-center
-    // it, and lifting ANY finger (e.g. tapping DASH) released it mid-drag.
+    if (e.pointerType === "touch" && touchFire.active && e.pointerId !== touchFire.pointerId) return;
+    const dtTap = now - lastCanvasTapTime, tapDrift = Math.hypot(cx - lastCanvasTapX, cy - lastCanvasTapY);
+    const distFromCenter = Math.hypot(p.x - W * 0.5, p.y - H * 0.5);
+    if (e.pointerType === "touch" && dtTap < 330 && tapDrift < 75 && distFromCenter >= 48) {
+      beginManualFire(e, false); lastCanvasTapTime = 0; e.preventDefault(); return;
+    }
+    // Existing desktop double-click dash remains available; touch double-tap now fires.
+    if (e.pointerType !== "touch" && opts.doubleTapDash !== false && typeof executeHeroDash === "function" && dtTap < 330 && tapDrift < 75 && distFromCenter >= 48) {
+      const wp = worldPoint(e);
+      if (executeHeroDash(wp.x, wp.y)) { lastCanvasTapTime = 0; return; }
+    }
+    lastCanvasTapTime = now; lastCanvasTapX = cx; lastCanvasTapY = cy;
     if (joy.act && e.pointerId !== joy.id) return;
     joy.act = true; joy.id = e.pointerId; joy.ox = cx; joy.oy = cy; joy.dx = 0; joy.dy = 0;
-  });
+  }, { passive: false });
   cv.addEventListener("pointermove", e => {
-    if (!joy.act || e.pointerId !== joy.id) return;
-    const vx = e.clientX - joy.ox, vy = e.clientY - joy.oy, m = Math.hypot(vx, vy) || 1, c = Math.min(1, m / opts.joySize);
-    joy.dx = (vx / m) * c; joy.dy = (vy / m) * c;
-  });
-  const releaseJoy = () => { joy.act = false; joy.id = -1; joy.dx = 0; joy.dy = 0; };
-  const onPointerEnd = e => { if (joy.act && e.pointerId === joy.id) releaseJoy(); };
-  window.addEventListener("pointerup", onPointerEnd);
-  window.addEventListener("pointercancel", onPointerEnd);
-  // Safety net: if the owning pointer's "up" was ever lost, release once no fingers remain.
-  window.addEventListener("touchend", e => { if (e.touches && e.touches.length === 0) releaseJoy(); });
-  window.addEventListener("touchcancel", e => { if (e.touches && e.touches.length === 0) releaseJoy(); });
-  window.addEventListener("blur", releaseJoy);
+    if (joy.act && e.pointerId === joy.id) {
+      const vx = e.clientX - joy.ox, vy = e.clientY - joy.oy, m = Math.hypot(vx, vy) || 1, c = Math.min(1, m / opts.joySize);
+      joy.dx = (vx / m) * c; joy.dy = (vy / m) * c; return;
+    }
+    if (touchFire.active && e.pointerId === touchFire.pointerId) {
+      const p = worldPoint(e); touchFireAim(p.x, p.y); e.preventDefault();
+    }
+  }, { passive: false });
+  const releaseJoy = e => { if (!e || (joy.act && e.pointerId === joy.id)) { joy.act = false; joy.id = -1; joy.dx = 0; joy.dy = 0; } };
+  const onPointerEnd = e => { releaseJoy(e); touchFireEnd(e.pointerId); };
+  window.addEventListener("pointerup", onPointerEnd); window.addEventListener("pointercancel", onPointerEnd);
+  window.addEventListener("touchend", e => { if (e.touches && e.touches.length === 0) { releaseJoy(); if (touchFire.active) touchFireEnd(touchFire.pointerId); } });
+  window.addEventListener("touchcancel", e => { if (e.touches && e.touches.length === 0) { releaseJoy(); if (touchFire.active) touchFireEnd(touchFire.pointerId); } });
+  window.addEventListener("blur", () => { releaseJoy(); if (touchFire.active) touchFireEnd(touchFire.pointerId); });
 }
 
 document.getElementById("goPlay").onclick = () => { if (checkLoadedScripts()) { if (window.trackProgress) window.trackProgress("Deploying Hero #" + meta.selChar); startRun(); } };

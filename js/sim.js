@@ -405,7 +405,7 @@ function updateMinionsSim(simDt) {
 
     let bestE = -1, bestD = 360;
     for (let j = 0; j < MAX_E; j++) {
-      if (!eAct[j] || (typeof eLevitate !== "undefined" && eLevitate[j] > 0) || (typeof sdIgnore === "function" && sdIgnore(j))) continue;
+      if (!eAct[j] || allyIs(j) || (typeof eLevitate !== "undefined" && eLevitate[j] > 0) || (typeof sdIgnore === "function" && sdIgnore(j))) continue;
       const d = Math.hypot(eX[j] - mX[m], eY[j] - mY[m]);
       if (d < bestD) { bestD = d; bestE = j; }
     }
@@ -444,7 +444,7 @@ function updateMinionsSim(simDt) {
             spawnBlastWave(mX[m], mY[m], 62, mCol[m], "squad");
             sfx(110, 42, 0.18, "sawtooth", 0.24);
             for (let k = 0; k < MAX_E; k++) {
-              if (!eAct[k]) continue;
+              if (!eAct[k] || allyIs(k)) continue;
               const dk = Math.hypot(eX[k] - mX[m], eY[k] - mY[m]);
               if (dk <= 64) {
                 eHP[k] -= mDmg[m];
@@ -682,7 +682,7 @@ function hitTestPlayerProj(i) {
       pBounce[i]--;
       let nextE = -1, nextD = 180;
       for (let k = 0; k < MAX_E; k++) {
-        if (k !== j && eAct[k] && !projHasHit(i, k)) {
+        if (k !== j && eAct[k] && !allyIs(k) && !projHasHit(i, k)) {
           const dk = Math.hypot(eX[k] - pX[i], eY[k] - pY[i]);
           if (dk < nextD) { nextD = dk; nextE = k; }
         }
@@ -892,11 +892,13 @@ function stepSimulation(rawDt) {
     }
   }
 
-  const desiredAim = (player.deflectStanceTimer > 0)
+  const desiredAim = (typeof touchFireHasAimPoint === "function" && touchFireHasAimPoint())
+    ? Math.atan2(touchFire.point.y - player.y, touchFire.point.x - player.x)
+    : ((player.deflectStanceTimer > 0)
     ? player.deflectAng
     : (aimTarget >= 0
       ? Math.atan2(eY[aimTarget] - player.y, eX[aimTarget] - player.x)
-      : (typeof player.moveDir === "number" ? player.moveDir : (player.aim || 0)));
+      : (typeof player.moveDir === "number" ? player.moveDir : (player.aim || 0))));
   let aimDiff = desiredAim - (player.aim || 0);
   while (aimDiff > Math.PI) aimDiff -= Math.PI * 2;
   while (aimDiff < -Math.PI) aimDiff += Math.PI * 2;
@@ -1065,6 +1067,7 @@ function stepSimulation(rawDt) {
     if (player.swapPause > 0.05) continue;
     // v14 Nexus City: guns only fire when a hostile is actually in sight (Shift = sneak & hold fire until spotted)
     if (!isMeleeBlade && typeof CITY !== "undefined" && CITY.on && typeof cityHoldFire === "function" && cityHoldFire()) continue;
+    if (typeof touchFireCanShoot === "function" && !touchFireCanShoot(w, simDt)) continue;
 
     if (w.id === 52) {
       // v13: every six-shooter has its OWN cylinder, so twin revolvers fire, run dry and reload independently
@@ -1077,7 +1080,7 @@ function stepSimulation(rawDt) {
         six.burst -= simDt;
         if (six.burst <= 0) {
           const fired = fireWeapon(w);
-          if (fired !== false) { player.recoilKick = 1.0; six.left--; }
+          if (fired !== false) { player.recoilKick = 1.0; six.left--; if (typeof touchFireConsume === "function") touchFireConsume(w); }
           six.reload = six.left <= 0 ? Math.max(0.32, 0.55 * (player.cdr || 1) * hasteCdr) : 0;
           if (six.left > 0) six.burst = Math.max(0.06, 0.12 * (player.cdr || 1) * hasteCdr);
         }
@@ -1089,7 +1092,7 @@ function stepSimulation(rawDt) {
         const baseCD = w.style === "orbit" ? 0.36 : (w.style === "beam" ? 0.48 : (w.style === "cone" ? 0.62 : 0.52));
         w.cd = Math.max(0.06, baseCD * (player.cdr || 1) * hasteCdr * (w.lvl >= 10 ? 0.78 : 1.0));
         const fired = fireWeapon(w);
-        if (!isMeleeBlade && fired !== false) player.recoilKick = 1.0;
+        if (!isMeleeBlade && fired !== false) { player.recoilKick = 1.0; if (typeof touchFireConsume === "function") touchFireConsume(w); }
       }
     }
   }

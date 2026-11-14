@@ -162,7 +162,7 @@ function jdcSceneEvidenceValid(a){
   return !!(live&&e&&e.captured===true&&e.vehicleKey===r.key&&e.model===r.model&&e.wx===r.wx&&e.wy===r.wy);
 }
 function jdcSceneOffer(){
-  if(!v15ContractEnabled(JOB_SCENE_CASE))return {ok:false,why:"Crime-scene detective calls are unavailable in this revision."};
+  if(!v15ContractOfferEnabled(JOB_SCENE_CASE))return {ok:false,why:"Crime-scene detective calls are unavailable for this character in this revision."};
   if(!runActive||!CITY.on||!player||player.inVehicle||player.roof||(player.flyAlt||0)>2)return {ok:false,why:"Stand on the ground outside a vehicle to request a detective call."};
   const read=jobReadState();if(!read.ok)return read;if(read.state.active)return {ok:false,why:"Finish or withdraw the current job first."};
   const plan=jdcScenePlan(player.x,player.y,(CITY.seed>>>0)+read.state.next*3571);if(!plan.ok)return plan;
@@ -204,7 +204,7 @@ function jdPoiPlan(sx,sy,salt,memory){
   return {ok:false,why:"No fully reachable person-of-interest route was found. Try a different starting point."};
 }
 function jdPoiOffer(){
-  if(!v15ContractEnabled(JOB_POI_FOLLOWUP))return {ok:false,why:"Person-of-interest follow-up calls are unavailable in this revision."};
+  if(!v15ContractOfferEnabled(JOB_POI_FOLLOWUP))return {ok:false,why:"Person-of-interest follow-up calls are unavailable for this character in this revision."};
   if(!runActive||!CITY.on||!player||player.inVehicle||player.roof||(player.flyAlt||0)>2)return {ok:false,why:"Stand on the ground outside a vehicle to request a follow-up."};
   if(!TF?.on)return {ok:false,why:"Person-of-interest interviews require townsfolk in an economy or apocalypse scenario."};
   const read=jobReadState();if(!read.ok)return read;if(read.state.active)return {ok:false,why:"Finish or withdraw the current job first."};

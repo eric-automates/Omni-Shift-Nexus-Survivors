@@ -50,6 +50,30 @@ function getHeroKinematicStyle(cid) {
 }
 
 /* === 2. ANATOMICAL STATURE & PROPORTION REGISTRY FOR ALL 80 HEROES (#00-#79) === */
+// Initial gait sets share a stable per-character API; special entries are tied to
+// cited performance references in 16.0_CHARACTER_MOTION_REFERENCE.md. Remaining
+// roster-specific performances are deliberately marked pending there, not guessed.
+const HERO_TACTICAL_GAIT = new Set([1, 2, 8, 13, 19, 22, 25, 26, 28, 31, 32, 40, 41, 43, 44, 47, 51, 53, 54]);
+const HERO_GAIT_OVERRIDES = Object.freeze({
+  5:  Object.freeze({ cadence: 1.72, stride: 3.9, bob: 0.7, style: "lumbering-gentle-giant" }), // Chewbacca
+  28: Object.freeze({ cadence: 2.34, stride: 2.05, bob: 0.28, style: "smartgun-braced-marine" }), // Vasquez
+  32: Object.freeze({ cadence: 2.16, stride: 2.2, bob: 0.3, style: "armored-tank-alert" }), // Master Chief
+  40: Object.freeze({ cadence: 2.42, stride: 2.3, bob: 0.18, style: "machine-efficient-cyborg" }), // T-800
+  76: Object.freeze({ cadence: 1.68, stride: 2.4, bob: 0.25, style: "measured-imperial-strut" }), // Darth Vader
+  79: Object.freeze({ cadence: 1.58, stride: 1.45, bob: 0.35, style: "aged-deliberate-shuffle" }) // Yoda
+});
+function getHeroGaitProfile(cid) {
+  if (HERO_GAIT_OVERRIDES[cid]) return HERO_GAIT_OVERRIDES[cid];
+  if (HERO_TACTICAL_GAIT.has(cid)) return { cadence: 2.7, stride: 2.35, bob: 0.42, style: "disciplined-tactical" };
+  const k = getHeroKinematicStyle(cid);
+  if (k === 0) return { cadence: 2.18, stride: 2.55, bob: 0.5, style: "deliberate" };
+  if (k === 1) return { cadence: 2.48, stride: 2.85, bob: 0.72, style: "compact-ready" };
+  if (k === 2) return { cadence: 2.05, stride: 2.45, bob: 0.48, style: "heavy-grounded" };
+  if (k === 3 || k === 5) return { cadence: 2.25, stride: 2.2, bob: 0.35, style: "light-hover-or-caster" };
+  if (k === 4) return { cadence: 2.75, stride: 3.25, bob: 0.82, style: "agile-melee" };
+  return { cadence: 2.35, stride: 2.85, bob: 0.7, style: "balanced" };
+}
+
 function getHeroBodySpec(cid) {
   if (cid === 4)  return { sx: 0.76, sy: 0.74, yOff: 3.5, kind: "astromech" }; // R2-D2 Small Astromech Droid
   if (cid === 79) return { sx: 0.68, sy: 0.60, yOff: 4.5, kind: "yoda" };      // Grandmaster Yoda Small Stature
@@ -321,10 +345,49 @@ function drawSaberBladePose(tCtx, w, R, col, handCol, aim, slotIdx, bladeSt, mai
   }
 }
 
+/*
+ * Directional pose/cel-light helpers. The base art faces screen-up; yaw rotates
+ * that body into eight movement directions while weapon aim is counter-rotated
+ * so the muzzle still points at its world-space target. Sun key is upper-left.
+ * Character-specific gait research/overrides are recorded in the companion
+ * 16.0_CHARACTER_MOTION_REFERENCE.md before each individual profile is tuned.
+ */
+const HERO_KEY_LIGHT_ANGLE = -2.28; // upper-left in screen/world coordinates
+function heroBodyRotation(facingAngle) {
+  const a = Number.isFinite(facingAngle) ? facingAngle : -Math.PI / 2;
+  return Math.round((a + Math.PI / 2) / (Math.PI / 4)) * (Math.PI / 4);
+}
+function drawHeroCellShading(tCtx, bodyRot, walk = 0) {
+  if (!tCtx || typeof opts !== "undefined" && opts.cellShade === false) return;
+  const light = HERO_KEY_LIGHT_ANGLE - bodyRot, lx = Math.cos(light), ly = Math.sin(light);
+  const shade = (paint) => {
+    tCtx.save(); paint(); tCtx.clip();
+    const grad = tCtx.createLinearGradient(-lx * 8, -ly * 10, lx * 8, ly * 10);
+    grad.addColorStop(0, "rgba(255,255,230,0.24)"); grad.addColorStop(0.22, "rgba(255,255,255,0.09)");
+    grad.addColorStop(0.47, "rgba(0,0,0,0)"); grad.addColorStop(0.73, "rgba(0,0,0,0.10)"); grad.addColorStop(1, "rgba(0,0,0,0.34)");
+    tCtx.fillStyle = grad; tCtx.fillRect(-16, -23, 32, 38); tCtx.restore();
+  };
+  // Shoulder/torso cel bands: clipped to a compact anatomical silhouette.
+  shade(() => { tCtx.beginPath(); tCtx.moveTo(-4.8,-5.6); tCtx.lineTo(-5.9,-3.6); tCtx.lineTo(-5.6,3.8); tCtx.quadraticCurveTo(0,5.4,5.6,3.8); tCtx.lineTo(5.9,-3.6); tCtx.lineTo(4.8,-5.6); tCtx.closePath(); });
+  // Head volume remains separate from hair/helmet paint; this adds a sunlit rim
+  // and a hard shadow band without changing the recognizable base palette.
+  shade(() => { tCtx.beginPath(); tCtx.ellipse(0, -9.4, 5.45, 5.8, 0, 0, Math.PI * 2); });
+  // Limb shadows follow the gait phase so the 2D sprite reads as a lit volume.
+  for (const side of [-1, 1]) {
+    const y = 4 + Math.sin(walk * 2.2 + (side < 0 ? 0 : Math.PI)) * 1.6;
+    shade(() => { tCtx.beginPath(); tCtx.rect(side < 0 ? -4.9 : 1.0, y, 3.8, 6.5); });
+  }
+  // A thin ink contour and light-facing shoulder edge establish the cel-shaded look.
+  tCtx.save(); tCtx.strokeStyle = "rgba(10,16,24,0.72)"; tCtx.lineWidth = 0.8;
+  tCtx.beginPath(); tCtx.moveTo(-5.9,-3.2); tCtx.lineTo(-5.5,3.8); tCtx.quadraticCurveTo(0,5.4,5.5,3.8); tCtx.lineTo(5.9,-3.2); tCtx.stroke();
+  tCtx.strokeStyle = "rgba(255,248,214,0.48)"; tCtx.lineWidth = 0.7;
+  tCtx.beginPath(); tCtx.moveTo(-4.6,-5.0); tCtx.quadraticCurveTo(-6.2,-2.3,-5.2,0.5); tCtx.stroke(); tCtx.restore();
+}
+
 /* === 4. CANON 80-HERO SPRITE RENDERER (STATURE SCALING, R2-D2 DROID, YODA, CLINT, VADER) === */
 const HELMET_HEROES = new Set([1, 2, 4, 7, 9, 17, 19, 23, 26, 29, 30, 32, 33, 47, 49, 50, 54, 55, 76]);
 
-function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx, guardZone = -1, flightPose = null) {
+function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx, guardZone = -1, flightPose = null, facingAngle = -Math.PI / 2) {
   const out = typeof getOutfit === "function" ? getOutfit(cid) : { head: 0, torso: 0, legs: 0, back: 0, blade: 0 };
   const pal = typeof getHeroOutfits === "function" ? getHeroOutfits(cid) : null;
   const cHead = (pal && pal.head && pal.head[out.head || 0]) ? pal.head[out.head || 0][1] : fac.c1;
@@ -338,13 +401,16 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   const isLivePlayer = (tCtx === ctx && typeof player !== "undefined" && player && player.cid === cid);
   const kStyle = getHeroKinematicStyle(cid);
   const bSpec = getHeroBodySpec(cid);
+  const bodyRot = heroBodyRotation(facingAngle), localAim = aim - bodyRot;
+  const gait = getHeroGaitProfile(cid), gaitPhase = walk * gait.cadence;
+  const backView = Math.sin(facingAngle) < -0.42;
   // Flight uses a held directional leg adjustment, never a walk-cycle.
   const flightSpeed = flightPose ? Math.hypot(flightPose.vx, flightPose.vy) : 0;
-  const flightAngle = flightSpeed > 0.01 ? Math.atan2(flightPose.vy, flightPose.vx) - aim : 0;
+  const flightAngle = flightSpeed > 0.01 ? Math.atan2(flightPose.vy, flightPose.vx) - facingAngle : 0;
   const flightAmount = flightPose ? Math.min(1, flightSpeed / Math.max(1, flightPose.top)) : 0;
-  const stride = flightPose ? (Math.sin(flightAngle) * 2.1 + Math.cos(flightAngle) * 0.8) * flightAmount : Math.sin(walk * 2.2) * 3.2;
+  const stride = flightPose ? (Math.sin(flightAngle) * 2.1 + Math.cos(flightAngle) * 0.8) * flightAmount : Math.sin(gaitPhase) * gait.stride;
   const acrobatZ = isLivePlayer ? (player.acrobatZ || 0) : 0;
-  const hoverBob = (kStyle === 3 || kStyle === 5 || flightPose) ? Math.sin((typeof runTime !== "undefined" ? runTime : 0) * 5.5) * 2.0 : 0;
+  const hoverBob = (kStyle === 3 || kStyle === 5 || flightPose) ? Math.sin((typeof runTime !== "undefined" ? runTime : 0) * 5.5) * 2.0 : Math.abs(Math.sin(gaitPhase * 2)) * gait.bob;
   const bankAng = (isLivePlayer ? (player.bankTilt || 0) : 0) + (flightPose ? Math.sin(flightAngle) * flightAmount * 0.10 : 0);
 
   // v13 creator jetpack: the hero really flies - raised sprite over a ground shadow
@@ -356,6 +422,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   }
   tCtx.save();
   tCtx.translate(x, y + hoverBob + bSpec.yOff - acrobatZ - flyLift);
+  if (bodyRot) tCtx.rotate(bodyRot);
   if (bankAng !== 0) tCtx.rotate(bankAng);
   if (acrobatZ > 2 && isLivePlayer && player.acrobatFlip) tCtx.rotate(player.acrobatFlip * 0.5);
 
@@ -394,12 +461,12 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     tCtx.fillRect(-4.2, -9.2, 2.6, 2.2);
     tCtx.fillRect(1.6, -9.2, 2.6, 2.2);
     tCtx.fillStyle = "#111111";
-    tCtx.beginPath(); tCtx.arc(Math.cos(aim) * 1.2, -8.2, 1.5, 0, Math.PI * 2); tCtx.fill();
+    tCtx.beginPath(); tCtx.arc(Math.cos(localAim) * 1.2, -8.2, 1.5, 0, Math.PI * 2); tCtx.fill();
     tCtx.fillStyle = "#ff1744";
     tCtx.beginPath(); tCtx.arc(2.2, -6.8, 0.9, 0, Math.PI * 2); tCtx.fill();
 
     tCtx.save();
-    tCtx.rotate(aim);
+    tCtx.rotate(localAim);
     tCtx.fillStyle = "#90a4ae";
     tCtx.fillRect(5, -1.2, 8.5, 2.4);
     tCtx.fillStyle = "#00e5ff";
@@ -514,8 +581,8 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   const isHelmeted = HELMET_HEROES.has(cid);
   const isFemale = FEMALE_HEROES.has(cid);
   const isBlinking = isLivePlayer && (player.blinkDur || 0) > 0;
-  const eyeLookX = Math.cos(aim) * 0.9;
-  const eyeLookY = Math.sin(aim) * 0.45;
+  const eyeLookX = Math.cos(localAim) * 0.9;
+  const eyeLookY = Math.sin(localAim) * 0.45;
 
   if (isHelmeted) {
     if (cid === CUSTOM_CID && typeof drawCustomHelmet === "function") {
@@ -723,6 +790,11 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     if (cid === CUSTOM_CID && typeof drawCustomSpeciesExtras === "function") {   // v12/v13 creator: species details + headgear
       drawCustomSpeciesExtras(tCtx, eyeLookX);
     }
+    if (backView && ![4, 10, 30, 55, 79].includes(cid)) {
+      // Back-facing octants hide the face instead of showing a front portrait on every heading.
+      tCtx.fillStyle = cHead; tCtx.beginPath(); tCtx.ellipse(0, -10.0, 5.4, 5.6, 0, 0, Math.PI * 2); tCtx.fill();
+      tCtx.fillStyle = "rgba(0,0,0,0.14)"; tCtx.beginPath(); tCtx.ellipse(0, -7.1, 4.4, 2.0, 0, 0, Math.PI * 2); tCtx.fill();
+    }
   }
 
   const swapP = isLivePlayer ? (player.swapPause || 0) : 0;
@@ -750,7 +822,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
 
   if (isLivePlayer && player.forceHandTimer > 0) {
     tCtx.save();
-    tCtx.rotate(player.forceHandAng || aim);
+    tCtx.rotate((player.forceHandAng || aim) - bodyRot);
     drawBallHand(tCtx, 11.5, -3.5, 2.7, handCol, "#00e5ff");
     tCtx.strokeStyle = "rgba(0, 229, 255, 0.75)";
     tCtx.lineWidth = 1.3;
@@ -774,14 +846,14 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
         : (w.bladeCol || (typeof getWeaponColor === "function" ? getWeaponColor(w.id) : cBlade));
 
       const sfR = (isLivePlayer && isMeleeBlade && typeof saberRenderState === "function") ? saberRenderState(w) : null;
-      if (sfR) { drawSaberFormSlot(tCtx, w, sfR, wActiveCol, handCol, aim, slotIdx); return; }
+      if (sfR) { drawSaberFormSlot(tCtx, w, sfR, wActiveCol, handCol, localAim, slotIdx); return; }
       // v14.2: blades sheathe on the back and guns holster when no threat is near (js/sheathe.js)
       if (isLivePlayer && typeof sheatheStowed === "function" && (isMeleeBlade || kStyle <= 3) && sheatheStowed(w, isMeleeBlade)) { sheatheDraw(tCtx, w, slotIdx, isMeleeBlade, wActiveCol, handCol); return; }
 
       const isTelekineticSlot = (slotIdx >= 2 && kStyle === 5) || (kStyle === 5 && slotIdx >= 1 && w.style !== "chain");
       const armAng = (isLivePlayer && typeof w.armAng === "number")
-        ? w.armAng
-        : (aim + (slotIdx === 0 ? 0 : (slotIdx === 1 ? 0.18 : (slotIdx === 2 ? -0.35 : 0.42))));
+        ? w.armAng - bodyRot
+        : (localAim + (slotIdx === 0 ? 0 : (slotIdx === 1 ? 0.18 : (slotIdx === 2 ? -0.35 : 0.42))));
       const wristSpin = (isLivePlayer && typeof w.wristSpin === "number") ? w.wristSpin : 0;
       // v14.2 low ready: an idle gun stays in hand, muzzle lowered toward the ground ahead (js/sheathe.js)
       const lowK = (isLivePlayer && !isMeleeBlade && kStyle <= 3 && typeof sheatheLowK === "function") ? sheatheLowK() : 0;
@@ -837,7 +909,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
 
       // v14.3: a matched pair (Neo's Micro-Uzis) — the twin sits in the free hand and aims on its own (js/dualaim.js)
       if (slotIdx === 0 && w.id === 39 && (activeWpns.length === 1 || kStyle === 5)) {
-        const a2 = (isLivePlayer && typeof w.armAng2 === "number") ? w.armAng2 : armAng + 0.18;
+        const a2 = (isLivePlayer && typeof w.armAng2 === "number") ? w.armAng2 - bodyRot : armAng + 0.18;
         tCtx.save();
         tCtx.rotate(a2);
         tCtx.translate(reachDist, -4.5);
@@ -847,6 +919,7 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
       }
     });
   }
+  drawHeroCellShading(tCtx, bodyRot, walk);
 
   tCtx.restore();
 }
@@ -1210,6 +1283,136 @@ function drawSmolderingSliceLine(tCtx, len, heat, glowCol) {
   }
 }
 
+// Conventional ammunition is a direction-aligned tracer/slug, never a round
+// faction-colored orb. GAU_GUN is the canonical per-weapon firearm class map.
+// Damage, spread, speed, penetration and collision remain in the unchanged sim.
+const BALLISTIC_ART_PROFILES = Object.freeze({
+  pistol: Object.freeze([4.5, 8, 0.95]), smg: Object.freeze([4.2, 8.5, 1.0]),
+  rifle: Object.freeze([5.0, 13, 1.05]), magnum: Object.freeze([5.5, 10, 1.05]),
+  shotgun: Object.freeze([4.0, 5.5, 0.8]), mg: Object.freeze([4.7, 11.5, 1.1])
+});
+const ENERGY_BOLT_ART_PROFILES = Object.freeze({
+  1: Object.freeze(["#f6c453", "#fff6d8"]),  // Beskar heavy blaster
+  6: Object.freeze(["#55c7ff", "#e8faff"]),  // DL-44 heavy blaster
+  22: Object.freeze(["#ff725e", "#fff0b5"]), // Type-II phaser
+  34: Object.freeze(["#ffad42", "#fff4cb"]), // Goku ki wave
+  35: Object.freeze(["#8fc8ff", "#f4fbff"]), // Royal Flash
+  36: Object.freeze(["#a8f06a", "#f5ffd8"]), // Piccolo spiral beam
+  40: Object.freeze(["#ff6248", "#ffe6b7"]), // M-25 plasma
+  84: Object.freeze(["#d36bff", "#fff0ff"])  // Frieza Death Beam
+});
+function drawEnergyBoltProjectile(g, i) {
+  if (pArt[i] !== 2 || (pStyle[i] !== 3 && pStyle[i] !== 4)) return false;
+  const palette = ENERGY_BOLT_ART_PROFILES[pWpnId[i]], speed = Math.hypot(pVX[i], pVY[i]);
+  if (!palette || !(speed > 0.01)) return false;
+  const [edge, core] = palette, scale = Math.max(0.75, Math.min(1.8, (pRad[i] || 7) / 8));
+  g.save(); g.translate(pX[i], pY[i]); g.rotate(Math.atan2(pVY[i], pVX[i]));
+  g.globalCompositeOperation = "lighter"; g.lineCap = "round";
+  g.globalAlpha = pEnemy[i] ? 0.52 : 0.62; g.strokeStyle = edge; g.lineWidth = 8 * scale;
+  g.beginPath(); g.moveTo(-13 * scale, 0); g.lineTo(1 * scale, 0); g.stroke();
+  g.globalAlpha = 0.96; g.fillStyle = edge; g.beginPath();
+  g.moveTo(-7 * scale, -2.8 * scale); g.lineTo(3 * scale, -2.8 * scale); g.lineTo(9 * scale, 0);
+  g.lineTo(3 * scale, 2.8 * scale); g.lineTo(-7 * scale, 2.8 * scale); g.closePath(); g.fill();
+  g.strokeStyle = core; g.lineWidth = 1.7 * scale; g.globalAlpha = 0.95;
+  g.beginPath(); g.moveTo(-5 * scale, 0); g.lineTo(7 * scale, 0); g.stroke();
+  g.restore(); return true;
+}
+// Utility-only family renderers use launch-time pArt tags set by reviewed caller IDs.
+// These are deliberately presentation-only: collision, impact and sound remain in their owners.
+const UTILITY_ENERGY_PALETTES = Object.freeze({
+  2: ["#ff7043", "#fff0cf"], 6: ["#45bfff", "#effbff"], 9: ["#ff854a", "#fff1c4"],
+  19: ["#b7f0ff", "#f5ffff"], 22: ["#54d9ff", "#f0fdff"], 23: ["#9affdb", "#f4fff8"],
+  35: ["#ff9b55", "#fff2c9"], 37: ["#ffb84d", "#fff6dd"], 41: ["#49d5ff", "#effdff"],
+  45: ["#a9a5ff", "#f4f1ff"], 87: ["#77ff92", "#f0fff3"], 88: ["#8aff80", "#f5ffed"]
+});
+const UTILITY_ARCANE_PALETTES = Object.freeze({
+  3: ["#a75cff", "#f5ddff"], 12: ["#9cff57", "#f0ffd8"],
+  60: ["#ffd166", "#fff8d7"], 65: ["#d76bff", "#fff0ff"]
+});
+const UTILITY_FAMILY_IDS = Object.freeze({
+  ballistic: Object.freeze([8,13,15,28,31,43,44,51,52]),
+  energy: Object.freeze([2,6,9,19,22,23,35,37,41,45,87,88]),
+  arcane: Object.freeze([3,12,60,65]), fragment: Object.freeze([17,21,25]),
+  arrow: Object.freeze([5,50]), rocketBody: Object.freeze([26])
+});
+function drawUtilityProjectile(g, i) {
+  const art = pArt[i];
+  if (art < 3 || art > 8 || (pStyle[i] !== 3 && pStyle[i] !== 4)) return false;
+  const id = pWpnId[i], speed = Math.hypot(pVX[i], pVY[i]);
+  if (!(speed > 0.01)) return false;
+  const energy = UTILITY_ENERGY_PALETTES[id], arcane = UTILITY_ARCANE_PALETTES[id];
+  const edge = art === 3 ? "#d4dce3" : art === 4 ? (energy ? energy[0] : "#65cfff") : art === 5 ? (arcane ? arcane[0] : "#bc7cff") : "#ffb65e";
+  const core = art === 3 ? "#fff0c0" : art === 4 ? (energy ? energy[1] : "#f3fdff") : art === 5 ? (arcane ? arcane[1] : "#fff2ff") : "#fff0cf";
+  const sc = Math.max(.75, Math.min(1.55, (pRad[i] || 8) / 8));
+  g.save(); g.translate(pX[i], pY[i]); g.rotate(Math.atan2(pVY[i], pVX[i])); g.lineCap = "round";
+  if (art === 3) {
+    g.globalAlpha = .32; g.strokeStyle = "#ffc66e"; g.lineWidth = 2.2 * sc;
+    g.beginPath(); g.moveTo(-15 * sc, 0); g.lineTo(-2 * sc, 0); g.stroke();
+    g.globalAlpha = .9; g.fillStyle = edge; g.beginPath(); g.moveTo(-5*sc,-2*sc); g.lineTo(4*sc,-1.6*sc); g.lineTo(8*sc,0); g.lineTo(4*sc,1.6*sc); g.lineTo(-5*sc,2*sc); g.closePath(); g.fill();
+    g.globalAlpha=.95;g.strokeStyle=core;g.lineWidth=1.1*sc;g.beginPath();g.moveTo(-3*sc,0);g.lineTo(6*sc,0);g.stroke();
+  } else if (art === 6) {
+    // Kinetic shrapnel: opaque steel shard with a warm edge, not an energy bolt.
+    g.globalAlpha=.72;g.strokeStyle="#9b6545";g.lineWidth=1.1*sc;g.beginPath();g.moveTo(-11*sc,0);g.lineTo(-4*sc,-1.2*sc);g.stroke();
+    g.globalAlpha=.94;g.fillStyle="#87929c";g.beginPath();g.moveTo(8*sc,-.7*sc);g.lineTo(1*sc,-1.4*sc);g.lineTo(-6*sc,-3.4*sc);g.lineTo(-3*sc,-.4*sc);g.lineTo(-8*sc,.6*sc);g.lineTo(-1*sc,1.2*sc);g.lineTo(4*sc,2.5*sc);g.closePath();g.fill();
+    g.globalAlpha=.9;g.strokeStyle="#e3ad72";g.lineWidth=.75*sc;g.beginPath();g.moveTo(-5*sc,-2.8*sc);g.lineTo(6*sc,-.45*sc);g.stroke();
+  } else if (art === 7) {
+    // Physical quarrel/arrow: straight shaft and four-fletch tail, no glow/explosion.
+    g.globalAlpha=.82;g.strokeStyle="#c9b48a";g.lineWidth=1.25*sc;g.beginPath();g.moveTo(-13*sc,0);g.lineTo(7*sc,0);g.stroke();
+    g.globalAlpha=.94;g.fillStyle="#d9e0e5";g.beginPath();g.moveTo(8*sc,-1.6*sc);g.lineTo(13*sc,0);g.lineTo(8*sc,1.6*sc);g.closePath();g.fill();
+    g.fillStyle="#8d6e63";g.beginPath();g.moveTo(-10*sc,-1*sc);g.lineTo(-6*sc,-3.1*sc);g.lineTo(-5*sc,-.6*sc);g.lineTo(-5*sc,.6*sc);g.lineTo(-6*sc,3.1*sc);g.lineTo(-10*sc,1*sc);g.closePath();g.fill();
+  } else if (art === 8) {
+    // Rocket body only: no new trail logic, detonation, or area damage implied.
+    g.globalAlpha=.42;g.strokeStyle="#ff9d52";g.lineWidth=2*sc;g.beginPath();g.moveTo(-15*sc,0);g.lineTo(-7*sc,0);g.stroke();
+    g.globalAlpha=.94;g.fillStyle="#b8c1c9";g.beginPath();g.moveTo(-9*sc,-2.4*sc);g.lineTo(6*sc,-2.4*sc);g.lineTo(12*sc,0);g.lineTo(6*sc,2.4*sc);g.lineTo(-9*sc,2.4*sc);g.closePath();g.fill();
+    g.fillStyle="#777f87";g.beginPath();g.moveTo(-8*sc,-2.2*sc);g.lineTo(-12*sc,-4.2*sc);g.lineTo(-5*sc,-2.4*sc);g.moveTo(-8*sc,2.2*sc);g.lineTo(-12*sc,4.2*sc);g.lineTo(-5*sc,2.4*sc);g.closePath();g.fill();
+    g.globalAlpha=.92;g.strokeStyle="#fff0cf";g.lineWidth=.8*sc;g.beginPath();g.moveTo(-5*sc,0);g.lineTo(8*sc,0);g.stroke();
+  } else {
+    const palette=art===4?energy:arcane;g.globalCompositeOperation="lighter";
+    g.globalAlpha=.48;g.strokeStyle=edge;g.lineWidth=(art===5?6:7)*sc;g.beginPath();g.moveTo(-12*sc,0);g.lineTo(2*sc,0);g.stroke();
+    g.globalAlpha=.94;g.fillStyle=edge;g.beginPath();g.moveTo(-5*sc,-2.5*sc);g.lineTo(3*sc,-2.3*sc);g.lineTo(8*sc,0);g.lineTo(3*sc,2.3*sc);g.lineTo(-5*sc,2.5*sc);g.closePath();g.fill();
+    if(art===5){g.globalAlpha=.82;g.strokeStyle=core;g.lineWidth=1;g.beginPath();g.moveTo(-2*sc,-3.6*sc);g.lineTo(1*sc,-1*sc);g.lineTo(-2*sc,0);g.lineTo(1*sc,1*sc);g.lineTo(-2*sc,3.6*sc);g.stroke()}
+    else{g.globalAlpha=.95;g.strokeStyle=core;g.lineWidth=1.4*sc;g.beginPath();g.moveTo(-3*sc,0);g.lineTo(6*sc,0);g.stroke()}
+  }
+  g.restore();return true;
+}
+function drawBallisticProjectile(g, i) {
+  // Explicit art identity avoids confusing hero-ID-tagged magic/signature shots
+  // with a firearm whose weapon ID happens to share the same integer.
+  if (pArt[i] !== 1 || (pStyle[i] !== 3 && pStyle[i] !== 4)) return false;
+  const soundProfile = typeof GAU_GUN !== "undefined" && GAU_GUN[pWpnId[i]];
+  if (!soundProfile) return false;
+  const profile = BALLISTIC_ART_PROFILES[soundProfile[0]];
+  if (!profile) return false;
+  const speed = Math.hypot(pVX[i], pVY[i]);
+  if (!(speed > 0.01)) return false;
+  const [bodyLen, trailLen, width] = profile;
+  g.save();
+  g.translate(pX[i], pY[i]);
+  g.rotate(Math.atan2(pVY[i], pVX[i]));
+  g.lineCap = "round";
+  // A faint tracer is deliberately restrained; the shaped slug stays readable
+  // without suggesting a glowing energy ball. Shots keep their real travel path.
+  g.globalAlpha = pEnemy[i] ? 0.46 : 0.34;
+  g.strokeStyle = pSup[i] ? "#ffd166" : "#ffcf78";
+  g.lineWidth = width * 1.65;
+  g.beginPath(); g.moveTo(-trailLen, 0); g.lineTo(-0.6, 0); g.stroke();
+  g.globalAlpha = pEnemy[i] ? 0.92 : 0.84;
+  g.fillStyle = "#c8d0d8";
+  g.beginPath();
+  g.moveTo(-bodyLen * 0.52, -width * 0.36);
+  g.lineTo(bodyLen * 0.18, -width * 0.36);
+  g.lineTo(bodyLen * 0.52, 0);
+  g.lineTo(bodyLen * 0.18, width * 0.36);
+  g.lineTo(-bodyLen * 0.52, width * 0.36);
+  g.closePath(); g.fill();
+  g.globalAlpha = 0.92;
+  g.strokeStyle = pSup[i] ? "#fff3c4" : "#fff0c0";
+  g.lineWidth = Math.max(0.65, width * 0.52);
+  g.beginPath(); g.moveTo(-bodyLen * 0.3, 0); g.lineTo(bodyLen * 0.36, 0); g.stroke();
+  g.restore();
+  return true;
+}
+
 function renderScene() {
   ctx.fillStyle = "#060b14";
   ctx.fillRect(0, 0, W, H);
@@ -1340,7 +1543,8 @@ function renderScene() {
     } else if (et === 98 && eRivalCid[i] >= 0) {
       const rFac = FACTIONS[CHAR_RAW[eRivalCid[i]][1]] || player.fac;
       const faceOv = sdOn ? showdownFaceAng(i) : null;     // v12: the rival turns to its challenger during its entrance
-      drawHeroSprite(ex, ey, rFac, eRivalCid[i], runTime * 4, faceOv !== null ? faceOv : Math.atan2(player.y - ey, player.x - ex), 0, ctx, -1);
+      drawHeroSprite(ex, ey, rFac, eRivalCid[i], runTime * 4, faceOv !== null ? faceOv : Math.atan2(player.y - ey, player.x - ex), 0, ctx, -1, null,
+        Math.hypot(eVX[i], eVY[i]) > 8 ? Math.atan2(eVY[i], eVX[i]) : (faceOv !== null ? faceOv : Math.atan2(player.y - ey, player.x - ex)));
     } else if (!ally && !spect && typeof drawEnemyDetailed === "function" && (visorMode !== 3 || (ctx.fillStyle = "rgba(255, 110, 40, 0.22)", ctx.beginPath(), ctx.arc(ex, ey, baseR + 5, 0, Math.PI * 2), ctx.fill(), true)) && drawEnemyDetailed(i, ex, ey, baseR, ally, isKneeling, isLevitating, spect)) {
       // v14: detailed per-hero roster enemies (js/enemylook.js); tracker visors keep a heat halo
       if (eGrapple[i] > 0) { ctx.strokeStyle = "#00e5ff"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(ex, ey); ctx.stroke(); }
@@ -1515,7 +1719,7 @@ function renderScene() {
     ctx.beginPath(); ctx.moveTo(-4, -2); ctx.lineTo(-16, -23); ctx.moveTo(4, -2); ctx.lineTo(16, -23); ctx.stroke();
     ctx.fillStyle = "#ffca70"; ctx.beginPath(); ctx.arc(0, -23, 16, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.restore();
   }
-  drawHeroSprite(hx, hy, player.fac, player.cid, player.walk, player.aim, player.inVehicle, ctx, player.guardZone, pose);
+  drawHeroSprite(hx, hy, player.fac, player.cid, player.walk, player.aim, player.inVehicle, ctx, player.guardZone, pose, Math.hypot(player.vx || 0, player.vy || 0) > 12 ? Math.atan2(player.vy, player.vx) : player.aim);
   ctx.restore();
 
   if (typeof thrownBlade !== "undefined" && thrownBlade.active) {
@@ -1534,6 +1738,7 @@ function renderScene() {
 
   const handOriginX = player.x + Math.cos(player.aim) * 9;
   const handOriginY = player.y + Math.sin(player.aim) * 9;
+
 
   for (let i = 0; i < MAX_P; i++) {
     if (!pAct[i]) continue;
@@ -1609,7 +1814,7 @@ function renderScene() {
     } else if (st === 6) {
       ctx.strokeStyle = pSup[i] ? "#ffd166" : player.fac.c1; ctx.lineWidth = 2.4;
       ctx.beginPath(); ctx.arc(pX[i], pY[i], pRad[i], 0, Math.PI * 2); ctx.stroke();
-    } else {
+    } else if (!drawBallisticProjectile(ctx, i) && !drawEnergyBoltProjectile(ctx, i) && !drawUtilityProjectile(ctx, i)) {
       ctx.fillStyle = pSup[i] === 2 ? "#ffffff" : (pEnemy[i] ? "#ff1744" : (pSup[i] ? "#ffd166" : player.fac.c1));
       ctx.beginPath(); ctx.arc(pX[i], pY[i], Math.max(2.5, pRad[i] * 0.45), 0, Math.PI * 2); ctx.fill();
     }

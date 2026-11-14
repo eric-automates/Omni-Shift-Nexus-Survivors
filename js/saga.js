@@ -173,7 +173,7 @@ function sagaDrawBlade2(tCtx, R, st, col) {
 function sagaSaberW() { return player && player.weapons ? player.weapons.find(q => q.enabled !== false && typeof saberEngineOwns === "function" && saberEngineOwns(q)) || player.weapons[0] : null; }
 function sagaFoes(x, y, r) { const out = []; for (let j = 0; j < MAX_E; j++) { if (!eAct[j] || (typeof allyIs === "function" && allyIs(j)) || (typeof sdIgnore === "function" && sdIgnore(j))) continue; const d = Math.hypot(eX[j] - x, eY[j] - y); if (d < r) out.push([d, j]); } out.sort((a, b) => a[0] - b[0]); return out.map(q => q[1]); }
 function sagaHurt(j, dmg, stun, ang) {
-  if (!eAct[j]) return;
+  if (!eAct[j] || (typeof allyIs === "function" && allyIs(j))) return;
   eHP[j] -= dmg; eStun[j] = Math.max(eStun[j], stun || 0);
   if (typeof spawnDmg === "function") spawnDmg(eX[j], eY[j], dmg, dmg > 120);
   if (eHP[j] <= 0 && typeof killEnemy === "function") killEnemy(j, false, ang || 0, "#80d8ff");

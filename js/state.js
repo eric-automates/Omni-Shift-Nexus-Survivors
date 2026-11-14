@@ -20,8 +20,8 @@ const OPTS_KEY = "OMNISHIFT_OPTS_V1";
 let opts = {
   zoom: 1.0, dmgNums: true, flash: true, lowPart: false, hiCon: true,
   fps: true, vol: 0.45, amb: true, joySize: 44, ttDelay: 350, hudFlip: false,
-  persistCount: 100, doubleTapDash: true, timeScale: 1.0,
-  shake: true, perfHud: true, weather: true,   // v10 game-feel options
+  persistCount: 100, doubleTapDash: true, fireMode: "auto", timeScale: 1.0,
+  shake: true, perfHud: true, weather: true, cellShade: true,   // v16 directional cel shading
   hud: { auto: true, scale: 1, order: [], keep: {}, hide: {} },   // v14.1 HUD layout manager (js/hudlayout.js)
   vehSteer: "point", vehUnits: "mph", traffic: true, police: true,
   squadFireSafety: true,                                     // city squad checks civilian/ally backdrops
@@ -280,7 +280,7 @@ const pX = new Float32Array(MAX_P), pY = new Float32Array(MAX_P),
       pRad = new Float32Array(MAX_P), pPrc = new Int8Array(MAX_P),
       pStyle = new Uint8Array(MAX_P), pSup = new Uint8Array(MAX_P),
       pEnemy = new Uint8Array(MAX_P), pSource = new Uint8Array(MAX_P), pHit = new Uint8Array(MAX_P),
-      pBounce = new Uint8Array(MAX_P), pWpnId = new Int16Array(MAX_P),
+      pBounce = new Uint8Array(MAX_P), pWpnId = new Int16Array(MAX_P), pArt = new Uint8Array(MAX_P),
       pSnap = new Uint8Array(MAX_P), pAct = new Uint8Array(MAX_P);
 
 // FIX: per-projectile hit memory. pHit[i] is the ring-buffer write head; pHitIdx/pHitT store
@@ -317,6 +317,47 @@ let activeForts = [], activeMines = [], movedBarricades = [], activeBarriers = [
 let runActive = false, runPaused = false, runSeed = 1337, runTime = 0, totalRunTime = 0, waveNum = 1;
 let rivalTimer = 0, orbWarpTimer = 0, fpsCount = 60, frameMs = 4.2, flashAlpha = 0, flameVisTimer = 0, muzzleFlashTimer = 0;
 let player = null, joy = { act: false, id: -1, ox: 0, oy: 0, dx: 0, dy: 0 }, pinchDist = 0;
+// Independent second-pointer ranged input. `pending` survives pointer-up so taps
+// can complete a single shot or a weapon-appropriate three-shot burst.
+let touchFire = { active: false, pointerId: -1, point: null, pending: 0, burstWait: 0 };
+const TOUCH_FIRE_MODES = ["single", "burst", "auto"];
+function touchFireMode() { return TOUCH_FIRE_MODES.includes(opts.fireMode) ? opts.fireMode : "auto"; }
+function cycleTouchFireMode() {
+  const i = TOUCH_FIRE_MODES.indexOf(touchFireMode());
+  opts.fireMode = TOUCH_FIRE_MODES[(i + 1) % TOUCH_FIRE_MODES.length];
+  if (typeof saveOpts === "function") saveOpts();
+  return opts.fireMode;
+}
+function touchFireBegin(x, y, held = true) {
+  touchFire.active = !!held; touchFire.point = { x, y };
+  const mode = touchFireMode();
+  touchFire.pending = mode === "burst" ? 3 : 1;
+  touchFire.burstWait = 0;
+}
+function touchFireAim(x, y) { if (touchFire.active) touchFire.point = { x, y }; }
+function touchFireEnd(pointerId) {
+  if (touchFire.pointerId !== pointerId) return false;
+  touchFire.active = false; touchFire.pointerId = -1;
+  return true;
+}
+function touchFireHasAimPoint() { return !!(touchFire.point && (touchFire.active || touchFire.pending > 0)); }
+function touchFireCanShoot(w, dt = 0) {
+  if (!player || !player.weapons || player.weapons[0] !== w || (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || w.style === "orbit") return true;
+  const mode = touchFireMode();
+  if (mode === "auto") return true; // preserve Survivor auto-fire when the touch trigger is idle
+  if (touchFire.pending > 0) return true;
+  if (mode === "burst" && touchFire.active) {
+    touchFire.burstWait -= Math.max(0, dt);
+    if (touchFire.burstWait <= 0) { touchFire.pending = 3; return true; }
+  }
+  return false;
+}
+function touchFireConsume(w) {
+  if (!player || !player.weapons || player.weapons[0] !== w || touchFire.pending <= 0) return;
+  touchFire.pending--;
+  if (touchFireMode() === "burst" && touchFire.pending === 0 && touchFire.active) touchFire.burstWait = 0.28;
+}
+
 
 /* === 3. STRICT ON-SCREEN TARGET LOCK & CORPSE-CONSUMPTION HELPERS === */
 function isEnemyOnScreen(j) {
@@ -641,7 +682,7 @@ function purgeRunMemory() {
   eAct.fill(0); eLegDmg.fill(0); eTailDmg.fill(0); eLegsLost.fill(0); eArmsLost.fill(0);
   eBleed.fill(0); eBleedRate.fill(0); eBleedSource.fill(3); eLevitate.fill(0); eLevZ.fill(0);
   mAct.fill(0); drAct.fill(0); corpAct.fill(0); corpRivalCid.fill(-1); lmbAct.fill(0);
-  pAct.fill(0); pHit.fill(0); pBounce.fill(0); pSnap.fill(0); oAct.fill(0); oHome.fill(0); dAct.fill(0); ptAct.fill(0);
+  pAct.fill(0); pHit.fill(0); pBounce.fill(0); pSnap.fill(0); pArt.fill(0); oAct.fill(0); oHome.fill(0); dAct.fill(0); ptAct.fill(0);
   pHitIdx.fill(-1); pDeflRolled.fill(0);
   eStun.fill(0); eSlow.fill(0); eShred.fill(0); eGrapple.fill(0); eLevVX.fill(0); eLevVY.fill(0);
 
@@ -758,7 +799,7 @@ function projectileShotOrigin(i) {
   return projectileOwner(i) === "player" && (pStyle[i] === 3 || pStyle[i] === 4 || pStyle[i] === 5) && Number.isFinite(pOriginX[i]) && Number.isFinite(pOriginY[i])
     ? { x: pOriginX[i], y: pOriginY[i] } : null;
 }
-function spawnProj(x, y, vx, vy, dmg, life, rad, prc, style, sup, isEnemy = 0, wpnId = -1, sourceKind = null) {
+function spawnProj(x, y, vx, vy, dmg, life, rad, prc, style, sup, isEnemy = 0, wpnId = -1, sourceKind = null, artKind = 0) {
   // Only the player's current automatic-weapon invocation is eligible; squad,
   // hostile, utility and area-effect projectiles retain their normal behavior.
   if (typeof tfAutoFireAllowed === "function" && !tfAutoFireAllowed(x, y, vx, vy, life, rad, style, isEnemy, sourceKind, dmg, wpnId)) return;
@@ -781,6 +822,7 @@ function spawnProj(x, y, vx, vy, dmg, life, rad, prc, style, sup, isEnemy = 0, w
       pHit[i] = 0; pBounce[i] = 0; pSnap[i] = 0; pDeflRolled[i] = 0;
       pHitIdx.fill(-1, i * PROJ_HIT_SLOTS, (i + 1) * PROJ_HIT_SLOTS);
       pWpnId[i] = wpnId >= 0 ? wpnId : (player ? player.cid : 0);
+      pArt[i] = (artKind >= 1 && artKind <= 8) ? artKind : 0;
       pAct[i] = 1;
       if (typeof tfAutoFireSpawned === "function") tfAutoFireSpawned(isEnemy, sourceKind);
       return;

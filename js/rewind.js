@@ -28,7 +28,7 @@ function rewindSetup() {
   try {
     const arrs = [eAct, eX, eY, eVX, eVY, eHP, eMax, eSpd, eSlow, eShred, eStun, eFireCD, eSeed, eWave, eMoveStyle, eRivalCid, eFormType,
       eFormLeader, eType, eLegsLost, eArmsLost, eBleed, eBleedRate, eBleedSource, eBleedOriginX, eBleedOriginY, eTurnAng, eLevitate, eLevZ, eLevVX, eLevVY, eKneel, eUid, eDummy, eStagger,
-      pAct, pX, pY, pVX, pVY, pDmg, pLife, pRad, pPrc, pStyle, pSup, pEnemy, pSource, pOriginX, pOriginY, pBounce, pWpnId, pSnap, pDeflRolled,
+      pAct, pX, pY, pVX, pVY, pDmg, pLife, pRad, pPrc, pStyle, pSup, pEnemy, pSource, pOriginX, pOriginY, pBounce, pWpnId, pArt, pSnap, pDeflRolled,
       corpAct, corpX, corpY, corpSeed, corpType, corpLegs, corpArms, corpFade, corpRot, corpRivalCid,
       slAct, slX, slY, slZ, slVX, slVY, slVZ, slRot, slVRot, slCutAng, slHeat, slRad, slHalf, slIsVet, slSeed, slHelmetOff,
       lmbAct, lmbX, lmbY, lmbRot, lmbKind, lmbFade,

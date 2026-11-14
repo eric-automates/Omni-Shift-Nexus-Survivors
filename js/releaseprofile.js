@@ -58,6 +58,16 @@ function v15JobEnabled(a) {
       !v15CareerEnabled("J09") && !v15FeatureEnabled("J09.MEDICAL_CONTACT")));
 }
 function v15AnyCareerAvailable() { return Object.keys(V15_CAREER_CONTRACTS).some(v15ContractEnabled); }
+function v15ContractOfferEnabled(id) {
+  if (!v15ContractEnabled(id)) return false;
+  const customHero = (typeof player !== "undefined" && player && player.cid === 80) ||
+    (typeof meta !== "undefined" && meta && meta.selChar === 80);
+  if (!customHero || typeof customCareerAllowsContract !== "function") return true;
+  return customCareerAllowsContract(id, meta && meta.custom);
+}
+function v15AnyContractOfferAvailable() {
+  return Object.keys(V15_CAREER_CONTRACTS).some(v15ContractOfferEnabled);
+}
 function v15HeldJob() {
   const a = typeof meta !== "undefined" && meta && meta.jobState && meta.jobState.active;
   return !!(a && !v15JobEnabled(a));

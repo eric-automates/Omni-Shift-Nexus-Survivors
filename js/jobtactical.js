@@ -144,9 +144,9 @@ function j03PlanCall(sx=player&&player.x,sy=player&&player.y,salt=CITY.seed){
   }
   return {ok:false,why:"No reachable residential interior with an exterior door and three valid floor sites was found. Move closer and retry."};
 }
-function j03ContractReady(){return !!(v15ContractEnabled(JOB_TACTICAL)&&runActive&&CITY.on&&player&&!player.inVehicle&&!player.roof&&(player.flyAlt||0)<=2&&TF.on&&SCN.mode==="economy");}
+function j03ContractReady(){return !!(v15ContractOfferEnabled(JOB_TACTICAL)&&runActive&&CITY.on&&player&&!player.inVehicle&&!player.roof&&(player.flyAlt||0)<=2&&TF.on&&SCN.mode==="economy");}
 function j03CallOffer(){
-  if(!j03ContractReady())return {ok:false,why:!v15ContractEnabled(JOB_TACTICAL)?"Tactical calls are unavailable in this revision.":"Stand outside on foot in an active economy town."};
+  if(!j03ContractReady())return {ok:false,why:!v15ContractOfferEnabled(JOB_TACTICAL)?"Tactical calls are unavailable for this character in this revision.":"Stand outside on foot in an active economy town."};
   const read=jobReadState();if(!read.ok)return read;
   if(read.state.active)return {ok:false,why:"Finish or withdraw the current incident first."};
   const career=j03CareerRecord(read.state);if(!career.ok)return {ok:false,why:"Tactical career data is invalid; no rank or payout will be inferred."};
@@ -318,7 +318,7 @@ function j03Panel(){
   const btn=(label,fn)=>{const b=document.createElement("button");b.type="button";b.className="btn";b.textContent=label;b.style.cssText="min-height:46px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";b.onclick=fn;panel.appendChild(b);};
   const text=(tag,value)=>{const e=document.createElement(tag);e.textContent=value;panel.appendChild(e);return e;};
   if(!a){
-    if(!v15ContractEnabled(JOB_TACTICAL))return;
+    if(!v15ContractOfferEnabled(JOB_TACTICAL))return;
     const state=jobReadState();if(!state.ok)return;
     text("p",j03CareerSummary(state.state));
     btn("TACTICAL RESPONSE · BARRICADE",()=>{const r=j03CallOffer();jdOpen(r.ok?"Barricade call open. Follow the marker to the exterior perimeter.":r.why);});

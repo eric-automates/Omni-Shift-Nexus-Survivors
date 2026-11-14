@@ -166,10 +166,10 @@ function j05PlanCall(sx=player&&player.x,sy=player&&player.y,salt=CITY.seed,medi
   }
   return {ok:false,why:"No reachable pair of unused vehicles with three safe casualty sites is nearby. Move through town and try dispatch again.",diagnostics};
 }
-function j05ContractReady(){return !!(v15ContractEnabled(JOB_EMT)&&runActive&&CITY.on&&player&&!player.inVehicle&&!player.roof&&
+function j05ContractReady(){return !!(v15ContractOfferEnabled(JOB_EMT)&&runActive&&CITY.on&&player&&!player.inVehicle&&!player.roof&&
   (player.flyAlt||0)<=2&&TF.on&&SCN.mode==="economy");}
 function j05CallOffer(){
-  if(!j05ContractReady())return {ok:false,why:!v15ContractEnabled(JOB_EMT)?"Paramedic calls are unavailable in this revision.":"Stand outside on foot in an active economy town with civilians present."};
+  if(!j05ContractReady())return {ok:false,why:!v15ContractOfferEnabled(JOB_EMT)?"Paramedic calls are unavailable for this character in this revision.":"Stand outside on foot in an active economy town with civilians present."};
   const read=jobReadState();if(!read.ok)return read;if(read.state.active)return {ok:false,why:"Finish or withdraw the current incident first."};
   const career=j05CareerRecord(read.state);if(!career.ok)return {ok:false,why:"EMT career data is invalid; no rank or payout will be inferred."};
   const plan=j05PlanCall(player.x,player.y,(CITY.seed>>>0)+read.state.next*6151);if(!plan.ok)return plan;
@@ -396,7 +396,7 @@ function j05Panel(){
   const btn=(label,fn)=>{const b=document.createElement("button");b.type="button";b.className="btn";b.textContent=label;b.style.cssText="min-height:46px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";b.onclick=fn;panel.appendChild(b);};
   const text=(tag,value)=>{const e=document.createElement(tag);e.textContent=value;panel.appendChild(e);return e;};
   if(!a){
-    if(!v15ContractEnabled(JOB_EMT))return;
+    if(!v15ContractOfferEnabled(JOB_EMT))return;
     const state=jobReadState();if(!state.ok)return;text("p",j05CareerSummary(state.state));
     btn("MULTI-VEHICLE MEDICAL RESPONSE",()=>{const r=j05CallOffer();jdOpen(r.ok?"Medical response open. Follow the marker to the crash scene.":r.why);});return;
   }

@@ -100,7 +100,7 @@ function squadCallFireteam(x, y, source = "beacon", count = 4, life = 75) {
 function squadPickFocus() {
   let best = -1, bestScore = -1;
   for (let i = 0; i < MAX_E; i++) {
-    if (!eAct[i] || !isEnemyOnScreen(i) || (typeof sdIgnore === "function" && sdIgnore(i))) continue;
+    if (!eAct[i] || allyIs(i) || !isEnemyOnScreen(i) || (typeof sdIgnore === "function" && sdIgnore(i))) continue;
     const score = (eType[i] === 99 ? 1e7 : (eType[i] === 98 ? 1e6 : 0)) + eHP[i];
     if (score > bestScore) { bestScore = score; best = i; }
   }
@@ -349,6 +349,11 @@ function squadSafeShotAt(m, x, y, ang, range, spread) {
   }
   if (player && risky(player.x, player.y, 9)) return false;
   for (let j = 0; j < MAX_MINION; j++) if (j !== m && mAct[j] && risky(mX[j], mY[j], Math.min(12, mRad[j] || 7))) return false;
+  // Persuaded actors share the enemy pool, but are friendlies to the player and fireteam.
+  // Prevent city shots through their occupied lane just as we do for the hero and minions.
+  for (let j = 0; j < MAX_E; j++) {
+    if (eAct[j] && typeof allyIs === "function" && allyIs(j) && risky(eX[j], eY[j], eType[j] === 99 ? 22 : (eType[j] === 3 ? 15 : 11))) return false;
+  }
   if (typeof TF !== "undefined" && TF.on && TF.walk) for (const p of TF.walk) {
     if (p && p.alive && p.w && p.w.hp > 0 && risky(p.w.x, p.w.y, 7)) return false;
   }
@@ -402,7 +407,7 @@ function squadMinionsSim(simDt) {
   squadPathBudget = 2;
   S.orderT += simDt;
   if (S.regroupT > 0) S.regroupT = Math.max(0, S.regroupT - simDt);
-  if (S.order === 2 && (S.focusIdx < 0 || !eAct[S.focusIdx] || eUid[S.focusIdx] !== S.focusUid)) squadPickFocus();
+  if (S.order === 2 && (S.focusIdx < 0 || !eAct[S.focusIdx] || allyIs(S.focusIdx) || eUid[S.focusIdx] !== S.focusUid)) squadPickFocus();
   const aimX = Math.cos(player.aim || 0), aimY = Math.sin(player.aim || 0);
   // Remember the direction of travel at a halt; do not orbit the leader.
   if (Math.hypot(player.vx || 0, player.vy || 0) > 8 && !player.inVehicle) {
@@ -575,7 +580,7 @@ function squadMinionsSim(simDt) {
     else if (!(S.order === 0 && S.regroupT > 0)) {
       const cx = S.order === 1 ? S.ax : mX[m], cy = S.order === 1 ? S.ay : mY[m];
       for (let j = 0; j < MAX_E; j++) {
-        if (!eAct[j] || eLevitate[j] > 0 || (typeof sdIgnore === "function" && sdIgnore(j))) continue;   // v12: not the crowd
+        if (!eAct[j] || allyIs(j) || eLevitate[j] > 0 || (typeof sdIgnore === "function" && sdIgnore(j))) continue;   // v12: not the crowd or persuaded allies
         const d = Math.hypot(eX[j] - cx, eY[j] - cy);
         if (d < bestD) { bestD = d; bestE = j; }
       }
@@ -651,7 +656,7 @@ function squadMinionsSim(simDt) {
             spawnBlastWave(mX[m], mY[m], 62, mCol[m], "squad");
             sfx(110, 42, 0.18, "sawtooth", 0.24);
             for (let k = 0; k < MAX_E; k++) {
-              if (!eAct[k]) continue;
+              if (!eAct[k] || allyIs(k)) continue;
               if (Math.hypot(eX[k] - mX[m], eY[k] - mY[m]) <= 64) {
                 eHP[k] -= mDmg[m]; eStun[k] = Math.max(eStun[k], 0.85);
                 spawnDmg(eX[k], eY[k], mDmg[m], true);

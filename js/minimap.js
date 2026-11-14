@@ -460,13 +460,17 @@ function mapWorldLabel() { return "🌆 WORLD: " + (typeof meta !== "undefined" 
   d.onclick = () => mapOpen("drop");
   go.insertAdjacentElement("afterend", d); go.insertAdjacentElement("afterend", w);
   const ctl = document.createElement("div"); ctl.id = "mmCtl";
-  ctl.innerHTML = '<button class="btn" id="mmOut" title="Minimap zoom out ( [ )">−</button><button class="btn" id="mmIn" title="Minimap zoom in ( ] )">+</button><button class="btn" id="mmMap" title="City map (M)">🗺</button><button class="btn" id="mmSneak" title="Sneak (hold Shift)">🥷</button><button class="btn" id="mmSup" title="Suppressor (V)">🔇</button><button class="btn" id="mmCiv" type="button" aria-label="Civilian injury consequences" aria-pressed="true">👥✓</button><button class="btn" id="mmCivWarn" type="button" aria-label="Off-screen civilian warning" aria-pressed="true">⚠✓</button>';
+  ctl.innerHTML = '<button class="btn" id="mmOut" title="Minimap zoom out ( [ )">−</button><button class="btn" id="mmIn" title="Minimap zoom in ( ] )">+</button><button class="btn" id="mmMap" title="City map (M)">🗺</button><button class="btn" id="mmSneak" title="Sneak (hold Shift)">🥷</button><button class="btn" id="mmSup" title="Suppressor (V)">🔇</button><button class="btn" id="mmFireMode" type="button" aria-label="Firing mode" title="Cycle single, burst, full-auto">FIRE · AUTO</button><button class="btn" id="mmCiv" type="button" aria-label="Civilian injury consequences" aria-pressed="true">👥✓</button><button class="btn" id="mmCivWarn" type="button" aria-label="Off-screen civilian warning" aria-pressed="true">⚠✓</button>';
   document.body.appendChild(ctl);
   ctl.querySelector("#mmOut").onclick = () => { MAPV.mini = Math.min(MAPV.miniSizes.length - 1, MAPV.mini + 1); };
   ctl.querySelector("#mmIn").onclick = () => { MAPV.mini = Math.max(0, MAPV.mini - 1); };
   ctl.querySelector("#mmMap").onclick = () => mapOpen("run");
   ctl.querySelector("#mmSneak").onclick = () => { if (typeof ST !== "undefined") { ST.touchSneak = !ST.touchSneak; ctl.querySelector("#mmSneak").classList.toggle("gold", ST.touchSneak); } };
   ctl.querySelector("#mmSup").onclick = () => { if (typeof stealthToggleSuppressor === "function") stealthToggleSuppressor(); };
+  const fireModeBtn = ctl.querySelector("#mmFireMode");
+  const syncFireMode = () => { const m = typeof touchFireMode === "function" ? touchFireMode() : "auto"; fireModeBtn.textContent = "FIRE · " + m.toUpperCase(); fireModeBtn.setAttribute("aria-label", "Firing mode: " + m); fireModeBtn.title = "Cycle firing mode (" + m + ")"; };
+  fireModeBtn.onclick = () => { if (typeof cycleTouchFireMode === "function") cycleTouchFireMode(); syncFireMode(); };
+  syncFireMode();
   ctl.querySelector("#mmCiv").onclick = () => {
     opts.civilianConsequences = opts.civilianConsequences === false;
     if (typeof saveOpts === "function") saveOpts();

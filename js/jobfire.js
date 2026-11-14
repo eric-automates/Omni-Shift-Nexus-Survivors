@@ -73,7 +73,7 @@ JOB_CORE.finishHooks[JOB_FIRE]=(state,a,outcome,pay)=>{
 };
 
 function j04ContractReady() {
-  return !!(v15ContractEnabled(JOB_FIRE)&&runActive&&CITY.on&&player&&!player.inVehicle&&!player.roof&&(player.flyAlt||0)<=2&&TF.on&&SCN.mode==="economy");
+  return !!(v15ContractOfferEnabled(JOB_FIRE)&&runActive&&CITY.on&&player&&!player.inVehicle&&!player.roof&&(player.flyAlt||0)<=2&&TF.on&&SCN.mode==="economy");
 }
 function j04CareerSummary(state) {
   const rank=j04CareerRank(state);
@@ -157,7 +157,7 @@ function j04PlanCall(sx=player&&player.x,sy=player&&player.y,salt=CITY.seed){
   return {ok:false,why:"No reachable fire engine and occupiable structure pair is nearby. Move closer to a fire station and try again."};
 }
 function j04CallOffer(){
-  if(!j04ContractReady())return {ok:false,why:!v15ContractEnabled(JOB_FIRE)?"Firefighter shifts are unavailable in this revision.":"Stand outside on foot in an active economy town with civilians present."};
+  if(!j04ContractReady())return {ok:false,why:!v15ContractOfferEnabled(JOB_FIRE)?"Firefighter shifts are unavailable for this character in this revision.":"Stand outside on foot in an active economy town with civilians present."};
   const read=jobReadState();if(!read.ok)return read;
   if(read.state.active)return {ok:false,why:"Finish or withdraw the current incident first."};
   const career=j04CareerRecord(read.state);if(!career.ok)return {ok:false,why:"Firefighter career data is invalid; no rank or payout will be inferred."};
@@ -303,7 +303,7 @@ function j04Panel(){
   const btn=(label,fn)=>{const b=document.createElement("button");b.type="button";b.className="btn";b.textContent=label;b.style.cssText="min-height:46px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";b.onclick=fn;panel.appendChild(b);};
   const text=(tag,value)=>{const e=document.createElement(tag);e.textContent=value;panel.appendChild(e);return e;};
   if(!a){
-    if(!v15ContractEnabled(JOB_FIRE))return;
+    if(!v15ContractOfferEnabled(JOB_FIRE))return;
     const state=jobReadState();if(!state.ok)return;
     text("p",j04CareerSummary(state.state));
     btn("FIRE & RESCUE SHIFT",()=>{const r=j04CallOffer();jdOpen(r.ok?"Fire shift open. Reach the marked station and use its fire engine.":r.why);});

@@ -171,7 +171,7 @@ function jdMedicalFinish(a) {
   result.pay=end.pay;result.restock=added;return result;
 }
 function jdTraceOffer() {
-  if(!v15ContractEnabled(JOB_TRACE)) return {ok:false,why:"Witness jobs are unavailable in this revision."};
+  if(!v15ContractOfferEnabled(JOB_TRACE)) return {ok:false,why:"Witness jobs are unavailable for this character in this revision."};
   if(!runActive || !CITY.on || !player || player.inVehicle || player.roof || (player.flyAlt || 0)>2)
     return {ok:false,why:"Stand on the ground outside a vehicle to find a call."};
   const read=jobReadState(); if(!read.ok)return read;
@@ -731,7 +731,7 @@ function jdTraceChoice(id, expected, action) {
 }
 function jdOffer(kind, recipientMode) {
   const wanted = kind === JOB_PRIORITY ? JOB_PRIORITY : kind === JOB_MEDICAL ? JOB_MEDICAL : (!kind || kind === JOB_DISPATCH.id ? JOB_DISPATCH.id : null);
-  if (!wanted || !v15ContractEnabled(wanted)) return {ok:false,why:"This courier call is unavailable in this revision."};
+  if (!wanted || !v15ContractOfferEnabled(wanted)) return {ok:false,why:"This courier call is unavailable for this character in this revision."};
   if (wanted === JOB_MEDICAL && recipientMode && !v15CareerEnabled("J09") && !v15FeatureEnabled("J09.MEDICAL_CONTACT")) return {ok:false,why:"Clinic-contact calls are unavailable in this revision."};
   if (!runActive || !CITY.on || !player || player.inVehicle || player.roof || (player.flyAlt || 0) > 2) return { ok: false, why: "Stand on the ground outside a vehicle to find a call." };
   const read = jobReadState();
@@ -891,7 +891,7 @@ function jdArrive() {
 // Never accept/create a call or interrupt a fight, a pause, another panel, an
 // old run, or a non-city world. The map shortcut remains available later.
 function jdMaybeStartPreferred(p, seed) {
-  if (!v15ContractEnabled(JOB_DISPATCH.id) || !runActive || runPaused || !CITY.on || !p || player !== p || runSeed !== seed || p.cid !== CUSTOM_CID || !meta.custom || meta.custom.simJob !== "courier") return false;
+  if (!v15ContractOfferEnabled(JOB_DISPATCH.id) || !runActive || runPaused || !CITY.on || !p || player !== p || runSeed !== seed || p.cid !== CUSTOM_CID || !meta.custom || meta.custom.simJob !== "courier") return false;
   if ((typeof MAPV !== "undefined" && MAPV.open) || (typeof PD !== "undefined" && PD.panel) || (typeof pdActiveFight === "function" && pdActiveFight())) return false;
   if (document.querySelector(".screen.active")) return false;
   jdOpen("Optional supply work — choose a call, or close and find a job later.");
@@ -919,14 +919,14 @@ function jdOpen(message) {
   }
   if (!read.ok) text("p", "Job data could not be read. Your saved data was not changed.");
   else if (!read.active) {
-    text("p", v15AnyCareerAvailable() ? "Choose an available local call. You can decline or end work early." : "Jobs are not available in this revision.");
-    if(v15ContractEnabled(JOB_DISPATCH.id)) button("FIND A CALL", () => { const r = jdOffer(); jdOpen(r.ok ? "A call is available." : r.why); });
-    if(v15ContractEnabled(JOB_PRIORITY)) button("PRIORITY DELIVERY", () => { const r = jdOffer(JOB_PRIORITY); jdOpen(r.ok ? "A priority call is available." : r.why); });
-    if(v15ContractEnabled(JOB_MEDICAL)) button("MEDICAL DELIVERY", () => { const r = jdOffer(JOB_MEDICAL); jdOpen(r.ok ? "A medical delivery is available." : r.why); });
-    if(v15ContractEnabled(JOB_MEDICAL) && (v15CareerEnabled("J09") || v15FeatureEnabled("J09.MEDICAL_CONTACT"))) button("MEDICAL DELIVERY + CONTACT", () => { const r = jdOffer(JOB_MEDICAL,true); jdOpen(r.ok ? "A medical delivery with a clinic contact is available." : r.why); });
-    if(v15ContractEnabled(JOB_TRACE)) button("WITNESS LEAD", () => { const r=jdTraceOffer(); jdOpen(r.ok ? "An investigative lead is available." : r.why); });
-    if(v15ContractEnabled(JOB_SCENE_CASE)) button("CRIME-SCENE CASE", () => { const r=jdcSceneOffer(); jdOpen(r.ok ? "A crime-scene evidence case is available." : r.why); });
-    if(v15ContractEnabled(JOB_POI_FOLLOWUP)) button("PERSON-OF-INTEREST FOLLOW-UP", () => { const r=jdPoiOffer(); jdOpen(r.ok ? "A follow-up linked to a returning witness is available." : r.why); });
+    text("p", v15AnyContractOfferAvailable() ? "Choose an available call from your selected career tracks. You can decline or end work early." : "No released calls match this character's selected career tracks.");
+    if(v15ContractOfferEnabled(JOB_DISPATCH.id)) button("FIND A CALL", () => { const r = jdOffer(); jdOpen(r.ok ? "A call is available." : r.why); });
+    if(v15ContractOfferEnabled(JOB_PRIORITY)) button("PRIORITY DELIVERY", () => { const r = jdOffer(JOB_PRIORITY); jdOpen(r.ok ? "A priority call is available." : r.why); });
+    if(v15ContractOfferEnabled(JOB_MEDICAL)) button("MEDICAL DELIVERY", () => { const r = jdOffer(JOB_MEDICAL); jdOpen(r.ok ? "A medical delivery is available." : r.why); });
+    if(v15ContractOfferEnabled(JOB_MEDICAL) && (v15CareerEnabled("J09") || v15FeatureEnabled("J09.MEDICAL_CONTACT"))) button("MEDICAL DELIVERY + CONTACT", () => { const r = jdOffer(JOB_MEDICAL,true); jdOpen(r.ok ? "A medical delivery with a clinic contact is available." : r.why); });
+    if(v15ContractOfferEnabled(JOB_TRACE)) button("WITNESS LEAD", () => { const r=jdTraceOffer(); jdOpen(r.ok ? "An investigative lead is available." : r.why); });
+    if(v15ContractOfferEnabled(JOB_SCENE_CASE)) button("CRIME-SCENE CASE", () => { const r=jdcSceneOffer(); jdOpen(r.ok ? "A crime-scene evidence case is available." : r.why); });
+    if(v15ContractOfferEnabled(JOB_POI_FOLLOWUP)) button("PERSON-OF-INTEREST FOLLOW-UP", () => { const r=jdPoiOffer(); jdOpen(r.ok ? "A follow-up linked to a returning witness is available." : r.why); });
     // A small debrief survives a reload via the existing bounded incident history.
     // Only show facts the incident system recorded; no invented NPC or world effect.
     const history = jobReadState();
