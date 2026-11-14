@@ -5,7 +5,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OMNI-SHIFT: NEXUS SURVIVORS</title>
 <link rel="stylesheet" href="css/style.css?v=v15-dev-2026-11-03-custom-hud-wrap">
 <!-- PRE-BOOT BULLETPROOF DOM GUARD & LIVE DEBUGGER -->
@@ -443,6 +443,22 @@
         </div>
       </div>
 
+      <section class="hud-guide-box" id="codingProgression" aria-labelledby="progressTitle">
+        <div class="guide-title" id="progressTitle">CODING PROGRESSION &amp; METHODOLOGY</div>
+        <p class="card-desc" style="line-height:1.45;margin:6px 0">A compact map of documented milestones in the available project history. Built mostly with <b style="color:#80deea">Arena.ai</b>, with an AI manager looped in occasionally when progress got stuck. Patch scope and test/rework notes come from project records; dates are chronology, not hours worked. Repository and project records include dates through Nov 14, later than the dashboard clock (Oct 27, 2026); dates are shown as recorded, not reconciled calendar claims.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:.62rem;color:#cfd8dc;margin:4px 0"><span>● milestone</span><span style="color:#ff6b6b">● documented rework / correction</span><span>Effort: relative scope only</span></div>
+        <div style="overflow-x:auto;width:100%">
+          <svg id="progressTimeline" viewBox="0 0 700 142" role="group" aria-label="Clickable project milestone timeline from October 27 to November 14, 2026" style="display:block;width:100%;min-width:330px;height:auto;touch-action:pan-x">
+            <line x1="34" y1="74" x2="666" y2="74" stroke="#607d8b" stroke-width="2"/>
+            <g fill="#b0bec5" font-size="11" text-anchor="middle"><text x="34" y="104">Oct 27</text><text x="245" y="104">Nov 2</text><text x="456" y="104">Nov 8</text><text x="666" y="104">Nov 14</text></g>
+            <g stroke="#607d8b"><line x1="34" y1="69" x2="34" y2="80"/><line x1="245" y1="69" x2="245" y2="80"/><line x1="456" y1="69" x2="456" y2="80"/><line x1="666" y1="69" x2="666" y2="80"/></g>
+            <g id="progressPoints"></g>
+          </svg>
+        </div>
+        <div id="progressDetail" role="status" aria-live="polite" style="min-height:58px;background:#08101c;border:1px solid #263850;border-radius:7px;padding:7px;font-size:.67rem;line-height:1.45;color:#e0f2f1">Choose a point to inspect the patch summary, relative effort estimate, evidence and any documented rework.</div>
+        <div class="card-desc" style="font-size:.58rem;line-height:1.4;margin-top:5px;color:#b0bec5">Effort key: S / M / L / XL ranks likely implementation scope from the patch records, not elapsed time. Exact coding hours are unavailable. GitHub upload/commit timestamps and the S01–S03 measured sessions do not establish effort for these historical patches. Red marks a recorded correction or preserved first-red test followed by correction; it is not a fault rating.</div>
+      </section>
+
       <div class="health-row"><b style="color:#ffd166">⚡ 1. Biographical Stances (Early Life → Prime):</b> Every lightsaber duelist, marksman, and spellcaster starts with their early-career form at Lv.1–3 and evolves into their Prime movie fighting style at Lv.7–10, with custom hand movements when deflecting incoming blaster bolts!</div>
       <div class="health-row"><b style="color:#00e5ff">🔍 2. Smooth Card Scrolling & 350ms Inspector:</b> Swipe up/down anywhere directly over Character Cards to scroll smoothly. Hold your finger still for 350ms on any card to open the Inspector & Dual-View Canon Outfit Customizer.</div>
     </div>
@@ -500,6 +516,33 @@
 </div>
 
 <!-- ORDERED MODULAR SCRIPT LOADING (?v= busts stale GitHub Pages caches after an upload; bump it on every release) -->
+<script>
+(function(){
+  const milestones = [
+    {date:'2026-10-27', title:'v10 · combat, biomes & campaign', effort:'XL', color:'#00e5ff', desc:'Broad game expansion recorded in the v10 changelog: adaptive biomes, finishers, campaign map, combat polish and verification. Large feature breadth; effort hours not recorded.', evidence:'CHANGELOG_v10.md; GitHub history establishes public upload chronology only.'},
+    {date:'2026-10-27', title:'15.6.2 · damage test correction', effort:'S (within L patch)', color:'#ff6b6b', desc:'Recorded first-red fixture issues in material/traversal tests were corrected without relaxing acceptance; later committed-tree regressions passed. Red indicates an evidence-backed correction loop, not blame.', evidence:'CHANGELOG_v15.md records first-red and final 21/21 non-performance results.'},
+    {date:'2026-10-29', dateLabel:'~2026-10-29 (approx.)', title:'v11 · saber forms & soundtrack', effort:'L', color:'#00e5ff', desc:'A new seven-form lightsaber engine, progression/deflection behavior and 17 soundtrack additions, with reported balance and regression checks.', evidence:'CHANGELOG_v11.md. Relative effort inferred from new engine + assets/tests.'},
+    {date:'2026-10-30', dateLabel:'~2026-10-30 (approx.)', title:'v12–v13 · creator & character systems', effort:'L', color:'#00e5ff', desc:'Custom hero/rival features followed by threat sense, persuasion, Yoda-specific work and a creator rewrite. Closely grouped milestones are separated vertically for readability.', evidence:'CHANGELOG_v12.md and CHANGELOG_v13.md; dates approximate from surrounding project chronology.'},
+    {date:'2026-10-31', title:'v14 · Nexus City foundation', effort:'XL', color:'#00e5ff', desc:'Large procedural city/world, themed rendering, vision, enemy rosters, stealth, ballistics and mapping systems, followed by related v14.x iterations.', evidence:'CHANGELOG_v14.md and v14.1–v14.3 changelogs.'},
+    {date:'2026-11-04', title:'v15.0 · vehicle & world systems', effort:'L', color:'#00e5ff', desc:'Vehicle/convoy, city, mission and compatibility changes are documented across the v15 records. Scope varies by patch; no reliable coding-hour log is available.', evidence:'CHANGELOG_v15.md and RELEASE_SCOPE_v15.md.'},
+    {date:'2026-11-07', title:'v15.4 · squad movement & integration', effort:'M–L', color:'#00e5ff', desc:'Incremental curb sensing, formation compression, sidewalk routing and an integration evidence checkpoint.', evidence:'CHANGELOG_v15.md and CHRONO_LATTICE_RATCHET_LEDGER_v15.md.'},
+    {date:'2026-11-08', title:'v15.5 · touch & HUD series', effort:'L', color:'#00e5ff', desc:'Touch-driving baseline, pointer targets, audio gating, skid-mark geometry, touch ownership and responsive HUD were implemented and series-locked.', evidence:'CHANGELOG_v15.md; CHRONO_LATTICE_RATCHET_LEDGER_v15.md.'},
+    {date:'2026-11-10', title:'15.6.4 · tactical response rework loop', effort:'M (within L series)', color:'#ff6b6b', desc:'The record preserves an initial actor-checkpoint/escape-path first red and subsequent corrected acceptance. The final scoped set passed; the unrelated H36 baseline failure remained out of scope.', evidence:'CHANGELOG_v15.md; explicit first-red and post-commit acceptance records.'},
+    {date:'2026-11-14', title:'Current public repository snapshot', effort:'Not a patch estimate', color:'#80deea', desc:'The public repository page reports 107 commits, with latest visible upload activity on Nov 14. Generic “Add files via upload” entries show publication activity, not the time or size of the underlying coding work.', evidence:'Public repository and main-branch commit history; local staged revision documentation.'}
+  ];
+  const svg=document.getElementById('progressPoints'), detail=document.getElementById('progressDetail');
+  if(!svg||!detail)return;
+  const start=Date.parse('2026-10-27T00:00:00Z'), end=Date.parse('2026-11-14T00:00:00Z');
+  const lanes=[43,55,67,81,91,57,69,43,55,67];
+  milestones.forEach((m,i)=>{
+    const x=34+(Date.parse(m.date+'T00:00:00Z')-start)/(end-start)*632, y=lanes[i];
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx',x.toFixed(1)); c.setAttribute('cy',y); c.setAttribute('r','7'); c.setAttribute('fill',m.color); c.setAttribute('stroke','#07101c'); c.setAttribute('stroke-width','2'); c.setAttribute('tabindex','0'); c.setAttribute('role','button'); c.setAttribute('aria-label',m.date+': '+m.title); c.style.cursor='pointer';
+    const show=()=>{detail.innerHTML='<b style="color:'+m.color+'">'+m.title+'</b> · '+(m.dateLabel||m.date)+'<br>'+m.desc+'<br><span style="color:#ffd166">Relative effort: '+m.effort+'</span><br><span style="color:#b0bec5">Evidence: '+m.evidence+'</span>';};
+    c.addEventListener('click',show); c.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();show();}}); svg.appendChild(c);
+  });
+})();
+</script>
 <script src="js/chaos.js?v=15.6.6-locked" onerror="window.trackProgress('404 Missing: js/chaos.js', true)"></script>
 <script src="js/data-factions.js?v=15.6.6-locked" onerror="window.trackProgress('404 Missing: js/data-factions.js', true)"></script>
 <script src="js/data-heroes.js?v=15.6.6-locked" onerror="window.trackProgress('404 Missing: js/data-heroes.js', true)"></script>
