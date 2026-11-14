@@ -188,14 +188,39 @@ const CUSTOM_SETUPS = {
   dual:   { name: "Dual Sabers", desc: "Two separate sabers - own hilt, colour, level & Form stage" },
   staff:  { name: "Saberstaff", desc: "Double-bladed staff, cuts front & back" }
 };
-// A preference opens the real, optional short dispatch; it is not a career
-// assignment, does not change gear, and never accepts a call automatically.
+// Selectable career tracks are qualifications/preferences, not active contracts.
+// A character may select several tracks, but jobcore still permits only one active
+// contract. Each track is backed only by fully released contract families.
+const CUSTOM_CAREER_TRACKS = Object.freeze({
+  courier: { name: "Courier & distribution", desc: "Supply, priority and medical delivery calls.", contracts: ["community_supply", "priority_supply", "medical_supply", "courier_shift"] },
+  detective: { name: "Detective & investigations", desc: "Witness leads, crime-scene cases and person-of-interest follow-ups.", contracts: ["witness_trace", "detective_scene_case", "detective_poi_followup"] },
+  patrol: { name: "Traffic patrol", desc: "Roadside traffic patrol shifts.", contracts: ["patrol_traffic"] },
+  tactical: { name: "Tactical response", desc: "Barricade response calls.", contracts: ["tactical_barricade"] },
+  paramedic: { name: "Paramedic response", desc: "Multi-vehicle medical response calls.", contracts: ["paramedic_incident"] },
+  firefighter: { name: "Fire & rescue", desc: "Structural-fire response calls; not currently released.", contracts: ["fire_structure"] }
+});
+const CUSTOM_CONTRACT_TRACK = Object.freeze(Object.fromEntries(Object.entries(CUSTOM_CAREER_TRACKS)
+  .flatMap(([key, track]) => track.contracts.map(id => [id, key]))));
+function customCareerTrackAvailable(key) {
+  const track = CUSTOM_CAREER_TRACKS[key];
+  return !!(track && typeof v15ContractEnabled === "function" && track.contracts.some(v15ContractEnabled));
+}
+function customCareerAllowsContract(id, design) {
+  const key = CUSTOM_CONTRACT_TRACK[id];
+  if (!key) {
+    return !(typeof V15_CAREER_CONTRACTS !== "undefined" && Object.prototype.hasOwnProperty.call(V15_CAREER_CONTRACTS, id));
+  }
+  const d = design || customHeroDesign();
+  return !Array.isArray(d && d.careerTracks) || d.careerTracks.includes(key);
+}
+// An optional spawn-time convenience inherited from the old single preference.
+// It opens Local Dispatch only; it never accepts a call or changes equipment.
 const CUSTOM_WORLD_JOBS = {
-  none: { name: "None · decide later", desc: "Keep your current gear. No job prompt or automatic assignment; open Local Dispatch on the map whenever you want." },
-  courier: { name: "Supply courier", desc: "At city deployment, open an optional short supply call. No gear is replaced and no call is accepted until you choose it. This is not a full career arc." }
+  none: { name: "No opening prompt", desc: "Do not open dispatch automatically. Local Dispatch remains available from the map." },
+  courier: { name: "Open courier dispatch at deployment", desc: "Convenience only: open Local Dispatch in a city. No call is accepted automatically; this is separate from selecting career tracks." }
 };
 const CUSTOM_DEFAULT = {
-  v: 2, created: false, name: "Nexus Wanderer", align: "light", force: "strong", talent: "swift", universe: "auto", hails: "auto", simJob: "none",
+  v: 2, created: false, name: "Nexus Wanderer", align: "light", force: "strong", talent: "swift", universe: "auto", hails: "auto", simJob: "none", careerTracks: [],
   weapons: [{ k: "saber", hilt: 0, col: 0 }, { k: "saber", hilt: 6, col: 2 }], path: "jarkai",
   skills: ["saberThrow", "forcePush"], gear: "forcePush", dash: "forceDash", armor: "robes",
   species: 0, body: 0, skin: 0, hair: 0, head: "none", robe: 0, legs: 0, cloak: 0
@@ -290,6 +315,11 @@ function customHeroSanitize(d) {
   if (typeof CITY_UNIVERSES !== "undefined" ? !CITY_UNIVERSES[o.universe] : typeof o.universe !== "string") o.universe = "auto";   // v14 Nexus City universe
   if (typeof RG_HAILS !== "undefined" ? !RG_HAILS[o.hails] : typeof o.hails !== "string") o.hails = "auto";   // v14.2 homeworld
   if (!Object.prototype.hasOwnProperty.call(CUSTOM_WORLD_JOBS, o.simJob)) o.simJob = "none";
+  if (Array.isArray(src.careerTracks)) {
+    o.careerTracks = [...new Set(src.careerTracks.filter(k => Object.prototype.hasOwnProperty.call(CUSTOM_CAREER_TRACKS, k)))];
+  } else {
+    o.careerTracks = src.created ? Object.keys(CUSTOM_CAREER_TRACKS).filter(customCareerTrackAvailable) : [];
+  }
   o.species = crClampI(o.species, CUSTOM_SPECIES.length); o.body = crClampI(o.body, 2); o.skin = crClampI(o.skin, CUSTOM_SKINS.length);
   o.hair = crClampI(o.hair, CUSTOM_HAIR.length); o.robe = crClampI(o.robe, CUSTOM_ROBES.length);
   o.legs = crClampI(o.legs, CUSTOM_LEGS.length); o.cloak = crClampI(o.cloak, CUSTOM_CLOAKS.length);
@@ -670,9 +700,9 @@ function throwThermalDetonator() {
   if (!player) return;
   let best = -1, bd = 1e9;
   for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j] || (typeof sdIgnore === "function" && sdIgnore(j)) || eStagger[j] > 0 || !isEnemyOnScreen(j)) continue;
+    if (!eAct[j] || allyIs(j) || (typeof sdIgnore === "function" && sdIgnore(j)) || eStagger[j] > 0 || !isEnemyOnScreen(j)) continue;
     // aim at the middle of a crowd: count neighbours
-    let n = 0; for (let k = 0; k < MAX_E; k += 3) if (eAct[k] && Math.abs(eX[k] - eX[j]) < 60 && Math.abs(eY[k] - eY[j]) < 60) n++;
+    let n = 0; for (let k = 0; k < MAX_E; k += 3) if (eAct[k] && !allyIs(k) && Math.abs(eX[k] - eX[j]) < 60 && Math.abs(eY[k] - eY[j]) < 60) n++;
     const s = Math.hypot(eX[j] - player.x, eY[j] - player.y) - n * 25;
     if (s < bd) { bd = s; best = j; }
   }
@@ -686,7 +716,7 @@ function castForceChoke() {
   if (!player) return;
   let best = -1, bh = -1;
   for (let j = 0; j < MAX_E; j++) {
-    if (!eAct[j] || (typeof sdIgnore === "function" && sdIgnore(j)) || eStagger[j] > 0 || eType[j] === 99) continue;
+    if (!eAct[j] || allyIs(j) || (typeof sdIgnore === "function" && sdIgnore(j)) || eStagger[j] > 0 || eType[j] === 99) continue;
     const dd = Math.hypot(eX[j] - player.x, eY[j] - player.y);
     if (dd > 230) continue;
     if (eHP[j] > bh) { bh = eHP[j]; best = j; }
@@ -715,7 +745,7 @@ function crKitStep(simDt) {
   }
   for (let k = crKit.chokes.length - 1; k >= 0; k--) {
     const c = crKit.chokes[k], j = c.j;
-    if (!eAct[j] || eUid[j] !== c.uid) { crKit.chokes.splice(k, 1); continue; }
+    if (!eAct[j] || eUid[j] !== c.uid || allyIs(j)) { crKit.chokes.splice(k, 1); continue; }
     c.t += simDt;
     eStun[j] = Math.max(eStun[j], 0.3);
     if (typeof eFLiftZ !== "undefined") eFLiftZ[j] = Math.min(16, c.t * 22);
@@ -788,6 +818,16 @@ function crCommit(d) {
   customHeroRegister();
   renderCreator();
   sfx(380, 620, 0.05, "triangle", 0.12);
+}
+function crToggleCareer(key) {
+  const d = window._crDraft;
+  if (!d || !Object.prototype.hasOwnProperty.call(CUSTOM_CAREER_TRACKS, key)) return;
+  const selected = new Set(Array.isArray(d.careerTracks) ? d.careerTracks : []);
+  const alreadySelected = selected.has(key);
+  if (!customCareerTrackAvailable(key) && !alreadySelected) { window._crMsg = "This career track is unavailable in this revision."; renderCreator(); return; }
+  if (alreadySelected) selected.delete(key); else selected.add(key);
+  d.careerTracks = [...selected];
+  crCommit(d);
 }
 // v12-compatible setter + the v13 keys
 function crSet(key, val) {
@@ -930,7 +970,11 @@ function renderCreator() {
     <div class="cr-row"><div class="cr-lbl">TALENT</div><div class="cr-chips">${chips("talent", CUSTOM_TALENTS, d.talent)}</div><small>${CUSTOM_TALENTS[d.talent].desc}</small></div>
     ${typeof CITY_UNIVERSES !== "undefined" ? `<div class="cr-row"><div class="cr-lbl">UNIVERSE · NEXUS CITY</div><div class="cr-chips">${chips("universe", CITY_UNIVERSES, d.universe || "auto")}</div><small>${(CITY_UNIVERSES[d.universe] || CITY_UNIVERSES.auto).desc}</small></div>` : ""}
     ${typeof RG_HAILS !== "undefined" ? `<div class="cr-row"><div class="cr-lbl">HAILS FROM · HOMEWORLD</div><div class="cr-chips">${chips("hails", RG_HAILS, d.hails || "auto")}</div><small>${(RG_HAILS[d.hails] || RG_HAILS.auto).desc}</small></div>` : ""}
-    ${v15ContractEnabled("community_supply") ? `<div class="cr-row"><div class="cr-lbl">SIMULATED WORLD JOB</div><div class="cr-chips">${chips("simJob", CUSTOM_WORLD_JOBS, d.simJob)}</div><small>${CUSTOM_WORLD_JOBS[d.simJob].desc}</small></div>` : `<div class="cr-row"><div class="cr-lbl">SIMULATED WORLD JOB</div><small>Jobs are unavailable in this revision. Existing job preferences remain saved.</small></div>`}
+    <div class="cr-row"><div class="cr-lbl">CAREER TRACKS · SELECT ALL THAT APPLY</div><div class="cr-chips">${Object.entries(CUSTOM_CAREER_TRACKS).map(([key, track]) => {
+      const available = customCareerTrackAvailable(key), selected = d.careerTracks.includes(key);
+      return `<button type="button" class="btn cr-chip cr-career-chip${selected ? " gold" : ""}${available ? "" : " locked"}" data-crcareer="${key}" aria-pressed="${selected}" ${available || selected ? "" : "disabled"} title="${esc(track.desc)}">${available ? "" : "🔒 "}${track.name}</button>`;
+    }).join("")}</div><small>These are qualifications/preferences, not active jobs. Select several if you like; only one contract can be active at a time. Your selected tracks control which calls you can accept. No call is accepted automatically.</small></div>
+    ${d.careerTracks.includes("courier") ? `<div class="cr-row"><div class="cr-lbl">OPTIONAL COURIER DISPATCH PROMPT</div><div class="cr-chips">${chips("simJob", CUSTOM_WORLD_JOBS, d.simJob)}</div><small>${CUSTOM_WORLD_JOBS[d.simJob].desc}</small></div>` : ""}
     <div class="cr-cap">LOADOUT ${cap}</div>
     ${wRows}
     <div class="cr-row"><div class="cr-chips">${d.weapons.length < 3 ? `<button class="btn gold cr-chip" id="crAdd">＋ ADD WEAPON (${d.weapons.length}/3)</button>` : ""}
@@ -948,6 +992,7 @@ function renderCreator() {
       <div>Hair ${cyc("hair", CUSTOM_HAIR.length, CUSTOM_HAIR[d.hair][0])} Headgear ${cyc("head", CUSTOM_HEADGEAR.length, hg.name)}</div>
       <div>Outfit ${cyc("robe", CUSTOM_ROBES.length, CUSTOM_ROBES[d.robe][0])} Legs ${cyc("legs", CUSTOM_LEGS.length, CUSTOM_LEGS[d.legs][0])}</div>
       <div>Cloak ${cyc("cloak", CUSTOM_CLOAKS.length, d.armor === "beskar" ? "— (jetpack)" : CUSTOM_CLOAKS[d.cloak][0])}</div></div>`;
+  box.querySelectorAll("[data-crcareer]").forEach(b => b.onclick = () => crToggleCareer(b.dataset.crcareer));
   box.querySelectorAll("[data-cr]").forEach(b => b.onclick = () => crSet(b.dataset.cr, b.dataset.v));
   box.querySelectorAll("[data-crc]").forEach(b => b.onclick = () => crCycle(b.dataset.crc, +b.dataset.n, +b.dataset.dir));
   box.querySelectorAll("[data-crn]").forEach(b => b.onclick = () => crSet(b.dataset.crn, +b.dataset.v));
@@ -1006,13 +1051,14 @@ function customRosterCard() {
   if (!d) {
     card.innerHTML = `<div class="card-head"><div class="cr-plus">＋</div><div><div class="card-title">#80 CREATE YOUR OWN HERO</div>
       <div class="card-sub">★ FREE · always unlocked</div></div></div>
-      <div class="card-desc">Build <b>any</b> character: a Jedi, a Sith, a gunslinger with <b>twin six-shooters</b>, a wizard with a little Force, a smuggler with a revolver and a lightsaber, a <b>Mandalorian with a real jetpack</b>… 1-3 weapons, 2 skills, gear, mobility and armor — each with honest requirements.</div>
+      <div class="card-desc">Build <b>any</b> character: a Jedi, a Sith, a gunslinger with <b>twin six-shooters</b>, a wizard with a little Force, a smuggler with a revolver and a lightsaber, a <b>Mandalorian with a real jetpack</b>… Choose multiple career tracks, then take one optional contract at a time. Also customize 1-3 weapons, 2 skills, gear, mobility and armor — each with honest requirements.</div>
       <button class="btn gold cr-edit">✨ OPEN HERO CREATOR</button>`;
   } else {
     const wl = d.weapons.map(w => crWDef(w).name).join(" + ");
+    const careers = (Array.isArray(d.careerTracks) ? d.careerTracks : []).map(k => CUSTOM_CAREER_TRACKS[k]?.name).filter(Boolean).join(" · ") || "None selected";
     card.innerHTML = `<div class="card-head"><canvas width="36" height="36" style="position:relative;width:36px;height:36px;background:#0a1424;border:1px solid #ffd166;border-radius:6px;flex-shrink:0"></canvas>
       <div><div class="card-title">#80 ${d.name}</div><div class="card-sub">YOUR HERO · ${CUSTOM_ALIGN[d.align].name} · ${CUSTOM_FORCE[d.force].name}</div></div></div>
-      <div class="card-desc"><b>Weapons:</b> ${wl}<br><b>Skills:</b> ${d.skills.map(k => CUSTOM_SKILLS[k].u[0]).join(" · ")} · <b>Armor:</b> ${CUSTOM_ARMOR[d.armor].name}</div>
+      <div class="card-desc"><b>Weapons:</b> ${wl}<br><b>Skills:</b> ${d.skills.map(k => CUSTOM_SKILLS[k].u[0]).join(" · ")} · <b>Armor:</b> ${CUSTOM_ARMOR[d.armor].name}<br><b>Career tracks:</b> ${careers}</div>
       <button class="btn cr-edit">✏️ EDIT HERO</button>`;
     const pcv = card.querySelector("canvas");
     if (pcv) drawHeroSprite(18, 20, FACTIONS[0], CUSTOM_CID, 0, 0, 0, pcv.getContext("2d"), -1);

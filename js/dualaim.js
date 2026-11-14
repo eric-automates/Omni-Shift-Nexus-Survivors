@@ -46,7 +46,7 @@ function dualSt(w, h) { const a = w._dh || (w._dh = [{ t: -1, ang: null }, { t: 
 function dualCandidates() {
   const c = [];
   for (let i = 0; i < MAX_E; i++) {
-    if (!eAct[i] || eStagger[i] > 0) continue;
+    if (!eAct[i] || allyIs(i) || eStagger[i] > 0) continue;
     if (typeof sdIgnore === "function" && sdIgnore(i)) continue;
     if (typeof isEnemyOnScreen === "function" && !isEnemyOnScreen(i)) continue;
     c.push([i, Math.hypot(eX[i] - player.x, eY[i] - player.y)]);
@@ -73,7 +73,7 @@ function dualAssign() {
 function dualAimTarget(w, h) {
   if (!w || DUAL.hands.length < 2 || !DUAL.inSet.has(w) || !w._dh) return -1;
   const j = w._dh[h || 0].t;
-  if (j < 0 || !eAct[j] || eStagger[j] > 0) return -1;
+  if (j < 0 || !eAct[j] || allyIs(j) || eStagger[j] > 0) return -1;
   // re-checked between assignments: a foe can turn into a duel spectator, get staggered or leave the screen
   if (typeof sdIgnore === "function" && sdIgnore(j)) return -1;
   return (typeof isEnemyOnScreen === "function" && !isEnemyOnScreen(j)) ? -1 : j;

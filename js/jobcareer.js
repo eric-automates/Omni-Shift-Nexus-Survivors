@@ -151,7 +151,7 @@ function jcPlan(stop,id,avoidUid) {
   return {ok:false,why:"No complete on-foot route to a medical entrance was found. Move closer to a clinic and retry."};
 }
 function jcOffer() {
-  if(!v15ContractEnabled(JOB_COURIER_SHIFT)) return {ok:false,why:"This shift is unavailable in this revision."};
+  if(!v15ContractOfferEnabled(JOB_COURIER_SHIFT)) return {ok:false,why:"This shift is unavailable for this character in this revision."};
   const read=jobReadState();if(!read.ok)return read;
   if(read.state.active)return {ok:false,why:"Finish or withdraw the current job first."};
   const plan=jcPlan(0,read.state.next);if(!plan.ok)return plan;
@@ -295,7 +295,7 @@ function jcEnd(id) {
     const a=read.active;
     if(a && !v15JobEnabled(a))return;
     if(!a) {
-      if(!v15ContractEnabled(JOB_COURIER_SHIFT))return;
+      if(!v15ContractOfferEnabled(JOB_COURIER_SHIFT))return;
       const close=Array.from(panel.querySelectorAll("button")).find(b=>b.textContent==="CLOSE");
       const b=document.createElement("button");b.type="button";b.className="btn";b.textContent="MEDICAL DISTRIBUTION SHIFT";b.style.cssText="min-height:48px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";
       b.onclick=()=>{const r=jcOffer();jdOpen(r.ok?"Distribution shift offered.":r.why);};panel.insertBefore(b,close||null);

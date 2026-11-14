@@ -13,7 +13,7 @@ let birdPopT = 0;
 function castWhistlingBirds(u) {
   if (!player) return;
   const targets = [];
-  for (let i = 0; i < MAX_E; i++) if (eAct[i] && !eDummy[i] && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i))) targets.push(i);
+  for (let i = 0; i < MAX_E; i++) if (eAct[i] && !allyIs(i) && !eDummy[i] && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i))) targets.push(i);
   targets.sort((a, b) => Math.hypot(eX[a] - player.x, eY[a] - player.y) - Math.hypot(eX[b] - player.x, eY[b] - player.y));
   const n = Math.max(14, Math.min(BIRD_MAX, targets.length));
   const queues = Array.from({ length: n }, () => []);
@@ -34,6 +34,7 @@ function castWhistlingBirds(u) {
 }
 
 function birdHit(i) {
+  if (!eAct[i] || allyIs(i)) return;
   const ex = eX[i], ey = eY[i];
   spawnBlastWave(ex, ey, 16, "#ffd166");
   for (let k = 0; k < (opts.lowPart ? 2 : 5); k++) {
@@ -57,7 +58,7 @@ function updateWhistlingBirds(simDt) {
   if (player.wbFailsafe > 0) {
     player.wbFailsafe -= simDt;
     if (player.wbFailsafe <= 0 && player.wbTargets) {
-      for (let i = 0; i < MAX_E; i++) if (eAct[i] && eType[i] < 98 && player.wbTargets.has(eUid[i])) birdHit(i);
+      for (let i = 0; i < MAX_E; i++) if (eAct[i] && !allyIs(i) && eType[i] < 98 && player.wbTargets.has(eUid[i])) birdHit(i);
       player.wbTargets = null;
     }
   }
@@ -65,9 +66,9 @@ function updateWhistlingBirds(simDt) {
     const B = whistlingBirds[b];
     B.t += simDt; B.life -= simDt;
     if (B.life <= 0) { whistlingBirds.splice(b, 1); continue; }
-    if (!B.tgt || !eAct[B.tgt.idx] || eUid[B.tgt.idx] !== B.tgt.uid) {
+    if (!B.tgt || !eAct[B.tgt.idx] || eUid[B.tgt.idx] !== B.tgt.uid || allyIs(B.tgt.idx)) {
       B.tgt = null;
-      while (B.q.length) { const c = B.q.shift(); if (eAct[c.idx] && eUid[c.idx] === c.uid) { B.tgt = c; break; } }
+      while (B.q.length) { const c = B.q.shift(); if (eAct[c.idx] && eUid[c.idx] === c.uid && !allyIs(c.idx)) { B.tgt = c; break; } }
       if (!B.tgt && B.t > B.launch) B.life = Math.min(B.life, 0.35);   // job done: peel off and burn out
     }
     let ang = Math.atan2(B.vy, B.vx), spd = Math.hypot(B.vx, B.vy);

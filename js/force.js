@@ -258,7 +258,7 @@ function yodaLiftStep(dt) {
   for (let k = F.lifts.length - 1; k >= 0; k--) {
     const L = F.lifts[k];
     const j = L.j;
-    if (!eAct[j] || eUid[j] !== L.uid) { F.lifts.splice(k, 1); continue; }
+    if (!eAct[j] || eUid[j] !== L.uid || allyIs(j)) { if (eUid[j] === L.uid) eFLiftZ[j] = 0; F.lifts.splice(k, 1); continue; }
     L.t += dt;
     if (L.t < 0.55) {                                            // rise
       eFLiftZ[j] = 24 * Math.sin(Math.min(1, L.t / 0.55) * Math.PI * 0.5);
@@ -351,7 +351,7 @@ function forceCrushStep(dt) {
   const F = forceState;
   for (let k = F.crush.length - 1; k >= 0; k--) {
     const C = F.crush[k], j = C.j;
-    if (!eAct[j] || eUid[j] !== C.uid) { F.crush.splice(k, 1); continue; }
+    if (!eAct[j] || eUid[j] !== C.uid || allyIs(j)) { if (eUid[j] === C.uid) eFLiftZ[j] = 0; F.crush.splice(k, 1); continue; }
     C.t += dt;
     eStun[j] = Math.max(eStun[j], 0.3);
     eFLiftZ[j] = 30 * Math.min(1, C.t / 0.6);

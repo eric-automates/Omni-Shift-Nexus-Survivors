@@ -92,6 +92,8 @@ function jobPayload(data) {
 }
 function jobOffer(defId, payload) {
   if (!v15JobEnabled({contract:defId,data:payload})) return {ok:false,why:"This job is unavailable in this revision."};
+  if (typeof v15ContractOfferEnabled === "function" && !v15ContractOfferEnabled(defId))
+    return {ok:false,why:"This character has not selected the matching career track."};
   const def = JOB_CORE.defs[defId], read = jobReadState(), world = jobWorldKey(), data = jobPayload(payload);
   if (!def || !read.ok || !world || !data) return { ok: false, why: !read.ok ? read.why : "invalid offer or world" };
   const s = read.state;

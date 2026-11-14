@@ -330,7 +330,7 @@ function executeHeroDash(targetX, targetY) {
   } else if (spec.style === "gunslingerRoll") {
     for (let k = 0; k < 6; k++) {
       const a = dashAng + (Math.PI * 2 * k) / 6;
-      spawnProj(endX, endY, Math.cos(a) * 460, Math.sin(a) * 460, dashDmg * 0.75, 0.65, 6, 2, 4, 1, 0, player.cid);
+      spawnProj(endX, endY, Math.cos(a) * 460, Math.sin(a) * 460, dashDmg * 0.75, 0.65, 6, 2, 4, 1, 0, player.cid, null, 1);
     }
   }
 
@@ -513,7 +513,7 @@ function castArcaneSpell(spellType, manualClick = false) {
     if (typeof sfxSpell === "function") sfxSpell("avada");
     let best = -1, bestScore = -1;
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i)) && !(eStagger[i] > 0)) {    // v12: never steal a waiting glory kill
+      if (eAct[i] && !allyIs(i) && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i)) && !(eStagger[i] > 0)) {    // v12: never steal a waiting glory kill
         const d = Math.hypot(eX[i] - player.x, eY[i] - player.y);
         if (d < 320) {
           const score = eHP[i] * (eType[i] >= 98 ? 5 : 1) / (1 + d * 0.01);
@@ -536,7 +536,7 @@ function castArcaneSpell(spellType, manualClick = false) {
     if (typeof sfxSpell === "function") sfxSpell("sectum");
     let hits = 0;
     for (let i = 0; i < MAX_E; i++) {
-      if (!eAct[i] || !isEnemyOnScreen(i) || !!(typeof sdIgnore === "function" && sdIgnore(i))) continue;
+      if (!eAct[i] || allyIs(i) || !isEnemyOnScreen(i) || !!(typeof sdIgnore === "function" && sdIgnore(i))) continue;
       if (Math.hypot(eX[i] - player.x, eY[i] - player.y) < 185 * player.area && hits < 5) {
         const cutA = Math.atan2(eY[i] - player.y, eX[i] - player.x) + (Math.random() - 0.5) * 0.9;
         if (typeof eScarAng !== "undefined") { eScarAng[i] = cutA; eScarHeat[i] = 1.0; }
@@ -1041,6 +1041,12 @@ function spawnEnemy(isBoss = false, isRival = false) {
 
 /* === 9. WEAPON & SPELLBOOK FIRING ENGINE === */
 function fireWeapon(w) {
+  if (!(typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) && w.style !== "orbit" && typeof sheatheForceDraw === "function") sheatheForceDraw(1.1);
+  const spawnWeaponProjectile = (...args) => {
+    const id = args[11] == null ? w.id : args[11], visual = args[8];
+    if ((visual === 3 || visual === 4) && [1, 6, 22, 34, 35, 36, 40, 84].includes(id)) args[13] = 2;
+    return spawnProj(...args);
+  };
   syncHeroSpellbook();
   if (w.lvl >= 5 && w.lvl < 10 && !w.evolvedLv5) {
     const sig = HERO_SIG_GEAR[w.id];
@@ -1062,7 +1068,7 @@ function fireWeapon(w) {
   let tx = player.x + Math.cos(player.aim) * 120, ty = player.y + Math.sin(player.aim) * 120, best = 1e9;
   let tx2 = 0, ty2 = 0, best2 = 1e9;
   for (let i = 0; i < MAX_E; i++) {
-    if (eAct[i] && !(eStagger[i] > 0) && !(typeof sdIgnore === "function" && sdIgnore(i)) && isEnemyOnScreen(i)) {
+    if (eAct[i] && !allyIs(i) && !(eStagger[i] > 0) && !(typeof sdIgnore === "function" && sdIgnore(i)) && isEnemyOnScreen(i)) {
       const d = Math.hypot(eX[i] - player.x, eY[i] - player.y);
       if (d < best) { best2 = best; tx2 = tx; ty2 = ty; best = d; tx = eX[i]; ty = eY[i]; }
       else if (d < best2) { best2 = d; tx2 = eX[i]; ty2 = eY[i]; }
@@ -1072,6 +1078,8 @@ function fireWeapon(w) {
   if (((w.twinIdx || 0) % 2 === 1) && best2 < 1e9) { tx = tx2; ty = ty2; }
   // v14.3: a gun in each hand — each hand fires at its own target (js/dualaim.js)
   if (typeof dualAimTarget === "function") { const dj = dualAimTarget(w); if (dj >= 0) { tx = eX[dj]; ty = eY[dj]; } }
+  // Manual touch aim is intentionally allowed to miss every enemy or point at empty ground.
+  if (typeof touchFireHasAimPoint === "function" && touchFireHasAimPoint() && touchFire.point) { tx = touchFire.point.x; ty = touchFire.point.y; }
   const eyeJitter = ((100 - player.limbs[0]) / 100) * 0.42;
   const aimAng = Math.atan2(ty - player.y, tx - player.x) + (Math.random() - 0.5) * eyeJitter;
 
@@ -1083,7 +1091,7 @@ function fireWeapon(w) {
     if (typeof sfxSpell === "function") sfxSpell("raiseDead");
     for (let k = 0; k < count; k++) {
       const a = aimAng + (k - (count - 1) / 2) * 0.20;
-      spawnProj(player.x, player.y, Math.cos(a) * 360, Math.sin(a) * 360, baseDmg * 1.25, 0.85, 10, 2 + player.pierce, 5, sup, 0, 75);
+      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * 360, Math.sin(a) * 360, baseDmg * 1.25, 0.85, 10, 2 + player.pierce, 5, sup, 0, 75);
     }
     return;
   }
@@ -1096,7 +1104,7 @@ function fireWeapon(w) {
   if ((typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 44, 73].includes(w.id))) {
     if (w.id === 71) {
       if (typeof sfxSpell === "function") sfxSpell("wand");
-      spawnProj(player.x, player.y, Math.cos(aimAng) * 440, Math.sin(aimAng) * 440, baseDmg * 1.2, 0.75, 9, 3 + player.pierce, 4, sup, 0, 71);
+      spawnWeaponProjectile(player.x, player.y, Math.cos(aimAng) * 440, Math.sin(aimAng) * 440, baseDmg * 1.2, 0.75, 9, 3 + player.pierce, 4, sup, 0, 71);
     }
     // v11: the Saber Form Engine (js/saberforms.js) choreographs every swing, hop and swing sound itself.
     if (typeof saberEngineOwns === "function" && saberEngineOwns(w)) return;
@@ -1120,7 +1128,7 @@ function fireWeapon(w) {
     for (let k = 0; k < discCnt; k++) {
       const launchAng = aimAng + (k - (discCnt - 1) / 2) * 0.35 + (Math.random() - 0.5) * 0.22;
       const curveSign = ((k & 1) ? 1 : -1) * (0.42 + Math.random() * 0.25);
-      spawnProj(player.x, player.y, launchAng, curveSign, baseDmg * 1.4, 1.35, 13 * player.area, 99, 8, sup, 0, w.id);
+      spawnWeaponProjectile(player.x, player.y, launchAng, curveSign, baseDmg * 1.4, 1.35, 13 * player.area, 99, 8, sup, 0, w.id);
     }
     return;
   }
@@ -1139,7 +1147,7 @@ function fireWeapon(w) {
       const ox = player.x - Math.sin(a0) * hy, oy = player.y + Math.cos(a0) * hy;
       for (let k = 0; k < n; k++) {
         const a = a0 + (Math.random() - 0.5) * 0.07, spd = 560 * player.projSpd;
-        spawnProj(ox - Math.cos(a) * k * 9, oy - Math.sin(a) * k * 9, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.38, 0.6 * player.dur, 4, 1 + player.pierce + sup * 2, 4, sup, 0, 39);
+        spawnWeaponProjectile(ox - Math.cos(a) * k * 9, oy - Math.sin(a) * k * 9, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.38, 0.6 * player.dur, 4, 1 + player.pierce + sup * 2, 4, sup, 0, 39, null, 1);
       }
       if (typeof sfxWeapon === "function") sfxWeapon(w.style, 39, false);
     }
@@ -1150,7 +1158,7 @@ function fireWeapon(w) {
 
   if (w.id === 52 || w.id === 13) {
     const spd = 540 * player.projSpd, spread = (Math.random() - 0.5) * (0.05 + eyeJitter * 0.4);
-    spawnProj(player.x, player.y, Math.cos(aimAng + spread) * spd, Math.sin(aimAng + spread) * spd, baseDmg * 2.2, 0.75 * player.dur, 4.5, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, w.id);
+    spawnWeaponProjectile(player.x, player.y, Math.cos(aimAng + spread) * spd, Math.sin(aimAng + spread) * spd, baseDmg * 2.2, 0.75 * player.dur, 4.5, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, w.id, null, 1);
     return;
   }
 
@@ -1160,7 +1168,7 @@ function fireWeapon(w) {
     const taps = 1 + (w.lvl >= 4 ? 1 : 0) + (sup ? 1 : 0) + Math.min(1, player.projCnt);
     for (let b = 0; b < taps; b++) {
       const a = aimAng + (b - (taps - 1) / 2) * 0.035, spd = 600 * player.projSpd;
-      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 2.0, 0.8 * player.dur, 6, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, 1);
+      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 2.0, 0.8 * player.dur, 6, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, 1);
     }
     return;
   }
@@ -1169,7 +1177,7 @@ function fireWeapon(w) {
     for (let b = 0; b < 3; b++) {
       const a = aimAng + (b - 1) * 0.045;
       const spd = (450 - b * 18) * player.projSpd;
-      spawnProj(player.x + Math.cos(a) * (10 + b * 6), player.y + Math.sin(a) * (10 + b * 6), Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.65, 0.72 * player.dur, 5, 2 + player.pierce, 4, sup, 0, 54);
+      spawnWeaponProjectile(player.x + Math.cos(a) * (10 + b * 6), player.y + Math.sin(a) * (10 + b * 6), Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.65, 0.72 * player.dur, 5, 2 + player.pierce, 4, sup, 0, 54);
     }
     return;
   }
@@ -1177,7 +1185,7 @@ function fireWeapon(w) {
   if (w.style === "missile") {
     for (let k = 0; k < count; k++) {
       const a = aimAng + (k - (count - 1) / 2) * 0.26, spd = 235 * player.projSpd;
-      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 1.6 * player.dur, 9 * player.area, player.pierce, 2, sup, 0, w.id);
+      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 1.6 * player.dur, 9 * player.area, player.pierce, 2, sup, 0, w.id);
     }
   } else if (w.style === "cone") {
     const isHeavyMG = [53].includes(w.id);
@@ -1186,18 +1194,18 @@ function fireWeapon(w) {
     for (let k = 0; k < pellets; k++) {
       const a = aimAng + (k - (pellets - 1) / 2) * spreadStep + (Math.random() - 0.5) * 0.04;
       const spd = (isHeavyMG ? 410 : (295 + Math.random() * 45)) * player.projSpd;
-      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * (isHeavyMG ? 1.05 : 0.85), (isHeavyMG ? 0.68 : 0.48) * player.dur, 6.5 * player.area, player.pierce + 1, 3, sup, 0, w.id);
+      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * (isHeavyMG ? 1.05 : 0.85), (isHeavyMG ? 0.68 : 0.48) * player.dur, 6.5 * player.area, player.pierce + 1, 3, sup, 0, w.id, null, (typeof GAU_GUN !== "undefined" && GAU_GUN[w.id]) ? 1 : 0);
     }
   } else if (w.style === "beam") {
     for (let k = 0; k < count; k++) {
       const a = aimAng + (k - (count - 1) / 2) * 0.10, spd = 470 * player.projSpd;
-      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 1.25, 0.75 * player.dur, 8.5 * player.area, 4 + player.pierce + (sup ? 6 : 0), 4, sup, 0, w.id);
+      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 1.25, 0.75 * player.dur, 8.5 * player.area, 4 + player.pierce + (sup ? 6 : 0), 4, sup, 0, w.id, null, (typeof GAU_GUN !== "undefined" && GAU_GUN[w.id]) ? 1 : 0);
     }
   } else if (w.style === "chain") {
     const isAvada = w.id === 70;
     for (let k = 0; k < count; k++) {
       const a = aimAng + (k - (count - 1) / 2) * 0.22, spd = (isAvada ? 420 : 340) * player.projSpd;
-      spawnProj(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * (isAvada ? 1.45 : 1.0), 0.9 * player.dur, 10 * player.area, 2 + player.pierce + (sup ? 4 : 0), 5, isAvada ? 3 : sup, 0, w.id);
+      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * (isAvada ? 1.45 : 1.0), 0.9 * player.dur, 10 * player.area, 2 + player.pierce + (sup ? 4 : 0), 5, isAvada ? 3 : sup, 0, w.id);
     }
   } else {
     executeForceKineticPush(player.x, player.y, aimAng, w.lvl, baseDmg * 0.75);
@@ -1251,7 +1259,7 @@ function triggerUtility(uIdx) {
   } else if (u.type === "grappleHook") {
     let best = -1, bestHP = -1;
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i)) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 320 && eHP[i] > bestHP) {
+      if (eAct[i] && !allyIs(i) && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i)) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 320 && eHP[i] > bestHP) {
         bestHP = eHP[i]; best = i;
       }
     }
@@ -1278,9 +1286,17 @@ function triggerUtility(uIdx) {
       }
     }
   } else if (u.type === "fanHammer" || u.type === "critBurst") {
+    // Visual-only family tags for source-reviewed utility callers. These alter only
+    // pArt; projectile speed, damage, spread, life, radius, pierce and sound stay as authored.
+    const artFamily = {
+      2: 4, 3: 5, 5: 7, 6: 4, 8: 3, 9: 4, 12: 5, 13: 3, 15: 3,
+      17: 6, 19: 4, 21: 6, 22: 4, 23: 4, 25: 6, 26: 8, 28: 3, 31: 3,
+      35: 4, 37: 4, 41: 4, 43: 3, 44: 3, 45: 4, 50: 7, 51: 3,
+      52: 3, 60: 5, 65: 5, 87: 4, 88: 4
+    }[player.cid] || 0;
     for (let k = 0; k < 10; k++) {
       const a = player.aim + (k - 4.5) * (u.type === "fanHammer" ? 0.14 : 0.62);
-      spawnProj(player.x, player.y, Math.cos(a) * 480, Math.sin(a) * 480, 110 * player.might, 0.8, 8, 4, 4, 1, 0, player.cid);
+      spawnProj(player.x, player.y, Math.cos(a) * 480, Math.sin(a) * 480, 110 * player.might, 0.8, 8, 4, 4, 1, 0, player.cid, null, artFamily);
     }
     if (typeof sfxWeapon === "function") sfxWeapon("beam", player.cid, false);
   } else if (u.type === "executeDash") {
@@ -1421,7 +1437,7 @@ function updateHeroSpecials(simDt) {
   if (player.sigGearCD <= 0 && !(typeof flyGroundSeparated === "function" && flyGroundSeparated())) {
     let best = -1, maxH = 0;
     for (let i = 0; i < MAX_E; i++) {
-      if (eAct[i] && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i)) && !(eStagger[i] > 0) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 280 && eHP[i] > maxH) {
+      if (eAct[i] && !allyIs(i) && isEnemyOnScreen(i) && !(typeof sdIgnore === "function" && sdIgnore(i)) && !(eStagger[i] > 0) && Math.hypot(eX[i] - player.x, eY[i] - player.y) < 280 && eHP[i] > maxH) {
         maxH = eHP[i]; best = i;
       }
     }
