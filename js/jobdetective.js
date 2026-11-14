@@ -24,7 +24,7 @@ function jdMemoryLedger(state,world,create=false){
   return ledger;
 }
 function jdRememberWitness(state,a,outcome){
-  if(!a||a.contract!==JOB_TRACE||!["witness_safe","witness_supported","witness_protected"].includes(outcome)||!a.data?.witnessState)return false;
+  if(!a||a.contract!==JOB_TRACE||!["witness_safe","witness_supported","witness_protected","trace_handoff"].includes(outcome)||!a.data?.witnessState)return false;
   const person=JD_CONTACT.actor;
   if(!person||JD_CONTACT.role!=="witness"||JD_CONTACT.incident!==a.id||JD_CONTACT.world!==a.world||typeof person.name!=="string")return false;
   const ledger=jdMemoryLedger(state,a.world,true);if(!ledger)return false;

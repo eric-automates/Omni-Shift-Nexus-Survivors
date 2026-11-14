@@ -69,11 +69,11 @@ function pdpEnsureCareerRecord(state) {
   return { changed: true };
 }
 JOB_CORE.finishHooks[JOB_PATROL] = function (s, a, outcome, pay) {
-  const pd = a.data && a.data.pd; let stopBonus = 0;
-  if (pd && Array.isArray(pd.stops)) for (const st of pd.stops) {
+  const counted = outcome === "debriefed" ? pdpCountedStops(a) : [];
+  let stopBonus = 0;
+  for (const st of counted) {
     if (st.resolved === "warn") stopBonus += 5; else if (st.resolved === "ticket") stopBonus += 25; else if (st.resolved === "booked") stopBonus += 60;
   }
-  const counted = outcome === "debriefed" ? pdpCountedStops(a) : [];
   const rank = pdpCareerRank(s), previous = pdpCareerStops(s);
   const total = previous + counted.length;
   const nextStops = Number.isSafeInteger(total) ? total : Number.MAX_SAFE_INTEGER;

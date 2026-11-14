@@ -497,7 +497,7 @@ function erBodyHuman(g, s, i, face, walk, swing, firing, kneel) {
   const c = s.c, x = s.x, robot = s.b === "r", giant = s.b === "g";
   const thin = x.indexOf("thin") >= 0, bulky = x.indexOf("bulky") >= 0 || giant;
   const tw = bulky ? 7.2 : (thin ? 4.4 : 6), limb = thin ? 2 : (bulky ? 3.8 : 3);
-  const sw = Math.sin(walk), bob = walk ? Math.abs(Math.cos(walk)) * 0.8 : Math.sin(runTime * 2 + i) * 0.25;
+  const sw = Math.sin(walk), bob = walk ? Math.abs(Math.cos(walk)) * 0.5 : Math.sin(runTime * 2 + i) * 0.2;
   const crouch = x.indexOf("crouch") >= 0 ? 2.5 : 0, legsLost = (typeof AGE !== "undefined" && AGE.level) ? 0 : eLegsLost[i] | 0, armsLost = (typeof AGE !== "undefined" && AGE.level) ? 0 : eArmsLost[i] | 0;
   g.fillStyle = "rgba(0,0,0,0.28)"; g.beginPath(); g.ellipse(0, 10.6, tw + 2.2, 2.6, 0, 0, 7); g.fill();
   g.save(); g.translate(0, crouch - bob);
@@ -509,9 +509,17 @@ function erBodyHuman(g, s, i, face, walk, swing, firing, kneel) {
   if (x.indexOf("pack") >= 0 && back) { g.fillStyle = erShade(c[0], -0.2); erRR(g, -tw + 1, -6, tw * 2 - 2, 8, 2); g.fill(); }
   // legs
   const lc = c[1], boot = robot ? erShade(c[1], -0.3) : "#1e1a16";
-  const leg = (lx, off) => { g.fillStyle = lc; g.fillRect(lx, 3.6 + Math.min(0, off), limb, 6.2 - Math.abs(off) * 0.3); g.fillStyle = boot; g.fillRect(lx - 0.3, 8.4 + Math.min(0, off) * 0.5, limb + 0.8, 2); };
+  const leg = (lx, phase) => {
+    const strideX = Math.sin(phase) * (bulky ? 1.6 : 1.25);
+    const lift = Math.max(0, Math.cos(phase)) * 0.8;
+    const kneeX = lx + strideX * 0.48, kneeY = 6.3 - lift * 0.35;
+    const ankleX = lx + strideX, ankleY = 9.2 - lift;
+    g.strokeStyle = lc; g.lineWidth = Math.max(1.8, limb * 0.9); g.lineCap = "round";
+    g.beginPath(); g.moveTo(lx, 3.4); g.lineTo(kneeX, kneeY); g.lineTo(ankleX, ankleY); g.stroke();
+    g.fillStyle = boot; g.beginPath(); g.ellipse(ankleX + 0.7, ankleY + 0.55, limb * 0.65, 0.9, 0, 0, Math.PI * 2); g.fill();
+  };
   if (kneel) { g.fillStyle = lc; g.fillRect(-tw + 0.5, 5, tw - 1, 3); g.fillRect(1, 5, tw - 1, 3); }
-  else { if (legsLost < 1) leg(-tw * 0.55 - limb * 0.4, sw * 1.6); if (legsLost < 2) leg(tw * 0.55 - limb * 0.6, -sw * 1.6); }
+  else { if (legsLost < 1) leg(-tw * 0.55 - limb * 0.4, walk); if (legsLost < 2) leg(tw * 0.55 - limb * 0.6, walk + Math.PI); }
   // lower garment over the legs
   if (x.indexOf("robe") >= 0 || x.indexOf("coat") >= 0 || x.indexOf("poncho") >= 0 || x.indexOf("kama") >= 0) {
     const lowCol = x.indexOf("kama") >= 0 ? erShade(c[2], -0.1) : (x.indexOf("robe") >= 0 ? erShade(c[0], -0.08) : erShade(c[0], -0.12));
@@ -711,8 +719,12 @@ function drawEnemyDetailed(i, ex, ey, baseR, ally, kneel, lev, spect, tCtx) {
   const dPl = Math.hypot(player.x - ex, player.y - ey);
   let face = cityAI ? ST.face[i] : Math.atan2(player.y - ey, player.x - ex);
   if (ally) face = Math.hypot(eVX[i], eVY[i]) > 5 ? Math.atan2(eVY[i], eVX[i]) : face + Math.PI;
-  const moving = Math.hypot(eVX[i], eVY[i]) > 6;
-  const walk = moving ? runTime * (et === 1 ? 13 : 10) + i * 0.7 : 0;
+  const moveSpeed = Math.hypot(eVX[i], eVY[i]);
+  const moving = moveSpeed > 6;
+  // Scale cadence with actual travel speed: a walk cycle should not sprint in
+  // place when an NPC is merely creeping, nor keep animating while standing.
+  const cadence = Math.min(12, Math.max(0, moveSpeed * 0.3));
+  const walk = moving ? runTime * cadence + i * 0.7 : 0;
   const swing = (!cityAI && dPl < 40 && !ally) ? Math.sin(runTime * 13 + i) * 0.9 : 0;
   const firing = (typeof ST !== "undefined" && ST.flash && ST.flash[i] > 0) || (et === 3 && eFireCD[i] > 2.2);
   g.save(); g.translate(ex, ey); g.scale(sc, sc);
