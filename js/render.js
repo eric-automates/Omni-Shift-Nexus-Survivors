@@ -346,16 +346,16 @@ function drawSaberBladePose(tCtx, w, R, col, handCol, aim, slotIdx, bladeSt, mai
 }
 
 /*
- * Directional pose/cel-light helpers. The base art faces screen-up; yaw rotates
- * that body into eight movement directions while weapon aim is counter-rotated
- * so the muzzle still points at its world-space target. Sun key is upper-left.
- * Character-specific gait research/overrides are recorded in the companion
- * 16.0_CHARACTER_MOTION_REFERENCE.md before each individual profile is tuned.
+ * Directional pose/cel-light helpers. These are upright 2D/isometric sprites,
+ * not top-down tokens: rotating the entire silhouette to express heading makes
+ * east/west movement look like the character is falling over. Keep the torso
+ * vertical; movement direction drives front/back cues, stride, and world motion.
+ * Weapon aim remains in world-space. Sun key is upper-left.
  */
 const HERO_KEY_LIGHT_ANGLE = -2.28; // upper-left in screen/world coordinates
 function heroBodyRotation(facingAngle) {
-  const a = Number.isFinite(facingAngle) ? facingAngle : -Math.PI / 2;
-  return Math.round((a + Math.PI / 2) / (Math.PI / 4)) * (Math.PI / 4);
+  // Facing changes the portrait cues, not the screen-space upright axis.
+  return 0;
 }
 function drawHeroCellShading(tCtx, bodyRot, walk = 0) {
   if (!tCtx || typeof opts !== "undefined" && opts.cellShade === false) return;
@@ -410,8 +410,9 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
   const flightAmount = flightPose ? Math.min(1, flightSpeed / Math.max(1, flightPose.top)) : 0;
   const stride = flightPose ? (Math.sin(flightAngle) * 2.1 + Math.cos(flightAngle) * 0.8) * flightAmount : Math.sin(gaitPhase) * gait.stride;
   const acrobatZ = isLivePlayer ? (player.acrobatZ || 0) : 0;
-  const hoverBob = (kStyle === 3 || kStyle === 5 || flightPose) ? Math.sin((typeof runTime !== "undefined" ? runTime : 0) * 5.5) * 2.0 : Math.abs(Math.sin(gaitPhase * 2)) * gait.bob;
-  const bankAng = (isLivePlayer ? (player.bankTilt || 0) : 0) + (flightPose ? Math.sin(flightAngle) * flightAmount * 0.10 : 0);
+  const hoverBob = (kStyle === 3 || kStyle === 5 || flightPose) ? Math.sin((typeof runTime !== "undefined" ? runTime : 0) * 5.5) * 2.0 : Math.abs(Math.sin(gaitPhase * 2)) * Math.min(gait.bob, 0.38);
+  // Ground movement never rolls the full sprite; only airborne flight gets a tiny bank.
+  const bankAng = flightPose ? Math.max(-0.045, Math.min(0.045, Math.sin(flightAngle) * flightAmount * 0.045)) : 0;
 
   // v13 creator jetpack: the hero really flies - raised sprite over a ground shadow
   const flyer = cid === CUSTOM_CID && typeof customHasJetpack === "function" && customHasJetpack();
@@ -535,9 +536,21 @@ function drawHeroSprite(x, y, fac, cid, walk = 0, aim = 0, inVeh = 0, tCtx = ctx
     });
   }
 
-  tCtx.fillStyle = cLegs;
-  tCtx.fillRect(-4.8, 4 + stride * 0.5, 3.8, 6.5);
-  tCtx.fillRect(1.0, 4 - stride * 0.5, 3.8, 6.5);
+  // Alternating compact footfalls: swing the feet forward/back and lift only
+  // during recovery. This reads as walking instead of two legs sliding vertically.
+  const legWidth = kStyle === 1 ? 3.1 : 3.5;
+  const drawLeg = (hipX, phase) => {
+    const travel = Math.sin(phase) * gait.stride * 0.72;
+    const lift = Math.max(0, Math.cos(phase)) * 1.05;
+    const kneeX = hipX + travel * 0.46, kneeY = 6.3 - lift * 0.35;
+    const ankleX = hipX + travel, ankleY = 9.5 - lift;
+    tCtx.strokeStyle = cLegs; tCtx.lineWidth = legWidth; tCtx.lineCap = "round";
+    tCtx.beginPath(); tCtx.moveTo(hipX, 3.4); tCtx.lineTo(kneeX, kneeY); tCtx.lineTo(ankleX, ankleY); tCtx.stroke();
+    tCtx.fillStyle = "#263238";
+    tCtx.beginPath(); tCtx.ellipse(ankleX + 0.7, ankleY + 0.7, 2.35, 1.15, 0, 0, Math.PI * 2); tCtx.fill();
+  };
+  drawLeg(-2.8, gaitPhase);
+  drawLeg(2.8, gaitPhase + Math.PI);
   if (flyer) {                                                    // v13: thruster jets blasting down toward the ground shadow
     const burn = 4.5 + Math.abs(stride) * 1.2 + Math.random() * 2.5;
     for (const jx of [-2.9, 2.9]) {
@@ -1543,7 +1556,7 @@ function renderScene() {
     } else if (et === 98 && eRivalCid[i] >= 0) {
       const rFac = FACTIONS[CHAR_RAW[eRivalCid[i]][1]] || player.fac;
       const faceOv = sdOn ? showdownFaceAng(i) : null;     // v12: the rival turns to its challenger during its entrance
-      drawHeroSprite(ex, ey, rFac, eRivalCid[i], runTime * 4, faceOv !== null ? faceOv : Math.atan2(player.y - ey, player.x - ex), 0, ctx, -1, null,
+      drawHeroSprite(ex, ey, rFac, eRivalCid[i], Math.hypot(eVX[i], eVY[i]) > 6 ? runTime * Math.min(12, Math.hypot(eVX[i], eVY[i]) * 0.3) : 0, faceOv !== null ? faceOv : Math.atan2(player.y - ey, player.x - ex), 0, ctx, -1, null,
         Math.hypot(eVX[i], eVY[i]) > 8 ? Math.atan2(eVY[i], eVX[i]) : (faceOv !== null ? faceOv : Math.atan2(player.y - ey, player.x - ex)));
     } else if (!ally && !spect && typeof drawEnemyDetailed === "function" && (visorMode !== 3 || (ctx.fillStyle = "rgba(255, 110, 40, 0.22)", ctx.beginPath(), ctx.arc(ex, ey, baseR + 5, 0, Math.PI * 2), ctx.fill(), true)) && drawEnemyDetailed(i, ex, ey, baseR, ally, isKneeling, isLevitating, spect)) {
       // v14: detailed per-hero roster enemies (js/enemylook.js); tracker visors keep a heat halo
