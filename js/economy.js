@@ -340,11 +340,18 @@ function ecoHud() {
 
 /* --- survival needs --------------------------------------------------------------------- */
 const ECO_GUN_RX = /pistol|rifle|blaster|gun|carbine|shot|revolver|smg|launcher|cannon|magnum|sniper|repeater|slug|bullet|minigun|phaser|disruptor|bowcaster|lancer|pulse|caster/i;
-function ecoIsGun(w) { return !!w && w.style !== "orbit" && !(typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) && ECO_GUN_RX.test(w.name || ""); }
+function ecoIsGun(w) {
+  if (!w) return false;
+  const isBlade = typeof isMeleeBladeWeapon === "function"
+    ? (isMeleeBladeWeapon(w) && !(typeof isHybridGunBlade === "function" && isHybridGunBlade(w.id)))
+    : (w.style === "orbit" || (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)));
+  if (isBlade) return false;
+  return ECO_GUN_RX.test(w.name || "") || (typeof gaIsGun === "function" && gaIsGun(w.id));
+}
 function ecoGunNeedsAmmo() { return ECO.needs && player && (player.weapons || []).some(w => w.enabled !== false && ecoIsGun(w)); }
 function ecoEat(k) {
-  if (k === "food") { if (ECO.needs) { if (ECO.hunger < 8) return false; ECO.hunger = Math.max(0, ECO.hunger - 45); } else if (player.hp >= player.maxHp) return false; else player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.06); itToast("🥫 " + itName("food"), "#c5e1a5"); return true; }
-  if (k === "water") { if (ECO.needs) { if (ECO.thirst < 8) return false; ECO.thirst = Math.max(0, ECO.thirst - 50); } else if (player.hp >= player.maxHp) return false; else player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.04); itToast("💧 " + itName("water"), "#b3e5fc"); return true; }
+  if (k === "food") { if (ECO.needs) { if (ECO.hunger < 8) return false; ECO.hunger = Math.max(0, ECO.hunger - 45); if (player) player.ecoWeak = ECO.hunger >= 75 || ECO.thirst >= 75; ecoHud(); } else if (player.hp >= player.maxHp) return false; else player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.06); itToast("🥫 " + itName("food"), "#c5e1a5"); return true; }
+  if (k === "water") { if (ECO.needs) { if (ECO.thirst < 8) return false; ECO.thirst = Math.max(0, ECO.thirst - 50); if (player) player.ecoWeak = ECO.hunger >= 75 || ECO.thirst >= 75; ecoHud(); } else if (player.hp >= player.maxHp) return false; else player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.04); itToast("💧 " + itName("water"), "#b3e5fc"); return true; }
   return false;
 }
 function ecoNeedsStep(dt) {
@@ -394,11 +401,12 @@ function ecoNeedsStep(dt) {
     if (CITY.on && player && !player.inVehicle) { const t = findInteractTarget(); if (t && t.kind === "ecoKiosk") { ecoKioskOpen(t.K); ECO.kioskT = -1; return; } }
     return _twi();
   };
-  window.addEventListener("keydown", e => { if (e.code === "Escape" && ECO.panel) ecoKioskClose(); });
+  window.addEventListener("keydown", e => { if (e.code === "Escape" && ECO.panel) { e.preventDefault(); ecoKioskClose(); } });
   if (typeof V10 !== "undefined") {
     V10.onRunStart.push(() => {
       ECO.on = typeof CITY !== "undefined" && CITY.on && SCN.mode === "economy";
       ECO.needs = SCN.needs; ECO.hunger = 15; ECO.thirst = 15; ECO.rounds = 30; ECO.law.fill(0); ECO.bad.fill(-1);
+      if (player) player.ecoWeak = false;
       ECO.W = { heat: 0, lvl: 0, lastSeen: -99, respT: 0, msgT: -99, crimes: 0, unseen: 99 };
       ECO.hourT = 0; ECO.gangT = 90 + Math.random() * 60; ECO.hunterT = 200;
       if (ECO.on) { ecoInitStock(); player.rivalEvery = Math.max(player.rivalEvery || 0, 300); }
@@ -436,7 +444,7 @@ function ecoNeedsStep(dt) {
       }
       ECO.bad[idx] = -1;
     });
-    V10.onRunReset.push(() => { ECO.on = false; ecoKioskClose(); ecoHud(); });
+    V10.onRunReset.push(() => { ECO.on = false; ECO.needs = false; if (player) player.ecoWeak = false; ecoKioskClose(); ecoHud(); });
   }
 })();
 // thoughts the economy puts in people's heads (js/townsfolk.js asks)

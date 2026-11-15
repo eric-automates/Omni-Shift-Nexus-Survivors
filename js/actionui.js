@@ -98,7 +98,8 @@ function actFrame() {
   requestAnimationFrame(actFrame);
   if (typeof runActive === "undefined") return;
   const el = actEl();
-  if (!runActive || !player || (typeof showdownActive !== "undefined" && showdownActive)) { actHide(); if (ACT.fly) ACT.fly.style.display = "none"; ACT.cur = null; return; }
+  const sdBusy = typeof showdownBusy === "function" && showdownBusy();
+  if (!runActive || !player || sdBusy) { actHide(); if (ACT.fly) ACT.fly.style.display = "none"; ACT.cur = null; return; }
   const now = performance.now() / 1000;
   document.body.classList.toggle("act-left", !!(typeof opts !== "undefined" && opts.hudFlip));
   let t = null;
@@ -107,7 +108,8 @@ function actFrame() {
   else if (ACT.cur && now - ACT.seenT < 2.6 && Math.hypot(player.x - ACT.ax, player.y - ACT.ay) < 72 && actStill(ACT.cur)) ACT.live = false;
   else { ACT.cur = null; ACT.live = false; }
   const show = ACT.cur || (typeof CITY !== "undefined" && CITY.on ? actRoofExit() : null);
-  if (!show || (typeof runPaused !== "undefined" && runPaused)) actHide();
+  const paused = typeof runPaused !== "undefined" && runPaused;
+  if (!show || paused) actHide();
   else {
     const P = actParse(show.label), choice = ACT.live && actChoicePerson(show), mv = show.kind === "exitVeh" && actMovingExit();
     if (choice) { P.icon = "✋"; P.text = "CHOOSE ACTION"; }
@@ -127,9 +129,9 @@ function actFrame() {
   // 🚀 for heroes who fly on their own (the Ki-Surge class keeps its own button)
   if (ACT.fly) {
     let can = false;
-    try { can = typeof CITY !== "undefined" && CITY.on && !player.inVehicle && typeof flySelfSpec === "function" && !!flySelfSpec() && !(document.getElementById("kiFly") && document.getElementById("kiFly").offsetParent); } catch (e) {}
+    try { can = !paused && typeof CITY !== "undefined" && CITY.on && !player.inVehicle && typeof flySelfSpec === "function" && !!flySelfSpec() && !(document.getElementById("kiFly") && document.getElementById("kiFly").offsetParent); } catch (e) {}
     const on = typeof FLY !== "undefined" && FLY.on && FLY.self;
-    if (on) can = true;
+    if (on && !paused) can = true;
     if (!ACT.fly.classList.contains("flight-pressed")) ACT.fly.classList.toggle("self-active", !!on);
     ACT.fly.style.display = can ? "block" : "none";
     if (can) ACT.fly.textContent = on ? "🛬" : "🚀";
@@ -310,7 +312,9 @@ function actTouchifyEl(el) {
     return t;
   };
   window.addEventListener("keydown", e => {
-    if (e.code !== "KeyF" || e.repeat || !runActive || !player) return;
+    if (typeof uiTypingInField === "function" && uiTypingInField(e)) return;
+    if (e.code !== "KeyF" || e.repeat || !runActive || !player || (typeof runPaused !== "undefined" && runPaused)) return;
+    if (document.querySelector(".screen.active") || (typeof MAPV !== "undefined" && MAPV.open)) return;
     let live = null; try { live = _fit(); } catch (err) {}
     if (!live && (ACT.cur || actRoofExit())) setTimeout(actFire, 0);
   });
@@ -331,8 +335,8 @@ function actTouchifyEl(el) {
   };
   setInterval(watch, 1500);
   if (typeof V10 !== "undefined") {
-    V10.onRunReset.push(() => actChoiceClose(false));
-    V10.onRunStart.push(() => { actChoiceClose(false); ACT.cur = null; ACT.key = ""; watch(); });
+    V10.onRunReset.push(() => { if (ACT.holdT) { clearTimeout(ACT.holdT); ACT.holdT = 0; } actChoiceClose(false); actHide(); if (ACT.fly) ACT.fly.style.display = "none"; });
+    V10.onRunStart.push(() => { if (ACT.holdT) { clearTimeout(ACT.holdT); ACT.holdT = 0; } actChoiceClose(false); ACT.cur = null; ACT.key = ""; watch(); });
   }
   requestAnimationFrame(actFrame);
 })();

@@ -14,8 +14,10 @@ const DUAL = { hands: [], inSet: new Set(), t: 0, close: 110, prev: new Set(), p
 
 function dualIsRanged(w) {
   if (!w) return false;
+  if (typeof isHybridGunMode === "function" && isHybridGunMode(w)) return true;
+  if (typeof isMeleeBladeWeapon === "function") return !isMeleeBladeWeapon(w);
   if (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) return false;
-  if (w.style === "orbit" && ![12, 16, 29, 44, 73].includes(w.id)) return false;   // blades & sabers (the Form engine moves those)
+  if (w.style === "orbit" && ![12, 16, 29, 35, 44, 73].includes(w.id)) return false;   // blades & sabers (the Form engine moves those)
   return true;
 }
 // the weapons in use this frame, in the sim's slot order

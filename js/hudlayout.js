@@ -62,7 +62,7 @@ function hudShown(el) {
   if (!el) return false;
   const cs = getComputedStyle(el);
   if (cs.display === "none") return false;
-  if (el.id === "cityTip" || el.id === "nexus-music-toast") return parseFloat(cs.opacity) > 0.02;
+  if (el.id === "cityTip" || el.id === "nexus-music-toast") return parseFloat(el.style.opacity) > 0.02 || parseFloat(cs.opacity) > 0.02;
   return true;
 }
 
@@ -190,13 +190,14 @@ function hudApplyEl(el, r, s, origin, hidden) {
   if (hidden) { el.style.visibility = "hidden"; return; }
   el.style.visibility = "";
   el.style.position = "fixed"; el.style.left = r.x + "px"; el.style.top = r.y + "px"; el.style.right = "auto"; el.style.bottom = "auto";
+  el.style.setProperty("--hudl-s", s.toFixed(3));
   el.style.transformOrigin = "0 0"; el.style.transform = s !== 1 ? "scale(" + s.toFixed(3) + ")" : "none";
 }
 function hudLayoutNow() {
   if (!HUDL.enabled) return;
   const R = hudSolve(), sc = HUDL.scale, hid = HUDL.hidden;
   for (const id of ["glory", "veh", "squad", "mmctl", "tip", "city", "toast", "perf"]) { const el = hudEl(id); if (el && R[id]) hudApplyEl(el, R[id], sc[id], "0 0", false); else if (el && hid[id] && hudShown(el)) hudApplyEl(el, null, 1, "", true); }
-  const top = hudEl("top"); if (top) top.style.visibility = hid.top ? "hidden" : "";
+  const top = hudEl("top"); if (top) { top.style.visibility = hid.top ? "hidden" : ""; top.classList.toggle("flip", !!(typeof opts !== "undefined" && opts.hudFlip)); }
   if (R.dev) {
     const a = document.getElementById("live-debug-toggle"), b = document.getElementById("nexus-music-toggle"), flip = typeof opts !== "undefined" && opts.hudFlip;
     if (a) hudApplyEl(a, { x: R.dev.x, y: R.dev.y }, sc.dev, "0 0", false);
@@ -272,7 +273,7 @@ function hudPreview() {
   let shrunk = [];
   for (const id in L.R) {
     const r = L.R[id]; if (!r) continue;
-    g.fillStyle = crA ? crA(cols[id] || "#fff", 0.22) : "rgba(255,255,255,0.2)"; g.strokeStyle = cols[id] || "#fff";
+    g.fillStyle = (typeof crA === "function") ? crA(cols[id] || "#fff", 0.22) : "rgba(255,255,255,0.2)"; g.strokeStyle = cols[id] || "#fff";
     g.fillRect(ox + r.x * s, oy + r.y * s, r.w * s, r.h * s); g.strokeRect(ox + r.x * s + 0.5, oy + r.y * s + 0.5, Math.max(1, r.w * s - 1), Math.max(1, r.h * s - 1));
     if ((L.sc[id] || 1) < (L.user || hudOpts().scale || 1) - 0.01) shrunk.push((HUDL_DEF.find(d => d.id === id) || {}).label + " " + Math.round(L.sc[id] * 100) + "%");
   }

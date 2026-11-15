@@ -931,18 +931,36 @@ function pdpPanelRow(panel) {
   mk(pdpShift() ? "END SHIFT — DEBRIEF" : "START SHIFT (station cruiser)", pdpShift() ? pdpEndShift : pdpStartShift);
 }
 (function pdpDispatchWire() {
+  if (typeof JD_CONTRACTS !== "undefined" && !JD_CONTRACTS.includes(JOB_PATROL)) JD_CONTRACTS.push(JOB_PATROL);
   const previousOpen = window.jdOpen;
   if (typeof previousOpen !== "function") return;
   window.jdOpen = function(message) {
     previousOpen(message);
     const panel = JOB_DISPATCH.panel, read = jobActive();
-    if (!panel || !read.ok || read.active || !v15ContractOfferEnabled(JOB_PATROL)) return;
-    const close = Array.from(panel.querySelectorAll("button")).find(b => b.textContent === "CLOSE");
-    const button = document.createElement("button"); button.type = "button"; button.className = "btn";
-    button.textContent = "START TRAFFIC PATROL SHIFT · POLICE STATION";
-    button.style.cssText = "min-height:48px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";
-    button.onclick = () => { const r = pdpStartShift(); jdOpen(r.ok ? "Traffic patrol shift started. Take a marked cruiser and follow the radar." : r.why); };
-    panel.insertBefore(button, close || null);
+    if (!panel || !read.ok) return;
+    if (!read.active) {
+      if (!v15ContractOfferEnabled(JOB_PATROL)) return;
+      const close = Array.from(panel.querySelectorAll("button")).find(b => b.textContent === "CLOSE");
+      const button = document.createElement("button"); button.type = "button"; button.className = "btn";
+      button.textContent = "START TRAFFIC PATROL SHIFT · POLICE STATION";
+      button.style.cssText = "min-height:48px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";
+      button.onclick = () => { const r = pdpStartShift(); jdOpen(r.ok ? "Traffic patrol shift started. Take a marked cruiser and follow the radar." : r.why); };
+      panel.insertBefore(button, close || null);
+      return;
+    }
+    const a = read.active;
+    if (a.contract !== JOB_PATROL || !read.inWorld || !v15JobEnabled(a)) return;
+    panel.innerHTML = "";
+    const text = (tag, value, style) => { const e = document.createElement(tag); e.textContent = value; if (style) e.style.cssText = style; panel.appendChild(e); return e; };
+    const btn = (label, fn) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = label; b.style.cssText = "min-height:48px;min-width:120px;margin:4px 6px 4px 0;white-space:normal"; b.onclick = fn; panel.appendChild(b); return b; };
+    const rank = pdpCareerRank(read.state), stops = Array.isArray(a.data?.pd?.stops) ? a.data.pd.stops : [], counted = pdpCountedStops(a);
+    text("h3", "TRAFFIC PATROL SHIFT · ON DUTY");
+    if (JOB_DISPATCH.lastMsg) text("p", JOB_DISPATCH.lastMsg, "color:#ffd166");
+    text("p", "PATROL CAREER · Stage " + rank.rank + "/5 · " + rank.name + " · " + rank.stops + " lifetime completed stop" + (rank.stops === 1 ? "" : "s") + (rank.next === null ? " · top stage reached" : " · " + rank.next + " to next stage"));
+    text("p", "Current shift stops logged: " + stops.length + " (" + counted.length + " lawful resolved). Drive a marked police cruiser and use the cruiser radar to run legal traffic stops, then debrief when off duty.");
+    btn("END SHIFT — DEBRIEF", () => { const r = pdpEndShift(); jdOpen(r.ok ? "Traffic patrol shift debriefed." : (r.why || "Could not debrief shift.")); });
+    btn("WITHDRAW · NO PAY", () => { const r = jobWithdraw(a.id); if (r.ok) pdpRelease(); jdOpen(r.ok ? "Traffic patrol shift withdrawn; no pay." : r.why); });
+    btn("CLOSE", jdClose);
   };
 })();
 if (typeof V10 !== "undefined") V10.onStep.push(dt => { try { pdpStep(dt); } catch (e) { window.__pdpErr = String((e && e.stack) || e).slice(0, 400); pdpRelease(); } });

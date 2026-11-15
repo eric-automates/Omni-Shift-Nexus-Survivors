@@ -300,8 +300,10 @@ function j04RecordBuildingLoss(){
 function j04Panel(){
   const panel=JOB_DISPATCH.panel,read=jobActive();if(!panel||!read.ok)return;
   const a=read.active;
-  const btn=(label,fn)=>{const b=document.createElement("button");b.type="button";b.className="btn";b.textContent=label;b.style.cssText="min-height:46px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";b.onclick=fn;panel.appendChild(b);};
-  const text=(tag,value)=>{const e=document.createElement(tag);e.textContent=value;panel.appendChild(e);return e;};
+  const closeRef=!a?Array.from(panel.querySelectorAll("button")).find(b=>b.textContent==="CLOSE"):null;
+  const addNode=el=>closeRef?panel.insertBefore(el,closeRef):panel.appendChild(el);
+  const btn=(label,fn)=>{const b=document.createElement("button");b.type="button";b.className="btn";b.textContent=label;b.style.cssText="min-height:46px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";b.onclick=fn;addNode(b);};
+  const text=(tag,value,style)=>{const e=document.createElement(tag);e.textContent=value;if(style)e.style.cssText=style;addNode(e);return e;};
   if(!a){
     if(!v15ContractOfferEnabled(JOB_FIRE))return;
     const state=jobReadState();if(!state.ok)return;
@@ -311,11 +313,12 @@ function j04Panel(){
   }
   if(a.contract!==JOB_FIRE||!read.inWorld)return;
   panel.innerHTML="";text("h3","FIRE & RESCUE · CALL "+a.data.callNo+"/"+J04_MAX_CALLS);
+  if(JOB_DISPATCH.lastMsg)text("p",JOB_DISPATCH.lastMsg,"color:#ffd166");
   text("p",j04CareerSummary(read.state));
   const structure=j04Building(a),engine=j04EngineBuilding(a);
   if((a.phase!=="equipment"&&!structure)||(a.phase==="equipment"&&!engine)){
     text("p","The assigned "+(a.phase==="equipment"?"fire station / engine":"structure")+" is absent from this world. The call is paused; no rescue, handoff or completion payout can be claimed.");
-    btn("WITHDRAW · NO PAY",()=>{const r=jobWithdraw(a.id);jdOpen(r.ok?"Call withdrawn; no pay.":r.why);});return;
+    btn("WITHDRAW · NO PAY",()=>{const r=jobWithdraw(a.id);jdOpen(r.ok?"Call withdrawn; no pay.":r.why);});btn("CLOSE",jdClose);return;
   }
   const fireCount=j04FireCount(a),near=jdNear(a);
   if(a.phase==="equipment"){
@@ -355,6 +358,7 @@ function j04Panel(){
     if(a.data.calls.length<J04_MAX_CALLS)btn("CONTINUE TO NEXT CALL",()=>{const r=j04Continue(a.id);jdOpen(r.ok?"Next call saved. Return to the existing fire engine.":r.why);});
   }
   if(a.phase!=="debrief"&&a.phase!=="offer")btn("WITHDRAW · NO PAY",()=>{const r=jobWithdraw(a.id);if(r.ok)jdContactRelease();jdOpen(r.ok?"Call withdrawn; no pay.":r.why);});
+  btn("CLOSE",jdClose);
 }
 (function j04Wire(){
   JD_CONTRACTS.push(JOB_FIRE);

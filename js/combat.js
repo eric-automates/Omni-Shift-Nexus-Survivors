@@ -576,7 +576,7 @@ function castArcaneSpell(spellType, manualClick = false) {
     if (typeof sfxSpell === "function") sfxSpell("patronus");
     player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.35);
     player.limbs.fill(100);
-    player.utils.forEach(u => { u.cd = 0; });
+    player.utils.forEach(u => { if (u.type !== "timeRewind") u.cd = 0; });
     for (let i = 0; i < MAX_E; i++) {
       if (eAct[i] && !allyIs(i) && isEnemyOnScreen(i)) eStun[i] = Math.max(eStun[i], 3.2);
     }
@@ -644,7 +644,9 @@ function startRun() {
   runTime = 0; totalRunTime = 0; orbWarpTimer = 0; waveNum = 1; rivalTimer = 0;
 
   const innateVac = (typeof hasInnateVacuum === "function" && hasInnateVacuum(cid)) ? 1.0 : 0.0;
-  const startsWithSaber = (typeof isSwordWeapon === "function" && isSwordWeapon(cid)) || (c[6] === "orbit" && (cid < 56 || cid >= 76));
+  const startsWithSaber = typeof isMeleeBladeWeapon === "function"
+    ? isMeleeBladeWeapon({ id: cid, style: c[6] })
+    : ((typeof isSwordWeapon === "function" && isSwordWeapon(cid)) || (c[6] === "orbit" && ![12, 16, 29, 35, 44, 73].includes(cid) && (cid < 56 || cid >= 76)));
   const armCap = typeof getHeroArmCap === "function" ? getHeroArmCap(cid) : 2;
 
   let innateVisor = 0;
@@ -662,7 +664,7 @@ function startRun() {
     : (typeof getWeaponColor === "function" ? getWeaponColor(cid) : "#00f0ff");
 
   player = {
-    x: 256, y: 256, aim: 0, moveDir: 0, walk: 0, vx: 0, vy: 0,
+    x: 256, y: 256, aim: 0, moveDir: 0, walk: 0, walkBlend: 0, facingAng: Math.PI / 2, vx: 0, vy: 0,
     hp: 100, maxHp: 100 * (1 + r[2] * 0.15) * diff.plrHp,
     might: 1 + r[0] * 0.10, armor: r[1],
     regen: r[3] * 0.6, cdr: 1 - r[4] * 0.06, area: 1 + r[5] * 0.12,
@@ -683,7 +685,7 @@ function startRun() {
     inVehicle: 0, vehicleHp: 0, vehBoostMul: 1.0,
     hasRepulsor: false, utilCdrMul: 1.0, orbVacuumRate: innateVac,
     limbs: [100, 100, 100, 100, 100, 100], guardZone: -1,
-    hasSaber: startsWithSaber, saberMastery: startsWithSaber ? ([55, 76, 77, 78, 79].includes(cid) ? 45 : 15) : 0,
+    hasSaber: startsWithSaber, saberMastery: startsWithSaber ? ([55, 76, 77, 78, 79, 81, 82, 83].includes(cid) ? 45 : 15) : 0,
     swordSwingTimer: 0, swordLungeTimer: 0, armReach: 0,
     whirlwindTimer: 0, forceHandTimer: 0, forceHandAng: 0,
     flourishPhase: 0, flourishForm: 0, flourishTimer: 0, flourishSpeed: 3.4,
@@ -1041,10 +1043,14 @@ function spawnEnemy(isBoss = false, isRival = false) {
 
 /* === 9. WEAPON & SPELLBOOK FIRING ENGINE === */
 function fireWeapon(w) {
-  if (!(typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) && w.style !== "orbit" && typeof sheatheForceDraw === "function") sheatheForceDraw(1.1);
+  const isMelee = typeof isMeleeBladeWeapon === "function"
+    ? isMeleeBladeWeapon(w)
+    : ((typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44, 73].includes(w.id)));
+  const isHybrid = typeof isHybridGunBlade === "function" && isHybridGunBlade(w.id);
+  if ((!isMelee || isHybrid) && typeof sheatheForceDraw === "function") sheatheForceDraw(1.1);
   const spawnWeaponProjectile = (...args) => {
     const id = args[11] == null ? w.id : args[11], visual = args[8];
-    if ((visual === 3 || visual === 4) && [1, 6, 22, 34, 35, 36, 40, 84].includes(id)) args[13] = 2;
+    if ((visual === 3 || visual === 4) && [1, 6, 22, 34, 35, 36, 38, 40, 43, 84, 85, 86, 87, 88].includes(id)) args[13] = 2;
     return spawnProj(...args);
   };
   syncHeroSpellbook();
@@ -1083,6 +1089,23 @@ function fireWeapon(w) {
   const eyeJitter = ((100 - player.limbs[0]) / 100) * 0.42;
   const aimAng = Math.atan2(ty - player.y, tx - player.x) + (Math.random() - 0.5) * eyeJitter;
 
+  // Align dual-wield projectile origin with the held hand's lateral offset so side-by-side guns fire from their own barrels.
+  let fireOx = player.x, fireOy = player.y;
+  if (player && Array.isArray(player.weapons)) {
+    const en = player.weapons.filter(pw => pw && pw.enabled !== false);
+    const cap = Math.min(player.armCap || 2, en.length);
+    if (cap > 1) {
+      for (let s = 0; s < cap; s++) {
+        if (en[((player.handSlotOffset || 0) + s) % en.length] === w) {
+          const hy = (s % 2 === 0) ? 4.5 : -4.5;
+          fireOx = player.x - Math.sin(aimAng) * hy;
+          fireOy = player.y + Math.cos(aimAng) * hy;
+          break;
+        }
+      }
+    }
+  }
+
   if (w.id === 75) {
     if (w.lvl >= 2 && typeof countActiveCorpsesNear === "function" && countActiveCorpsesNear(player.x, player.y, 320) > 0) {
       castArcaneSpell("raiseDead", false);
@@ -1091,7 +1114,7 @@ function fireWeapon(w) {
     if (typeof sfxSpell === "function") sfxSpell("raiseDead");
     for (let k = 0; k < count; k++) {
       const a = aimAng + (k - (count - 1) / 2) * 0.20;
-      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * 360, Math.sin(a) * 360, baseDmg * 1.25, 0.85, 10, 2 + player.pierce, 5, sup, 0, 75);
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * 360, Math.sin(a) * 360, baseDmg * 1.25, 0.85, 10, 2 + player.pierce, 5, sup, 0, 75);
     }
     return;
   }
@@ -1101,13 +1124,39 @@ function fireWeapon(w) {
     return;
   }
 
-  if ((typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 44, 73].includes(w.id))) {
+  // Hybrid gun + energy-blade heroes (#32 Master Chief MA5B/Energy Sword, #33 Doom Slayer Super Shotgun/Crucible):
+  // close-quarters foes are sliced by the Saber Form Engine; at medium/long range they fire their canonical firearm!
+  if (isHybrid) {
+    const meleeEngaged = best <= 78 * player.area || player.whirlwindTimer > 0 || (w.sf && w.sf.lit >= 0.35);
+    if (meleeEngaged && typeof saberEngineOwns === "function" && saberEngineOwns(w)) return false;
+    if (typeof sfxWeapon === "function") sfxWeapon(w.style, w.id, false);
+    if (w.id === 32) {
+      // MA5B Assault Rifle: crisp 3-round ballistic burst (+1 at Lv.5/Lv.10/extra projectiles)
+      const burst = 3 + (w.lvl >= 5 ? 1 : 0) + sup + Math.min(2, player.projCnt);
+      for (let b = 0; b < burst; b++) {
+        const a = aimAng + (b - (burst - 1) / 2) * 0.032 + (Math.random() - 0.5) * 0.025;
+        const spd = (530 - b * 14) * player.projSpd;
+        spawnWeaponProjectile(fireOx + Math.cos(a) * (b * 5), fireOy + Math.sin(a) * (b * 5), Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.56, 0.72 * player.dur, 5.5, 2 + player.pierce + sup * 2, 4, sup, 0, 32, null, 1);
+      }
+      return "ranged";
+    }
+    // #33 Lucifer Super Shotgun: heavy close-to-mid double-barrel buckshot spread
+    const pellets = count + 4;
+    for (let k = 0; k < pellets; k++) {
+      const a = aimAng + (k - (pellets - 1) / 2) * 0.145 + (Math.random() - 0.5) * 0.04;
+      const spd = (340 + Math.random() * 55) * player.projSpd;
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.78, 0.52 * player.dur, 6.2 * player.area, 1 + player.pierce + sup, 3, sup, 0, 33, null, 1);
+    }
+    return "ranged";
+  }
+
+  if (isMelee) {
     if (w.id === 71) {
       if (typeof sfxSpell === "function") sfxSpell("wand");
-      spawnWeaponProjectile(player.x, player.y, Math.cos(aimAng) * 440, Math.sin(aimAng) * 440, baseDmg * 1.2, 0.75, 9, 3 + player.pierce, 4, sup, 0, 71);
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(aimAng) * 440, Math.sin(aimAng) * 440, baseDmg * 1.2, 0.75, 9, 3 + player.pierce, 4, sup, 0, 71);
     }
     // v11: the Saber Form Engine (js/saberforms.js) choreographs every swing, hop and swing sound itself.
-    if (typeof saberEngineOwns === "function" && saberEngineOwns(w)) return;
+    if (typeof saberEngineOwns === "function" && saberEngineOwns(w)) return false;
     if (best <= 58 * player.area) {
       player.swordSwingTimer = 0.34;
       player.armReach = 5.5;
@@ -1119,6 +1168,18 @@ function fireWeapon(w) {
     } else if (w.id !== 71) {
       w.cd = 0.12;
     }
+    return false;
+  }
+
+  // #44 V8 Chrome Interceptor: Sawed-Off Double-Barrel shotgun fires heavy ballistic buckshot, never boomerang discs.
+  if (w.id === 44) {
+    if (typeof sfxWeapon === "function") sfxWeapon("cone", 44, false);
+    const pellets = count + 4;
+    for (let k = 0; k < pellets; k++) {
+      const a = aimAng + (k - (pellets - 1) / 2) * 0.17 + (Math.random() - 0.5) * 0.045;
+      const spd = (320 + Math.random() * 55) * player.projSpd;
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.78, 0.48 * player.dur, 6.2 * player.area, 1 + player.pierce + sup, 3, sup, 0, 44, null, 1);
+    }
     return;
   }
 
@@ -1128,7 +1189,7 @@ function fireWeapon(w) {
     for (let k = 0; k < discCnt; k++) {
       const launchAng = aimAng + (k - (discCnt - 1) / 2) * 0.35 + (Math.random() - 0.5) * 0.22;
       const curveSign = ((k & 1) ? 1 : -1) * (0.42 + Math.random() * 0.25);
-      spawnWeaponProjectile(player.x, player.y, launchAng, curveSign, baseDmg * 1.4, 1.35, 13 * player.area, 99, 8, sup, 0, w.id);
+      spawnWeaponProjectile(fireOx, fireOy, launchAng, curveSign, baseDmg * 1.4, 1.35, 13 * player.area, 99, 8, sup, 0, w.id);
     }
     return;
   }
@@ -1154,11 +1215,55 @@ function fireWeapon(w) {
     return;
   }
 
+  // #27 Spectre Biotic Vanguard: M-8 Avenger assault burst at range, Biotic Push every 3rd cycle in close quarters.
+  if (w.id === 27) {
+    w.bioN = (w.bioN || 0) + 1;
+    if (best < 95 * player.area && w.bioN % 3 === 0) { executeForceKineticPush(player.x, player.y, aimAng, w.lvl, baseDmg * 0.9); return; }
+    if (typeof sfxWeapon === "function") sfxWeapon("beam", 27, false);
+    const burst = 3 + Math.floor(w.lvl / 4) + player.projCnt + sup;
+    for (let b = 0; b < burst; b++) {
+      const a = aimAng + (b - (burst - 1) / 2) * 0.036 + (Math.random() - 0.5) * 0.03;
+      const spd = (520 - b * 15) * player.projSpd;
+      spawnWeaponProjectile(fireOx + Math.cos(a) * (b * 5), fireOy + Math.sin(a) * (b * 5), Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.52, 0.72 * player.dur, 5, 2 + player.pierce + sup * 2, 4, sup, 0, 27, null, 1);
+    }
+    return;
+  }
+
   if (typeof sfxWeapon === "function") sfxWeapon(w.style, w.id, false);
+
+  // #25 Viper Starbuck-Ace: KEW Flak Magnum fires heavy high-pierce ballistic revolver slugs.
+  if (w.id === 25) {
+    for (let k = 0; k < count; k++) {
+      const a = aimAng + (k - (count - 1) / 2) * 0.075 + (Math.random() - 0.5) * 0.025;
+      const spd = 560 * player.projSpd;
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 1.45, 0.78 * player.dur, 5.5, 2 + player.pierce + (sup ? 3 : 0), 4, sup, 0, 25, null, 1);
+    }
+    return;
+  }
+
+  // #43 Vault-Tec Wanderer: AER9 Laser Rifle fires crisp piercing crimson laser beams.
+  if (w.id === 43) {
+    for (let k = 0; k < count; k++) {
+      const a = aimAng + (k - (count - 1) / 2) * 0.08;
+      const spd = 540 * player.projSpd;
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 1.3, 0.78 * player.dur, 7.5 * player.area, 3 + player.pierce + (sup ? 5 : 0), 4, sup, 0, 43, null, 2);
+    }
+    return;
+  }
+
+  // #38 Gohan (Rising Ki Blast) & #85 Cell (Perfect Ki Wave): ranged piercing energy/ki blasts.
+  if (w.id === 38 || w.id === 85) {
+    for (let k = 0; k < count; k++) {
+      const a = aimAng + (k - (count - 1) / 2) * 0.11;
+      const spd = 485 * player.projSpd;
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 1.25, 0.78 * player.dur, 8.5 * player.area, 3 + player.pierce + (sup ? 5 : 0), 4, sup, 0, w.id, null, 2);
+    }
+    return;
+  }
 
   if (w.id === 52 || w.id === 13) {
     const spd = 540 * player.projSpd, spread = (Math.random() - 0.5) * (0.05 + eyeJitter * 0.4);
-    spawnWeaponProjectile(player.x, player.y, Math.cos(aimAng + spread) * spd, Math.sin(aimAng + spread) * spd, baseDmg * 2.2, 0.75 * player.dur, 4.5, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, w.id, null, 1);
+    spawnWeaponProjectile(fireOx, fireOy, Math.cos(aimAng + spread) * spd, Math.sin(aimAng + spread) * spd, baseDmg * 2.2, 0.75 * player.dur, 4.5, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, w.id, null, 1);
     return;
   }
 
@@ -1168,7 +1273,7 @@ function fireWeapon(w) {
     const taps = 1 + (w.lvl >= 4 ? 1 : 0) + (sup ? 1 : 0) + Math.min(1, player.projCnt);
     for (let b = 0; b < taps; b++) {
       const a = aimAng + (b - (taps - 1) / 2) * 0.035, spd = 600 * player.projSpd;
-      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 2.0, 0.8 * player.dur, 6, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, 1);
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 2.0, 0.8 * player.dur, 6, 2 + player.pierce + (sup ? 4 : 0), 4, sup, 0, 1);
     }
     return;
   }
@@ -1177,7 +1282,7 @@ function fireWeapon(w) {
     for (let b = 0; b < 3; b++) {
       const a = aimAng + (b - 1) * 0.045;
       const spd = (450 - b * 18) * player.projSpd;
-      spawnWeaponProjectile(player.x + Math.cos(a) * (10 + b * 6), player.y + Math.sin(a) * (10 + b * 6), Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.65, 0.72 * player.dur, 5, 2 + player.pierce, 4, sup, 0, 54);
+      spawnWeaponProjectile(fireOx + Math.cos(a) * (10 + b * 6), fireOy + Math.sin(a) * (10 + b * 6), Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 0.65, 0.72 * player.dur, 5, 2 + player.pierce, 4, sup, 0, 54);
     }
     return;
   }
@@ -1185,7 +1290,7 @@ function fireWeapon(w) {
   if (w.style === "missile") {
     for (let k = 0; k < count; k++) {
       const a = aimAng + (k - (count - 1) / 2) * 0.26, spd = 235 * player.projSpd;
-      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 1.6 * player.dur, 9 * player.area, player.pierce, 2, sup, 0, w.id);
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg, 1.6 * player.dur, 9 * player.area, player.pierce, 2, sup, 0, w.id);
     }
   } else if (w.style === "cone") {
     const isHeavyMG = [53].includes(w.id);
@@ -1194,18 +1299,18 @@ function fireWeapon(w) {
     for (let k = 0; k < pellets; k++) {
       const a = aimAng + (k - (pellets - 1) / 2) * spreadStep + (Math.random() - 0.5) * 0.04;
       const spd = (isHeavyMG ? 410 : (295 + Math.random() * 45)) * player.projSpd;
-      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * (isHeavyMG ? 1.05 : 0.85), (isHeavyMG ? 0.68 : 0.48) * player.dur, 6.5 * player.area, player.pierce + 1, 3, sup, 0, w.id, null, (typeof GAU_GUN !== "undefined" && GAU_GUN[w.id]) ? 1 : 0);
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * (isHeavyMG ? 1.05 : 0.85), (isHeavyMG ? 0.68 : 0.48) * player.dur, 6.5 * player.area, player.pierce + 1, 3, sup, 0, w.id, null, (typeof GAU_GUN !== "undefined" && GAU_GUN[w.id]) ? 1 : 0);
     }
   } else if (w.style === "beam") {
     for (let k = 0; k < count; k++) {
       const a = aimAng + (k - (count - 1) / 2) * 0.10, spd = 470 * player.projSpd;
-      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 1.25, 0.75 * player.dur, 8.5 * player.area, 4 + player.pierce + (sup ? 6 : 0), 4, sup, 0, w.id, null, (typeof GAU_GUN !== "undefined" && GAU_GUN[w.id]) ? 1 : 0);
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * 1.25, 0.75 * player.dur, 8.5 * player.area, 4 + player.pierce + (sup ? 6 : 0), 4, sup, 0, w.id, null, (typeof GAU_GUN !== "undefined" && GAU_GUN[w.id]) ? 1 : 0);
     }
   } else if (w.style === "chain") {
     const isAvada = w.id === 70;
     for (let k = 0; k < count; k++) {
       const a = aimAng + (k - (count - 1) / 2) * 0.22, spd = (isAvada ? 420 : 340) * player.projSpd;
-      spawnWeaponProjectile(player.x, player.y, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * (isAvada ? 1.45 : 1.0), 0.9 * player.dur, 10 * player.area, 2 + player.pierce + (sup ? 4 : 0), 5, isAvada ? 3 : sup, 0, w.id);
+      spawnWeaponProjectile(fireOx, fireOy, Math.cos(a) * spd, Math.sin(a) * spd, baseDmg * (isAvada ? 1.45 : 1.0), 0.9 * player.dur, 10 * player.area, 2 + player.pierce + (sup ? 4 : 0), 5, isAvada ? 3 : sup, 0, w.id);
     }
   } else {
     executeForceKineticPush(player.x, player.y, aimAng, w.lvl, baseDmg * 0.75);

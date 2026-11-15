@@ -19,8 +19,19 @@
 "use strict";
 
 /* === 1. DATA === */
-const HERO_ROSTER_N = 80;          // canon heroes #00-#79; random rivals / drops / new-weapon cards never pick #80
-function randomRosterHero() { return Math.floor(Math.random() * HERO_ROSTER_N); }
+// Dynamic canonical hero picker (excludes CUSTOM_CID #80; js/heroreg.js may add #81+ after this file loads).
+function randomRosterHero(exclude) {
+  if (typeof heroRosterIds === "function") {
+    const ids = heroRosterIds().filter(i => i !== exclude);
+    if (ids.length > 0) return ids[Math.floor(Math.random() * ids.length)];
+  }
+  const customCid = typeof CUSTOM_CID === "number" ? CUSTOM_CID : 80;
+  const ids = [];
+  if (typeof CHAR_RAW !== "undefined" && Array.isArray(CHAR_RAW)) {
+    for (let i = 0; i < CHAR_RAW.length; i++) if (CHAR_RAW[i] && i !== customCid && i !== exclude) ids.push(i);
+  }
+  return ids.length > 0 ? ids[Math.floor(Math.random() * ids.length)] : 0;
+}
 
 // 10 hilts. len = hilt length factor, blade = blade length factor (shoto), curve = bent grip (rad), emitter style.
 const SABER_HILTS = [
@@ -320,6 +331,7 @@ function customHeroSanitize(d) {
   } else {
     o.careerTracks = src.created ? Object.keys(CUSTOM_CAREER_TRACKS).filter(customCareerTrackAvailable) : [];
   }
+  if (!o.careerTracks.includes("courier")) o.simJob = "none";
   o.species = crClampI(o.species, CUSTOM_SPECIES.length); o.body = crClampI(o.body, 2); o.skin = crClampI(o.skin, CUSTOM_SKINS.length);
   o.hair = crClampI(o.hair, CUSTOM_HAIR.length); o.robe = crClampI(o.robe, CUSTOM_ROBES.length);
   o.legs = crClampI(o.legs, CUSTOM_LEGS.length); o.cloak = crClampI(o.cloak, CUSTOM_CLOAKS.length);
@@ -524,24 +536,30 @@ function customHairStyle() {
   return h[1] === "none" ? "bald" : (h[2] === "long" ? "long" : "hair");
 }
 // species details drawn over the head (sprite space, head centre ~ (0, -9.3), r 5.2)
-function drawCustomSpeciesExtras(t, eyeLookX) {
+function drawCustomSpeciesExtras(t, eyeLookX, pose = null) {
   const d = customHeroDesign(), sp = CUSTOM_SPECIES[d.species].key, skin = CUSTOM_SKINS[d.skin];
+  const backView = !!(pose && pose.backView);
+  const fShift = pose ? pose.faceShiftX : 0;
   if (CUSTOM_HAIR[d.hair][2] === "long" && d.head !== "jediHood" && d.head !== "sithHood") {   // long hair falls to the shoulders
     t.fillStyle = CUSTOM_HAIR[d.hair][1];
-    t.fillRect(-5.6, -10.5, 1.8, 7.5); t.fillRect(3.8, -10.5, 1.8, 7.5);
+    if (backView) { t.fillRect(-5.5, -10.4, 11.0, 8.0); }
+    else { t.fillRect(-5.6, -10.5, 1.8, 7.5); t.fillRect(3.8, -10.5, 1.8, 7.5); }
   }
   if (sp === "zabrak") {
     t.fillStyle = "#e0d6c8";
     [[-3.2, -13.4], [-1.1, -14.6], [1.1, -14.6], [3.2, -13.4]].forEach(([hx, hy]) => { t.beginPath(); t.moveTo(hx - 0.7, -12.6); t.lineTo(hx, hy - 1.2); t.lineTo(hx + 0.7, -12.6); t.closePath(); t.fill(); });
-    t.strokeStyle = "rgba(20,10,10,0.55)"; t.lineWidth = 0.6;
-    t.beginPath(); t.moveTo(-3.4, -11.6); t.lineTo(-1.4, -9.0); t.moveTo(3.4, -11.6); t.lineTo(1.4, -9.0); t.stroke();
+    if (!backView) {
+      t.strokeStyle = "rgba(20,10,10,0.55)"; t.lineWidth = 0.6;
+      t.beginPath(); t.moveTo(-3.4 + fShift * 0.6, -11.6); t.lineTo(-1.4 + fShift * 0.6, -9.0); t.moveTo(3.4 + fShift * 0.6, -11.6); t.lineTo(1.4 + fShift * 0.6, -9.0); t.stroke();
+    }
   } else if (sp === "togruta") {
     t.fillStyle = "#eceff1";                                      // montrals
     t.beginPath(); t.moveTo(-4.6, -12.4); t.quadraticCurveTo(-7.4, -16.5, -5.0, -18.6); t.lineTo(-3.0, -13.0); t.closePath(); t.fill();
     t.beginPath(); t.moveTo(4.6, -12.4); t.quadraticCurveTo(7.4, -16.5, 5.0, -18.6); t.lineTo(3.0, -13.0); t.closePath(); t.fill();
     t.fillStyle = "#1565c0"; t.fillRect(-5.6, -15.6, 1.4, 1.0); t.fillRect(4.2, -15.6, 1.4, 1.0);
-    t.fillStyle = skin;                                           // head-tails down the chest
+    t.fillStyle = skin;                                           // head-tails
     t.fillRect(-6.4, -9.5, 2.0, 8.5); t.fillRect(4.4, -9.5, 2.0, 8.5);
+    if (backView) t.fillRect(-2.2, -9.2, 4.4, 8.8);
     t.fillStyle = "#eceff1"; t.fillRect(-6.4, -6.5, 2.0, 1.0); t.fillRect(4.4, -6.5, 2.0, 1.0);
   } else if (sp === "twilek") {
     t.fillStyle = skin;                                           // lekku
@@ -553,20 +571,29 @@ function drawCustomSpeciesExtras(t, eyeLookX) {
   } else if (sp === "cyborg") {
     t.fillStyle = "#90a4ae"; t.beginPath(); t.arc(0, -9.3, 5.25, -Math.PI / 2, Math.PI / 2); t.closePath(); t.fill();
     t.strokeStyle = "#455a64"; t.lineWidth = 0.6; t.beginPath(); t.moveTo(0, -14.4); t.lineTo(0, -4.2); t.stroke();
-    t.fillStyle = "#ff1744"; t.beginPath(); t.arc(2.3 + eyeLookX * 0.5, -9.9, 1.2, 0, Math.PI * 2); t.fill();
+    if (!backView) {
+      t.fillStyle = "#ff1744"; t.beginPath(); t.arc(2.2 + fShift * 0.65, -9.9, 1.2, 0, Math.PI * 2); t.fill();
+    }
   }
-  drawCustomHeadgear(t, eyeLookX);
+  drawCustomHeadgear(t, eyeLookX, pose);
 }
-function customHoodOver(t, col) {     // hood drawn over the hair line, framing the face
+function customHoodOver(t, col, backView = false) {     // hood drawn over the hair line, framing the face (or closed in backView)
   t.fillStyle = col;
+  if (backView) {
+    t.beginPath(); t.arc(0, -9.6, 6.5, 0, Math.PI * 2); t.fill();
+    t.fillStyle = "rgba(0,0,0,0.20)"; t.beginPath(); t.ellipse(0, -6.0, 5.0, 2.0, 0, 0, Math.PI * 2); t.fill();
+    return;
+  }
   t.beginPath(); t.arc(0, -9.6, 6.6, Math.PI * 0.86, Math.PI * 2.14); t.lineTo(6.2, -5.4); t.lineTo(4.6, -5.4); t.lineTo(4.4, -9.2);
   t.arc(0, -9.3, 4.5, -0.05, Math.PI + 0.05, true); t.lineTo(-4.6, -5.4); t.lineTo(-6.2, -5.4); t.closePath(); t.fill();
 }
 // hats / hoods / goggles on an uncovered head
-function drawCustomHeadgear(t, eyeLookX) {
+function drawCustomHeadgear(t, eyeLookX, pose = null) {
   const d = customHeroDesign(), hg = CUSTOM_HEADGEAR.find(x => x.key === d.head);
+  const backView = !!(pose && pose.backView);
+  const fShift = pose ? pose.faceShiftX : 0;
   if (!hg || hg.key === "none" || hg.helmet) return;
-  if (hg.hood) { customHoodOver(t, hg.col); return; }
+  if (hg.hood) { customHoodOver(t, hg.col, backView); return; }
   if (hg.key === "cowboy") {
     t.fillStyle = "#4e342e";
     t.beginPath(); t.moveTo(-4.8, -12.4); t.lineTo(-3.6, -17.2); t.quadraticCurveTo(0, -15.6, 3.6, -17.2); t.lineTo(4.8, -12.4); t.closePath(); t.fill();
@@ -579,63 +606,109 @@ function drawCustomHeadgear(t, eyeLookX) {
     t.fillStyle = "#ffd166"; t.beginPath(); t.arc(0.6, -16.2, 0.9, 0, Math.PI * 2); t.fill();
   } else if (hg.key === "goggles") {
     t.fillStyle = "#3e2723"; t.fillRect(-5.3, -13.1, 10.6, 1.3);
-    t.fillStyle = hg.col; t.beginPath(); t.arc(-2.2, -13.0, 1.7, 0, Math.PI * 2); t.arc(2.2, -13.0, 1.7, 0, Math.PI * 2); t.fill();
-    t.fillStyle = "#80deea"; t.beginPath(); t.arc(-2.2, -13.0, 1.0, 0, Math.PI * 2); t.arc(2.2, -13.0, 1.0, 0, Math.PI * 2); t.fill();
+    if (!backView) {
+      const gx = fShift * 0.55;
+      t.fillStyle = hg.col; t.beginPath(); t.arc(-2.2 + gx, -13.0, 1.7, 0, Math.PI * 2); t.arc(2.2 + gx, -13.0, 1.7, 0, Math.PI * 2); t.fill();
+      t.fillStyle = "#80deea"; t.beginPath(); t.arc(-2.2 + gx, -13.0, 1.0, 0, Math.PI * 2); t.arc(2.2 + gx, -13.0, 1.0, 0, Math.PI * 2); t.fill();
+    }
   }
 }
-// full helmets (the head is covered): Mandalorian T-visor or a tactical visor
-function drawCustomHelmet(t, eyeLookX, isLive) {
+// full helmets (the head is covered): Mandalorian T-visor or a tactical visor (8-dir directional + backView dome)
+function drawCustomHelmet(t, eyeLookX, isLive, pose = null) {
   const d = customHeroDesign();
+  const backView = !!(pose && pose.backView);
+  const fShift = pose ? pose.faceShiftX : 0;
+  const profileK = pose ? pose.profileK : 0;
+  const fx = pose ? pose.fx : 0;
   if (d.head === "mando") {
     t.fillStyle = "#90a4ae"; t.beginPath(); t.arc(0, -9.5, 5.6, 0, Math.PI * 2); t.fill();
     t.fillStyle = "#cfd8dc"; t.beginPath(); t.arc(-1.6, -11.6, 2.2, Math.PI, Math.PI * 1.8); t.lineTo(-1.6, -11.6); t.fill();
-    t.fillStyle = "#111"; t.fillRect(-3.9, -10.9, 7.8, 1.9); t.fillRect(-1.05, -10.9, 2.1, 4.8);
-    t.strokeStyle = "#546e7a"; t.lineWidth = 0.6; t.beginPath(); t.moveTo(-5.0, -7.2); t.lineTo(-2.6, -5.6); t.moveTo(5.0, -7.2); t.lineTo(2.6, -5.6); t.stroke();
+    if (backView) {
+      t.fillStyle = "rgba(0,0,0,0.22)"; t.fillRect(-4.6, -7.2, 9.2, 2.2);
+      t.strokeStyle = "#546e7a"; t.lineWidth = 0.9; t.beginPath(); t.moveTo(0, -14.8); t.lineTo(0, -5.0); t.stroke();
+    } else {
+      const vW = 7.6 * (1 - profileK * 0.24), vx = fShift * 0.82;
+      t.fillStyle = "#111"; t.fillRect(vx - vW * 0.5, -10.9, vW, 1.9); t.fillRect(vx - 1.0, -10.9, 2.0, 4.8);
+      t.strokeStyle = "#546e7a"; t.lineWidth = 0.6; t.beginPath(); t.moveTo(-4.8 + vx * 0.25, -7.2); t.lineTo(-2.5 + vx * 0.5, -5.6); t.moveTo(4.8 + vx * 0.25, -7.2); t.lineTo(2.5 + vx * 0.5, -5.6); t.stroke();
+    }
     const visorOn = !isLive || player.activeVisor === 1;
-    t.strokeStyle = "#b0bec5"; t.lineWidth = 1.1; t.beginPath(); t.moveTo(5.2, -10);
-    if (visorOn) { t.lineTo(7.0, -12.4); t.lineTo(2.6, -12.4); t.stroke(); t.fillStyle = "#ff1744"; t.fillRect(1.4, -13.1, 2.0, 1.4); }
-    else { t.lineTo(5.2, -16.2); t.stroke(); }
+    const rfSide = fx < -0.3 ? -1 : 1;
+    t.strokeStyle = "#b0bec5"; t.lineWidth = 1.1; t.beginPath(); t.moveTo(5.2 * rfSide, -10);
+    if (visorOn && !backView) { t.lineTo(7.0 * rfSide, -12.4); t.lineTo(2.6 * rfSide, -12.4); t.stroke(); t.fillStyle = "#ff1744"; t.fillRect(rfSide > 0 ? 1.4 : -3.4, -13.1, 2.0, 1.4); }
+    else { t.lineTo(5.2 * rfSide, -16.2); t.stroke(); }
   } else {
     t.fillStyle = "#37474f"; t.beginPath(); t.arc(0, -9.6, 5.6, 0, Math.PI * 2); t.fill();
     t.fillStyle = "#263238"; t.fillRect(-5.6, -9.6, 11.2, 1.0);
-    t.fillStyle = "#0d1b2a"; t.fillRect(-4.2, -11.3, 8.4, 2.5);
-    t.fillStyle = "#40c4ff"; t.fillRect(-3.4 + eyeLookX * 0.5, -10.7, 6.8, 1.0);
-    t.fillStyle = "#546e7a"; t.fillRect(4.4, -13.4, 1.0, 3.0);
+    if (backView) {
+      t.fillStyle = "rgba(0,0,0,0.26)"; t.fillRect(-4.6, -7.4, 9.2, 2.2);
+      t.strokeStyle = "#546e7a"; t.lineWidth = 0.9; t.beginPath(); t.moveTo(0, -15.0); t.lineTo(0, -5.2); t.stroke();
+    } else {
+      const vW = 8.2 * (1 - profileK * 0.24), vx = fShift * 0.82;
+      t.fillStyle = "#0d1b2a"; t.fillRect(vx - vW * 0.5, -11.3, vW, 2.5);
+      t.fillStyle = "#40c4ff"; t.fillRect(vx - vW * 0.4, -10.7, vW * 0.8, 1.0);
+    }
+    const antSide = fx < -0.3 ? -1 : 1;
+    t.fillStyle = "#546e7a"; t.fillRect(antSide > 0 ? 4.4 : -5.4, -13.4, 1.0, 3.0);
   }
 }
-// armour over the torso (after the legs + torso fill)
-function drawCustomArmor(t, stride, cTorso) {
+// armour over the torso (after the legs + torso fill; supports authentic backView details!)
+function drawCustomArmor(t, stride, cTorso, pose = null) {
   const d = customHeroDesign(), a = d.armor;
+  const backView = !!(pose && pose.backView);
   if (a === "robes") {
     t.fillStyle = cTorso; t.fillRect(-5.8, 4.0, 11.6, 3.4);                    // robe skirt
-    t.fillStyle = "rgba(0,0,0,0.18)"; t.fillRect(-1.5, -5.5, 3.0, 12.9);       // tabard
-    t.fillStyle = "rgba(255,255,255,0.12)"; t.beginPath(); t.moveTo(-5.8, -5.5); t.lineTo(0, 1.2); t.lineTo(5.8, -5.5); t.lineTo(3.6, -5.5); t.lineTo(0, -1.4); t.lineTo(-3.6, -5.5); t.closePath(); t.fill();
+    t.fillStyle = "rgba(0,0,0,0.18)"; t.fillRect(-1.5, -5.5, 3.0, 12.9);       // tabard / rear seam
+    if (!backView) {
+      t.fillStyle = "rgba(255,255,255,0.12)"; t.beginPath(); t.moveTo(-5.8, -5.5); t.lineTo(0, 1.2); t.lineTo(5.8, -5.5); t.lineTo(3.6, -5.5); t.lineTo(0, -1.4); t.lineTo(-3.6, -5.5); t.closePath(); t.fill();
+    }
   } else if (a === "beskar") {
     t.fillStyle = "#b0bec5"; t.fillRect(-4.9, -4.9, 9.8, 6.0);
-    t.fillStyle = "#eceff1"; t.fillRect(-4.3, -4.4, 3.6, 2.2); t.fillRect(0.7, -4.4, 3.6, 2.2);
+    if (backView) {
+      t.fillStyle = "#90a4ae"; t.fillRect(-3.6, -4.2, 7.2, 4.6);
+      t.strokeStyle = "#546e7a"; t.lineWidth = 0.8; t.beginPath(); t.moveTo(0, -4.2); t.lineTo(0, 0.4); t.stroke();
+    } else {
+      t.fillStyle = "#eceff1"; t.fillRect(-4.3, -4.4, 3.6, 2.2); t.fillRect(0.7, -4.4, 3.6, 2.2);
+    }
     t.fillStyle = "#90a4ae"; t.beginPath(); t.arc(-6.0, -4.3, 2.4, 0, Math.PI * 2); t.arc(6.0, -4.3, 2.4, 0, Math.PI * 2); t.fill();
-    t.fillStyle = "#4e342e"; t.fillRect(-5.8, 2.4, 11.6, 1.6); t.fillStyle = "#6d4c41"; t.fillRect(-4.6, 2.6, 1.8, 2.2); t.fillRect(2.8, 2.6, 1.8, 2.2);
+    t.fillStyle = "#4e342e"; t.fillRect(-5.8, 2.4, 11.6, 1.6);
+    if (!backView) { t.fillStyle = "#6d4c41"; t.fillRect(-4.6, 2.6, 1.8, 2.2); t.fillRect(2.8, 2.6, 1.8, 2.2); }
   } else if (a === "duster") {
     const sw = stride * 0.35;
     t.fillStyle = "#8d6e63";
-    t.beginPath(); t.moveTo(-6.6, -5.5); t.lineTo(-2.0, -5.5); t.lineTo(-2.4 + sw, 10.8); t.lineTo(-7.2 + sw, 10.4); t.closePath(); t.fill();
-    t.beginPath(); t.moveTo(2.0, -5.5); t.lineTo(6.6, -5.5); t.lineTo(7.2 - sw, 10.4); t.lineTo(2.4 - sw, 10.8); t.closePath(); t.fill();
-    t.fillStyle = "#6d4c41"; t.fillRect(-6.6, -5.5, 13.2, 1.6);                // shoulder cape
-    t.strokeStyle = "#3e2723"; t.lineWidth = 1.2; t.beginPath(); t.moveTo(-5.4, 0.6); t.lineTo(4.8, 3.6); t.stroke();   // gun belt
-    t.fillStyle = "#ffd166"; for (let k = 0; k < 4; k++) t.fillRect(-3.8 + k * 2.4, 1.3 + k * 0.72, 0.8, 0.8);
+    if (backView) {
+      // Closed full-back frontier duster coat with split hem sway
+      t.beginPath(); t.moveTo(-6.6, -5.5); t.lineTo(6.6, -5.5); t.lineTo(7.2 - sw * 0.5, 10.6); t.lineTo(-7.2 + sw * 0.5, 10.6); t.closePath(); t.fill();
+      t.fillStyle = "#6d4c41"; t.fillRect(-6.6, -5.5, 13.2, 2.4);
+      t.strokeStyle = "rgba(0,0,0,0.22)"; t.lineWidth = 0.9; t.beginPath(); t.moveTo(0, 2.0); t.lineTo(0, 10.6); t.stroke();
+    } else {
+      t.beginPath(); t.moveTo(-6.6, -5.5); t.lineTo(-2.0, -5.5); t.lineTo(-2.4 + sw, 10.8); t.lineTo(-7.2 + sw, 10.4); t.closePath(); t.fill();
+      t.beginPath(); t.moveTo(2.0, -5.5); t.lineTo(6.6, -5.5); t.lineTo(7.2 - sw, 10.4); t.lineTo(2.4 - sw, 10.8); t.closePath(); t.fill();
+      t.fillStyle = "#6d4c41"; t.fillRect(-6.6, -5.5, 13.2, 1.6);
+      t.strokeStyle = "#3e2723"; t.lineWidth = 1.2; t.beginPath(); t.moveTo(-5.4, 0.6); t.lineTo(4.8, 3.6); t.stroke();
+      t.fillStyle = "#ffd166"; for (let k = 0; k < 4; k++) t.fillRect(-3.8 + k * 2.4, 1.3 + k * 0.72, 0.8, 0.8);
+    }
   } else if (a === "tactical") {
     t.fillStyle = "#37474f"; t.fillRect(-5.3, -4.9, 10.6, 8.2);
-    t.fillStyle = "#263238"; t.fillRect(-4.4, 0.4, 2.4, 2.2); t.fillRect(-1.2, 0.4, 2.4, 2.2); t.fillRect(2.0, 0.4, 2.4, 2.2);
+    if (backView) {
+      t.fillStyle = "#263238"; t.fillRect(-3.8, -3.6, 7.6, 5.8);
+      t.strokeStyle = "#546e7a"; t.lineWidth = 0.8; t.strokeRect(-3.8, -3.6, 7.6, 5.8);
+    } else {
+      t.fillStyle = "#263238"; t.fillRect(-4.4, 0.4, 2.4, 2.2); t.fillRect(-1.2, 0.4, 2.4, 2.2); t.fillRect(2.0, 0.4, 2.4, 2.2);
+    }
     t.fillStyle = "#546e7a"; t.fillRect(-5.3, -4.9, 10.6, 1.0);
   } else if (a === "wizard") {
     t.fillStyle = cTorso;
     t.beginPath(); t.moveTo(-5.8, -5.5); t.lineTo(5.8, -5.5); t.lineTo(7.6, 10.6); t.lineTo(-7.6, 10.6); t.closePath(); t.fill();
     t.fillStyle = "rgba(255,209,102,0.85)"; [[-3.6, 4.2], [3.0, 7.6], [0.4, 1.0], [-4.6, 8.8], [4.6, 2.8]].forEach(([sx, sy]) => t.fillRect(sx, sy, 0.9, 0.9));
-    t.fillStyle = "rgba(0,0,0,0.25)"; t.fillRect(-0.6, -5.5, 1.2, 16.1);
+    if (!backView) { t.fillStyle = "rgba(0,0,0,0.25)"; t.fillRect(-0.6, -5.5, 1.2, 16.1); }
   } else if (a === "cyborg") {
-    t.fillStyle = "#90a4ae"; t.fillRect(0, -5.2, 5.6, 9.8);
-    t.fillStyle = "#546e7a"; t.fillRect(0, -1.2, 5.6, 0.8); t.fillRect(0, 1.6, 5.6, 0.8);
-    t.fillStyle = "#00e5ff"; t.beginPath(); t.arc(-2.2, -2.0, 1.4, 0, Math.PI * 2); t.fill();
+    t.fillStyle = "#90a4ae"; t.fillRect(backView ? -5.6 : 0, -5.2, 5.6, 9.8);
+    t.fillStyle = "#546e7a"; t.fillRect(backView ? -5.6 : 0, -1.2, 5.6, 0.8); t.fillRect(backView ? -5.6 : 0, 1.6, 5.6, 0.8);
+    if (!backView) {
+      t.fillStyle = "#00e5ff"; t.beginPath(); t.arc(-2.2, -2.0, 1.4, 0, Math.PI * 2); t.fill();
+    } else {
+      t.fillStyle = "#37474f"; t.fillRect(-1.0, -4.6, 2.0, 8.2);
+    }
   } else if (a === "hunter") {
     t.strokeStyle = "#3e2723"; t.lineWidth = 1.8; t.beginPath(); t.moveTo(-5.2, -5.0); t.lineTo(5.0, 3.8); t.stroke();
     t.fillStyle = "#ffb300"; for (let k = 0; k < 5; k++) t.fillRect(-4.2 + k * 2.0, -4.0 + k * 1.72, 0.8, 1.0);

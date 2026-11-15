@@ -275,7 +275,10 @@ function itCourierSend(wi) {
   const w = player.weapons[wi], F = itFlavor(), pay = itWeaponValue(w);
   player.weapons.splice(wi, 1);
   player.handSlotOffset = 0; player.swapTimer = 0;
-  if (!player.weapons.some(pw => pw.style === "orbit" || (typeof isSwordWeapon === "function" && isSwordWeapon(pw.id)))) player.hasSaber = player.hasSaber && player.weapons.length > 0 && player.weapons.some(pw => pw.style === "orbit");
+  const stillHasBlade = player.weapons.some(pw => typeof isMeleeBladeWeapon === "function"
+    ? isMeleeBladeWeapon(pw)
+    : (pw.style === "orbit" || (typeof isSwordWeapon === "function" && isSwordWeapon(pw.id))));
+  if (!stillHasBlade) player.hasSaber = false;
   const ang = Math.random() * Math.PI * 2;
   IT.drone.push({ w, pay, name: F.courier, icon: F.cIcon, beam: !!F.beam, t: 0, x: player.x + Math.cos(ang) * 900, y: player.y + Math.sin(ang) * 900, ox: Math.cos(ang), oy: Math.sin(ang), st: 0 });
   if (typeof updateHUD === "function") updateHUD();
@@ -383,8 +386,9 @@ function itPanelRender() {
   };
   window.addEventListener("keydown", e => {
     if (e.repeat) return;
+    if (e.code === "Escape" && IT.panel) { e.preventDefault(); itPanelClose(); return; }
+    if (typeof uiTypingInField === "function" && uiTypingInField(e)) return;
     if (e.code === "KeyI" && runActive && typeof CITY !== "undefined" && CITY.on) { if (IT.panel) itPanelClose(); else if (!runPaused) itPanelOpen(); }
-    else if (e.code === "Escape" && IT.panel) itPanelClose();
   });
   const addBtn = () => {
     const ctl = document.getElementById("mmCtl");

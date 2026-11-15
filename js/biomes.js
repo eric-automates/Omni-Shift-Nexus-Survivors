@@ -48,17 +48,34 @@ const BIOME_THEMES = {
 };
 const HERO_BIOME = {
   0: "tatooine", 1: "tatooine", 2: "deathstar", 3: "deathstar", 4: "tatooine", 5: "jungle", 6: "tatooine", 54: "tatooine",
-  76: "deathstar", 77: "deathstar", 78: "tatooine", 79: "darkwood", 55: "deathstar", 10: "starship", 11: "colony", 17: "wasteland",
+  76: "deathstar", 77: "deathstar", 78: "tatooine", 79: "darkwood", 55: "deathstar", 82: "deathstar",
+  10: "starship", 11: "colony", 17: "wasteland",
   28: "colony", 29: "jungle", 30: "colony", 31: "arrakis", 32: "jungle", 33: "hell", 53: "jungle", 40: "wasteland", 43: "wasteland",
   44: "wasteland", 51: "gotham", 47: "colony", 48: "darkwood", 49: "darkwood", 50: "feudal", 52: "frontier", 71: "darkwood",
   72: "darkwood", 73: "neon", 74: "wasteland", 75: "darkwood"
 };
 const FACTION_BIOME = ["tatooine", "abydos", "frontier", "arrakis", "starship", "colony", "kiplains", "neon", "lab", "darkwood", "hogwarts"];
+// v16.0-s06-7: map #80 Custom Hero's chosen homeworld / universe to its matching classic arena biome
+const CUSTOM_HOME_BIOME = {
+  tatooine: "tatooine", abydos: "abydos", persephone: "frontier", arrakis: "arrakis", sfearth: "starship",
+  lv426: "colony", kiearth: "kiplains", nightcity: "neon", blackmesa: "lab", continent: "darkwood", highlands: "hogwarts", midwest: "gotham"
+};
+const CUSTOM_UNI_BIOME = {
+  outerrim: "tatooine", core: "deathstar", clonewars: "tatooine", stargate: "abydos", mob: "gotham", manhunt: "gotham",
+  matrix: "neon", cyber: "neon", frontier: "frontier", west: "frontier", dune: "arrakis", trek: "starship",
+  aliens: "colony", doom: "hell", w40k: "kiplains", waste: "wasteland", middle: "darkwood", witcher: "darkwood", wizard: "hogwarts"
+};
 
 const biomeState = { key: "tatooine", th: null, weather: [], hazLabelT: 0, shockT: 0, dustT: 0, vig: null, vigKey: "" };
 
 function biomeKeyForHero(cid) {
   if (HERO_BIOME[cid]) return HERO_BIOME[cid];
+  if (typeof CUSTOM_CID !== "undefined" && cid === CUSTOM_CID) {
+    const d = typeof customHeroDesign === "function" ? customHeroDesign() : null;
+    if (d && d.hails && d.hails !== "auto" && CUSTOM_HOME_BIOME[d.hails]) return CUSTOM_HOME_BIOME[d.hails];
+    const u = typeof customCityUniverse === "function" ? customCityUniverse() : null;
+    if (u && CUSTOM_UNI_BIOME[u.key]) return CUSTOM_UNI_BIOME[u.key];
+  }
   const c = CHAR_RAW[cid];
   return FACTION_BIOME[c ? c[1] : 0] || "tatooine";
 }

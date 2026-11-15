@@ -183,6 +183,6 @@ function gaUi() {
       gaUi();
     });
   }
-  window.addEventListener("keydown", e => { if (e.code === "KeyL" && !e.repeat && typeof runActive !== "undefined" && runActive && !runPaused && gaPlayerHasGun()) gaLightToggle(); });
+  window.addEventListener("keydown", e => { if (typeof uiTypingInField === "function" && uiTypingInField(e)) return; if (e.code === "KeyL" && !e.repeat && typeof runActive !== "undefined" && runActive && !runPaused && gaPlayerHasGun()) gaLightToggle(); });
 })();
 // EOF:js/gunart.js

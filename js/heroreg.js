@@ -110,6 +110,7 @@ heroRegister({
            ["Tan Jedi Tunic", "#c8b08a"], ["Naboo Duel Tunic", "#a1887f"], ["Brown Jedi Robe", "#5d4037"],
            ["Jedi Boots", "#4e342e"], ["Tan Trousers", "#a1887f"], ["Brown Jedi Cloak", "#4e342e"], ["No Cloak", "none"]],
   icon: HR_SABER_ICON("#00e676", "#b0bec5"),
+  music: [0.19, "triangle", [262, 294, 330, 392, 440, 392, 330, 294, 262, 330, 392, 523, 440, 392, 330, 294]],
   sense: { k: "jedi", label: "THE LIVING FORCE", lines: ["Something's not right…", "I sense a disturbance.", "Be mindful of your feelings.", "IT'S HERE."] },
   vision: ["aura", "#69f0ae", 24, "LIVING FORCE", 56], roster: "separatist", theme: "galactic",
   dash: { name: "Force Speed Sprint", cd: 4.0, dist: 165, style: "saberRush", col: "#00e676", callout: "FORCE SPEED!", desc: "A Force-speed blur through the enemy line, green blade cleaving" },
@@ -136,6 +137,7 @@ heroRegister({
            ["Serenno Dark Tunic", "#3e2723"], ["Sith Lord Black", "#1b1b1b"], ["Jedi Master Robes", "#795548"],
            ["Black Riding Boots", "#111111"], ["Brown Trousers", "#4e342e"], ["Cape with Chain Clasp", "#2a1a12"], ["No Cape", "none"]],
   icon: HR_SABER_ICON("#ff1744", "#8d6e63", true),
+  music: [0.18, "sawtooth", [196, 208, 196, 185, 196, 233, 220, 196, 175, 185, 175, 165, 147, 165, 175, 196]],
   sense: { k: "sith", label: "THE DARK SIDE STIRS" },
   vision: ["aura", "#ff1744", 24, "SITH SENSES", 56], roster: "republic", theme: "galactic",
   dash: { name: "Makashi Flèche", cd: 3.8, dist: 150, style: "saberRush", col: "#ff1744", callout: "EN GARDE!", desc: "A fencer's running lunge: the curved blade leads, point first" },
@@ -163,6 +165,7 @@ heroRegister({
            ["Tatooine Tan Tunic", "#d7ccc8"], ["Clone Wars Armor", "#cfd8dc"], ["Desert Wraps", "#bcaaa4"],
            ["Jedi Boots", "#4e342e"], ["Tan Trousers", "#a1887f"], ["Brown Hermit Cloak", "#5d4037"], ["No Cloak", "none"]],
   icon: HR_SABER_ICON("#00b0ff", "#cfd8dc"),
+  music: [0.19, "triangle", [294, 330, 392, 440, 523, 440, 392, 330, 294, 392, 440, 587, 523, 440, 392, 330]],
   sense: { k: "jedi", label: "I HAVE A BAD FEELING", lines: ["Something stirs…", "Be mindful.", "They're close now.", "HELLO THERE."] },
   vision: ["aura", "#4fc3ff", 26, "JEDI SENSES", 56], roster: "separatist", theme: "galactic",
   dash: { name: "Ataru Force Flip", cd: 3.8, dist: 160, style: "saberRush", col: "#4fc3ff", callout: "HELLO THERE!", desc: "A Force-assisted flip over the front line, blue blade sweeping on landing" },
@@ -174,11 +177,85 @@ heroRegister({
 if (CHAR_RAW[0]) CHAR_RAW[0][3] = "Luke";
 if (CHAR_RAW[78]) CHAR_RAW[78][3] = "The Jedi Master Duelist";
 
-/* --- roster labels follow the real count -------------------------------------------------------- */
+/* --- live canonical hero registry diagnostics & unified roster labels --------------------------- */
+function heroRegistryDiagnostics() {
+  const customCid = typeof CUSTOM_CID === "number" ? CUSTOM_CID : 80;
+  const raw = typeof CHAR_RAW !== "undefined" && Array.isArray(CHAR_RAW) ? CHAR_RAW : [];
+  const canonicalIds = [], definedIds = [], holes = [], idMismatches = [];
+  for (let i = 0; i < raw.length; i++) {
+    const row = raw[i];
+    if (!row) { holes.push(i); continue; }
+    definedIds.push(i);
+    if (row[0] !== i) idMismatches.push({ slot: i, rowId: row[0] });
+    if (i !== customCid) canonicalIds.push(i);
+  }
+  const baseCount = canonicalIds.filter(id => id < customCid).length;
+  const extendedCount = canonicalIds.filter(id => id > customCid).length;
+  const customRegistered = !!(raw[customCid] && raw[customCid][0] === customCid);
+  const customCreated = typeof customHeroCreated === "function" ? !!customHeroCreated() : false;
+
+  const missingByHero = [];
+  for (const cid of canonicalIds) {
+    const row = raw[cid];
+    const miss = [];
+    if (!Array.isArray(row) || row.length < 9) miss.push("CHAR_RAW");
+    if (typeof FACTIONS === "undefined" || !FACTIONS[row[1]]) miss.push("FACTIONS");
+    if (typeof HERO_SIG_GEAR === "undefined" || !HERO_SIG_GEAR[cid]) miss.push("HERO_SIG_GEAR");
+    if (typeof UTILS_56 === "undefined" || !Array.isArray(UTILS_56[cid]) || UTILS_56[cid].length < 2) miss.push("UTILS_56");
+    if (typeof Q_56 === "undefined" || !Array.isArray(Q_56[cid]) || Q_56[cid].length < 1) miss.push("Q_56");
+    if (typeof CANON_56 === "undefined" || !Array.isArray(CANON_56[cid]) || CANON_56[cid].length < 10) miss.push("CANON_56");
+    if (typeof WPN_SVG_56 === "undefined" || typeof WPN_SVG_56[cid] !== "function") miss.push("WPN_SVG_56");
+    if (typeof CHARACTER_THEMES === "undefined" || !CHARACTER_THEMES[cid]) miss.push("CHARACTER_THEMES");
+    if (typeof getHeroBodySpec === "function" && !getHeroBodySpec(cid)) miss.push("bodySpec");
+    if (typeof getHeroDashSpec === "function" && !getHeroDashSpec(cid)) miss.push("dashSpec");
+    if (typeof getHeroKinematicStyle === "function" && typeof getHeroKinematicStyle(cid) !== "number") miss.push("kinematicStyle");
+    if (miss.length > 0) missingByHero.push({ cid, name: row ? row[3] : "?", missing: miss });
+  }
+
+  const expectedCanonical = canonicalIds.length;
+  const verifiedCanonical = expectedCanonical - missingByHero.length;
+  const expectedTotalSlots = raw.length;
+  const loadedTotalSlots = definedIds.length;
+  const ok = expectedCanonical > 0 && verifiedCanonical === expectedCanonical && customRegistered && holes.length === 0 && idMismatches.length === 0;
+  const ranges = [];
+  if (canonicalIds.length > 0) {
+    let start = canonicalIds[0], prev = canonicalIds[0];
+    for (let i = 1; i < canonicalIds.length; i++) {
+      if (canonicalIds[i] !== prev + 1) {
+        ranges.push(`#${String(start).padStart(2, "0")}-#${String(prev).padStart(2, "0")}`);
+        start = canonicalIds[i];
+      }
+      prev = canonicalIds[i];
+    }
+    ranges.push(`#${String(start).padStart(2, "0")}-#${String(prev).padStart(2, "0")}`);
+  }
+  return {
+    ok,
+    canonicalIds,
+    canonicalCount: expectedCanonical,
+    verifiedCanonical,
+    baseCount,
+    extendedCount,
+    customCid,
+    customRegistered,
+    customCreated,
+    loadedTotalSlots,
+    expectedTotalSlots,
+    holes,
+    idMismatches,
+    missingByHero,
+    rangesLabel: ranges.join(", "),
+    biomesCount: typeof FACTIONS !== "undefined" && Array.isArray(FACTIONS) ? FACTIONS.length : 0
+  };
+}
+
 function heroRosterLabels() {
   const n = heroRosterCount();
-  const b = document.getElementById("goChars"); if (b) b.textContent = `CHARACTER ROSTER (${n})`;
-  const h = document.querySelector("#scrChars h2"); if (h) h.textContent = h.textContent.replace(/^\d+ MULTIVERSE/, `${n} MULTIVERSE`);
+  const hasCustom = typeof CUSTOM_CID === "number" && (typeof customRosterCard === "function" || !!(typeof CHAR_RAW !== "undefined" && CHAR_RAW[CUSTOM_CID]));
+  const b = document.getElementById("goChars");
+  if (b) b.textContent = hasCustom ? `CHARACTER ROSTER (${n} + YOUR HERO)` : `CHARACTER ROSTER (${n})`;
+  const h = document.querySelector("#scrChars h2");
+  if (h) h.textContent = h.textContent.replace(/^\d+ MULTIVERSE/, `${n} MULTIVERSE`);
 }
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", heroRosterLabels); else heroRosterLabels();
 // EOF:js/heroreg.js

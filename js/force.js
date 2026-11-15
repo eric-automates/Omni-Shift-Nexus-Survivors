@@ -47,7 +47,7 @@ function forceAllyColor() {
 function forceLightUser() {
   if (!player) return false;
   const c = player.cid;
-  if (c === 0 || c === 78 || c === 79) return true;
+  if (c === 0 || c === 78 || c === 79 || c === 81 || c === 83) return true;
   if (c === CUSTOM_CID && typeof customForceTier === "function") return customForceTier() >= 2 && customAllegiance() === "light";
   return false;
 }

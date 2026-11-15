@@ -291,8 +291,8 @@ function sfxWeapon(style, wpnId = 0, isSaber = false) {
         sfxTone(2400, 1650, 0.06, "sine", 0.08, 0.05);
         return;
       }
-      // Bespoke Lightsaber Hum Profiles (#76 Vader 62Hz, #77 Maul 78Hz, #78 Windu 104Hz, #79 Yoda 124Hz)
-      const baseMap = { 3: 68, 55: 88, 76: 62, 77: 78, 78: 104, 79: 124 };
+      // Bespoke Lightsaber Hum Profiles (#76 Vader 62Hz, #77 Maul 78Hz, #78 Windu 104Hz, #79 Yoda 124Hz, #81 Qui-Gon 96Hz, #82 Dooku 72Hz, #83 Old Ben 100Hz)
+      const baseMap = { 3: 68, 55: 88, 76: 62, 77: 78, 78: 104, 79: 124, 81: 96, 82: 72, 83: 100 };
       const baseH = (baseMap[wpnId] || 92) + (Math.random() - 0.5) * 20;
       const peakH = baseH * (wpnId === 77 ? 2.15 : (1.85 + Math.random() * 0.50));
       const dur = wpnId === 79 ? 0.16 : (0.21 + Math.random() * 0.08);
@@ -464,7 +464,8 @@ const CHARACTER_THEMES = [
   [0.22,"sawtooth",[196,196,196,155,233,196,155,233,196,293,293,293,311,233,185,155]], // #76 Darth Vader (Imperial March)
   [0.15,"sawtooth",[146,164,174,146,164,174,146,164,220,233,220,196,174,164,146,130]], // #77 Darth Maul (Duel of the Fates)
   [0.18,"square",  [196,220,261,293,349,329,293,261,220,261,329,392,349,293,261,196]], // #78 Mace Windu (Vaapad Shatterpoint)
-  [0.17,"triangle",[261,293,329,392,440,392,329,293,329,392,523,493,440,392,329,261]]  // #79 Grandmaster Yoda (Force/Ataru)
+  [0.17,"triangle",[261,293,329,392,440,392,329,293,329,392,523,493,440,392,329,261]], // #79 Grandmaster Yoda (Force/Ataru)
+  [0.18,"triangle",[293,349,440,523,587,523,440,349,329,392,493,587,659,587,493,392]]  // #80 Nexus Wanderer (Custom Hero)
 ];
 
 /* ============================================================================
@@ -979,6 +980,14 @@ function renderGenreFilterList() {
     });
 
     tBox.innerHTML = "";
+    if (playlistInitialized && MASTER_TRACKS.length === 0) {
+      const ttl = document.getElementById("nexus-Player-Title");
+      if (ttl && !currentTrack) ttl.textContent = "Procedural Synth Active (no MP3s)";
+      const empty = document.createElement("div");
+      empty.style.cssText = "padding:4px 6px;font-size:9.5px;color:#90a4ae";
+      empty.textContent = "No MP3 files in music/ · procedural hero themes & SFX active.";
+      tBox.appendChild(empty);
+    }
     MASTER_TRACKS.filter(t => enabledGenres.has(t.genre)).forEach(t => {
       const active = currentTrack && currentTrack.url === t.url;
       const row = document.createElement("div");

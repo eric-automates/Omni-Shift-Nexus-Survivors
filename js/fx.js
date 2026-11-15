@@ -40,6 +40,7 @@ function fxFocus(x, y, zoom, sec) {
 }
 function fxLetterbox(sec) { fxState.letterboxT = Math.max(fxState.letterboxT, sec); }
 function fxBanner(text, sub = "", col = "#ffd166", dur = 1.6, big = false, slot = "") {
+  if (typeof ageText === "function") { text = ageText(text); if (sub) sub = ageText(sub); }
   const b = fxState.banners;
   for (let i = 0; i < b.length; i++) if (b[i].text === text && b[i].t < 0.3) return;   // no instant duplicates
   if (slot) for (let i = b.length - 1; i >= 0; i--) if (b[i].slot === slot) b.splice(i, 1);   // e.g. a new streak tier replaces the last
@@ -192,9 +193,10 @@ function drawEnemyStatusFx(i, ex, ey, baseR) {
     ctx.strokeStyle = p > 0.5 ? "#ff9100" : "#40c4ff"; ctx.lineWidth = 2.2; ctx.globalAlpha = 0.85;
     ctx.beginPath(); ctx.arc(ex, ey, baseR + 6 + p * 3, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = "#fff"; ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText("☠", ex, ey - baseR - 10);
+    const strongAge = typeof AGE !== "undefined" && AGE.level === 2;
+    ctx.fillText(strongAge ? "★" : "☠", ex, ey - baseR - 10);
     if (player && Math.hypot(player.x - ex, player.y - ey) < 130) {
-      ctx.fillStyle = "#ff9100"; ctx.font = "bold 7px monospace"; ctx.fillText("EXECUTE", ex, ey - baseR - 19);
+      ctx.fillStyle = "#ff9100"; ctx.font = "bold 7px monospace"; ctx.fillText(strongAge ? "FINISH" : "EXECUTE", ex, ey - baseR - 19);
     }
   } else if (eEcho[i]) {
     ctx.strokeStyle = "#00e5ff"; ctx.globalAlpha = 0.45 + 0.25 * Math.sin(runTime * 9 + i); ctx.lineWidth = 1.3;
@@ -239,9 +241,10 @@ function fxRenderScreen(c) {
     yOff += b.sub ? 44 : 32;
   }
   if (f.streak >= 5) {
+    const sy = Math.max(H * 0.2, ((typeof HUDL !== "undefined" && HUDL.enabled && HUDL.topH) ? HUDL.topH : 80) + 22);
     c.globalAlpha = Math.min(1, f.streakT * 2);
     c.font = "bold 12px monospace"; c.fillStyle = "#ffd166"; c.strokeStyle = "rgba(0,0,0,0.7)"; c.lineWidth = 3;
-    c.strokeText("🔥 x" + f.streak, W / 2, H * 0.2); c.fillText("🔥 x" + f.streak, W / 2, H * 0.2);
+    c.strokeText("🔥 x" + f.streak, W / 2, sy); c.fillText("🔥 x" + f.streak, W / 2, sy);
   }
   c.restore();
 }
@@ -250,7 +253,8 @@ function fxReset() {
   const f = fxState;
   f.shakeT = 0; f.hitStop = 0; f.slowT = 0; f.slowMul = 1; f.uiSlow = 1; f.zoomCur = 1; f.zoomTarget = 1; f.zoomT = 0;
   f.focusT = 0; f.focusOffX = 0; f.focusOffY = 0; f.letterbox = 0; f.letterboxT = 0; f.banners.length = 0;
-  f.streak = 0; f.streakT = 0; f.streakTier = -1; f.bestStreak = 0; f.lastHp = -1; f.hurtFlash = 0; f.bossAnnounced = false; f.glories = 0;
+  f.streak = 0; f.streakT = 0; f.streakTier = -1; f.bestStreak = 0; f.lastHp = -1; f.hurtFlash = 0; f.bossAnnounced = false; f.glories = 0; f.perfT = 0;
+  const perf = document.getElementById("perfHud"); if (perf) perf.style.display = "none";
 }
 
 V10.onRunStart.push(function fxRunStart() { fxReset(); });

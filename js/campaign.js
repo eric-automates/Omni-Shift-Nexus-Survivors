@@ -154,17 +154,17 @@ V10.onRunStart.push(function campaignRunStart(p) {
     case "bounty": p.rivalEvery = 35; break;
     case "swarm": p.spawnMul = 1.45; p.enemyHpMul = 0.7; break;
     case "fortified": p.enemyHpMul = 1.4; p.extraBossRelic = 1; break;
-    case "supply": setTimeout(() => { if (player === p && typeof grantRelic === "function") grantRelic(); }, 600); break;
+    case "supply": setTimeout(() => { if (runActive && player === p && typeof grantRelic === "function") grantRelic(); }, 600); break;
     case "bloodmoon": p.enemySpdMul = 1.2; break;
   }
   if (n.type === "elite") { p.enemyHpMul *= 1.25; p.elitePromote = 0.22; p.extraBossRelic = 1; }
   if (n.type === "hazard") p.hazardRadMul = Math.max(p.hazardRadMul || 1, 1.25);
-  if (n.type === "cache") { p.xp += 40; setTimeout(() => { if (player === p && typeof grantRelic === "function") grantRelic(); }, 900); }
+  if (n.type === "cache") { p.xp += 40; setTimeout(() => { if (runActive && player === p && typeof grantRelic === "function") grantRelic(); }, 900); }
   if (n.type === "rival") { p.rivalEvery = Math.min(p.rivalEvery || 75, 45); rivalTimer = 25; }
   if (n.type === "boss") { p.bossAt = 90; p.bossHpMul = 2.2; }
   const m = CAMPAIGN_MODS[pr.mod];
   setTimeout(() => {
-    if (player === p && typeof fxBanner === "function") fxBanner(campaignNodeLabel(n).toUpperCase(), `${m.icon} ${m.name} · Hostiles: ${FACTIONS[pr.fac].name}`, "#ffd166", 3.0);
+    if (runActive && player === p && typeof fxBanner === "function") fxBanner(campaignNodeLabel(n).toUpperCase(), `${m.icon} ${m.name} · Hostiles: ${FACTIONS[pr.fac].name}`, "#ffd166", 3.0);
   }, 1500);
 });
 
@@ -264,8 +264,8 @@ function campaignRenderWorld(c) {
 }
 
 function campaignRenderScreen(c) {
-  if (!player || player.campMod !== "blackout") return;
-  const key = W + "x" + H;
+  if (!runActive || !player || player.campMod !== "blackout") return;
+  const key = W + "x" + H + "@" + (opts.zoom || 1).toFixed(2);
   if (campState.blackKey !== key) {
     const g = c.createRadialGradient(W / 2, H / 2, 70 * opts.zoom, W / 2, H / 2, 240 * opts.zoom);
     g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.9)");

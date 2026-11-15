@@ -393,17 +393,21 @@ function j05CleanupActors(a){
 function j05Panel(){
   const panel=JOB_DISPATCH.panel,read=jobActive();if(!panel||!read.ok)return;
   let a=read.active;
-  const btn=(label,fn)=>{const b=document.createElement("button");b.type="button";b.className="btn";b.textContent=label;b.style.cssText="min-height:46px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";b.onclick=fn;panel.appendChild(b);};
-  const text=(tag,value)=>{const e=document.createElement(tag);e.textContent=value;panel.appendChild(e);return e;};
+  const closeRef=!a?Array.from(panel.querySelectorAll("button")).find(b=>b.textContent==="CLOSE"):null;
+  const addNode=el=>closeRef?panel.insertBefore(el,closeRef):panel.appendChild(el);
+  const btn=(label,fn)=>{const b=document.createElement("button");b.type="button";b.className="btn";b.textContent=label;b.style.cssText="min-height:46px;min-width:120px;margin:4px 6px 4px 0;white-space:normal";b.onclick=fn;addNode(b);};
+  const text=(tag,value,style)=>{const e=document.createElement(tag);e.textContent=value;if(style)e.style.cssText=style;addNode(e);return e;};
   if(!a){
     if(!v15ContractOfferEnabled(JOB_EMT))return;
     const state=jobReadState();if(!state.ok)return;text("p",j05CareerSummary(state.state));
     btn("MULTI-VEHICLE MEDICAL RESPONSE",()=>{const r=j05CallOffer();jdOpen(r.ok?"Medical response open. Follow the marker to the crash scene.":r.why);});return;
   }
   if(a.contract!==JOB_EMT||!read.inWorld||!v15JobEnabled(a))return;
-  panel.innerHTML="";text("h3","PARAMEDIC RESPONSE · CALL "+a.data.callNo+"/"+J05_MAX_CALLS);text("p",j05CareerSummary(read.state));
+  panel.innerHTML="";text("h3","PARAMEDIC RESPONSE · CALL "+a.data.callNo+"/"+J05_MAX_CALLS);
+  if(JOB_DISPATCH.lastMsg)text("p",JOB_DISPATCH.lastMsg,"color:#ffd166");
+  text("p",j05CareerSummary(read.state));
   const vehicles=j05EnsureSceneVehicles(a),ambulance=j05EnsureAmbulance(a);
-  if(!vehicles.ok||!ambulance.ok){text("p","An assigned response vehicle is absent. The call is paused; no triage or completion can be claimed.");btn("WITHDRAW · NO PAY",()=>{const r=j05Withdraw(a.id);jdOpen(r.ok?"Call withdrawn; no pay.":r.why);});return;}
+  if(!vehicles.ok||!ambulance.ok){text("p","An assigned response vehicle is absent. The call is paused; no triage or completion can be claimed.");btn("WITHDRAW · NO PAY",()=>{const r=j05Withdraw(a.id);jdOpen(r.ok?"Call withdrawn; no pay.":r.why);});btn("CLOSE",jdClose);return;}
   if(a.phase==="response"){
     text("p","Two existing cars have collision damage at the multi-vehicle scene. Reach the marked on-foot approach before triage; the assigned ambulance is parked nearby.");
     if(jdNear(a))btn("ARRIVE · ASSESS SCENE",()=>{const r=j05Arrive(a.id);jdOpen(r.ok?"Scene assessed. Triage the most critical patient first.":r.why);});
@@ -444,6 +448,7 @@ function j05Panel(){
     if(a.data.calls.length<J05_MAX_CALLS)btn("CONTINUE TO NEXT MEDICAL CALL",()=>{const r=j05Continue(a.id);jdOpen(r.ok?"Next medical call saved. Follow the new scene marker.":r.why);});
   }
   if(a.phase!=="debrief")btn("WITHDRAW · NO PAY",()=>{const r=j05Withdraw(a.id);jdOpen(r.ok?"Call withdrawn; no pay.":r.why);});
+  btn("CLOSE",jdClose);
 }
 (function j05Wire(){
   if(!JD_CONTRACTS.includes(JOB_EMT))JD_CONTRACTS.push(JOB_EMT);

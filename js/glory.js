@@ -47,7 +47,9 @@ function gloryStyleForCid(cid, hasSaber) {
   if (cid === 33) return "doom";
   if ([5, 17, 30, 61].includes(cid)) return "beast";
   const c = CHAR_RAW[cid];
-  const sword = hasSaber || (typeof isSwordWeapon === "function" && isSwordWeapon(cid)) || (c && c[6] === "orbit" && (cid < 56 || cid >= 76));
+  const sword = hasSaber || (typeof isMeleeBladeWeapon === "function"
+    ? isMeleeBladeWeapon({ id: cid, style: c ? c[6] : "" })
+    : ((typeof isSwordWeapon === "function" && isSwordWeapon(cid)) || (c && c[6] === "orbit" && ![12, 16, 29, 35, 44, 73].includes(cid) && (cid < 56 || cid >= 76))));
   if (sword) return "saber";
   if ([34, 35, 36, 38, 84, 85, 86, 87, 88].includes(cid)) return "ki";   // v14.2 Ki-Surge: an energy blast at point-blank range
   if ((c && c[1] === 10) || [7, 10, 12, 18, 20, 46, 49].includes(cid)) return "arcane";
@@ -116,7 +118,7 @@ function gloryExecute(i) {
   const ang = Math.atan2(eY[i] - player.y, eX[i] - player.x);
   const now = performance.now();
   G.chain = (now - G.lastEnd < 2600) ? G.chain + 1 : 1;
-  G.exec = { i, uid: eUid[i], t0: now, style, x0: player.x, y0: player.y, ang, hit: false, echo: eEcho[i] === 1, hp0: eHP[i],
+  G.exec = { i, uid: eUid[i], t0: now, t: 0, style, x0: player.x, y0: player.y, ang, hit: false, echo: eEcho[i] === 1, hp0: eHP[i],
              chain: G.chain, dist: Math.hypot(eX[i] - player.x, eY[i] - player.y) };
   eStagger[i] = Math.max(eStagger[i], 2.0); eKneel[i] = 1;
   // lock the victim for the finisher: stray blade sweeps / bullets can't steal the kill mid-animation
@@ -131,8 +133,10 @@ function gloryExecute(i) {
 }
 
 function gloryExecTick() {
-  const G = gloryState, E = G.exec, i = E.i;
-  const t = (performance.now() - E.t0) / 1000;
+  const G = gloryState, E = G.exec;
+  if (!E) return;
+  const i = E.i;
+  const t = E.t || 0;
   const alive = eAct[i] && eUid[i] === E.uid;
   if (alive && t < 0.5) {
     // lunge: end up just in front of the victim
@@ -173,9 +177,11 @@ function gloryImpact(E) {
     if (E.style === "doom") { spawnGroundLimb(ex + 8, ey, bodyCol, 1); spawnGroundLimb(ex - 8, ey, bodyCol, 1); }
   } else if (E.style === "spine") {
     killEnemy(i, true, null);
-    const li = lmbHead; lmbHead = (lmbHead + 1) % MAX_LIMB;
-    lmbX[li] = player.x + Math.cos(E.ang + 2.4) * 10; lmbY[li] = player.y + Math.sin(E.ang + 2.4) * 10;
-    lmbRot[li] = E.ang + Math.PI; lmbKind[li] = 4; lmbCol[li] = headCol; lmbFade[li] = 1; lmbAct[li] = 1;
+    if (!(typeof AGE !== "undefined" && AGE.level >= 1)) {
+      const li = lmbHead; lmbHead = (lmbHead + 1) % MAX_LIMB;
+      lmbX[li] = player.x + Math.cos(E.ang + 2.4) * 10; lmbY[li] = player.y + Math.sin(E.ang + 2.4) * 10;
+      lmbRot[li] = E.ang + Math.PI; lmbKind[li] = 4; lmbCol[li] = headCol; lmbFade[li] = 1; lmbAct[li] = 1;
+    }
   } else if (E.style === "beast") {
     spawnGroundLimb(ex + 9, ey - 2, bodyCol, 1); spawnGroundLimb(ex - 9, ey + 2, bodyCol, 1);
     killEnemy(i, false, null);
@@ -223,22 +229,32 @@ function gloryButton() {
 function gloryFrameForce() { gloryState.uiT = 0; gloryFrame(0); }
 function gloryFrame(rawDt) {
   const G = gloryState;
+  const live = runActive && !!player && !runPaused;
+  if (live && G.exec) {
+    G.exec.t = (G.exec.t || 0) + Math.min(0.05, Math.max(0, rawDt || 0));
+    gloryExecTick();
+  }
+  if (!live) {
+    const b = document.getElementById("gloryBtn"); if (b && b.style.display !== "none") b.style.display = "none";
+    G.btnMode = ""; return;
+  }
   G.uiT -= rawDt;
   if (G.noTgtT > 0) G.noTgtT -= rawDt;
   if (G.uiT > 0) return;
   G.uiT = 0.1;
-  const live = runActive && !!player && !runPaused;
-  if (!live || (!G.seen && G.inRange === 0 && !G.exec)) {
+  if (!G.seen && G.inRange === 0 && !G.exec) {
     const b = document.getElementById("gloryBtn"); if (b && b.style.display !== "none") b.style.display = "none";
     G.btnMode = ""; return;
   }
   const btn = gloryButton();
+  const strongAge = typeof AGE !== "undefined" && AGE.level === 2;
+  const ico = strongAge ? "★" : "☠";
   let mode, main = (typeof ageExecWord === "function" ? ageExecWord() : "☠ EXECUTE"), sub = "";
   if (G.exec) {
     mode = "busy";
-    if (G.queued) { main = "☠ CHAIN QUEUED"; sub = "next: " + (G.best >= 0 ? GLORY_RANK_NAMES[gloryRank(G.best)] : "—"); }
-    else if (G.inRange > 0) { main = "☠ NEXT ▸"; sub = "tap to chain"; }
-    else { main = "☠ …"; }
+    if (G.queued) { main = ico + " CHAIN QUEUED"; sub = "next: " + (G.best >= 0 ? GLORY_RANK_NAMES[gloryRank(G.best)] : "—"); }
+    else if (G.inRange > 0) { main = ico + " NEXT ▸"; sub = "tap to chain"; }
+    else { main = ico + " …"; }
   } else if (G.best >= 0) {
     mode = "ready";
     sub = GLORY_RANK_NAMES[gloryRank(G.best)] + (G.inRange > 1 ? ` · ×${G.inRange}` : "");
@@ -261,6 +277,7 @@ function gloryRenderWorld(c) {
   const G = gloryState;
   if (!runActive || !player || G.any === 0) return;
   const pulse = 1 + Math.sin(performance.now() / 110) * 0.12;
+  const mark = (typeof AGE !== "undefined" && AGE.level === 2) ? "★" : "☠";
   for (let i = 0; i < MAX_E; i++) {
     if (!eAct[i] || !(eStagger[i] > 0) || (G.exec && G.exec.i === i)) continue;
     const isBest = i === G.best, d = Math.hypot(player.x - eX[i], player.y - eY[i]);
@@ -274,7 +291,7 @@ function gloryRenderWorld(c) {
     });
     if (isBest) {
       c.fillStyle = "#ffccbc"; c.font = "bold 9px sans-serif"; c.textAlign = "center";
-      c.fillText("☠", x, y - r - 3);
+      c.fillText(mark, x, y - r - 3);
     }
     c.restore();
   }
@@ -293,5 +310,5 @@ V10.onRunReset.push(function gloryRunReset() { gloryReset(); });
 V10.onStep.push(gloryStep);
 V10.onFrame.push(gloryFrame);
 V10.onRenderWorld.push(gloryRenderWorld);
-window.addEventListener("keydown", e => { if (e.code === "KeyE" && !e.repeat) gloryRequest(); });
+window.addEventListener("keydown", e => { if (typeof uiTypingInField === "function" && uiTypingInField(e)) return; if (e.code === "KeyE" && !e.repeat) gloryRequest(); });
 // EOF:js/glory.js

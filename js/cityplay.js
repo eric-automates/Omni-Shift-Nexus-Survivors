@@ -253,7 +253,7 @@ const CITY_CAR_NAME = { sedan: "CAR", spinner: "SPINNER", speeder: "LANDSPEEDER"
     }
     return _twi();
   };
-  window.addEventListener("keydown", e => { if (e.code === "KeyF" && !e.repeat && runActive && !runPaused && CITY.on) triggerWorldInteract(); });
+  window.addEventListener("keydown", e => { if (typeof uiTypingInField === "function" && uiTypingInField(e)) return; if (e.code === "KeyF" && !e.repeat && runActive && !runPaused && CITY.on) triggerWorldInteract(); });
 })();
 
 /* --- hooks ---------------------------------------------------------------------- */

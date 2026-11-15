@@ -110,9 +110,16 @@ function flyBegin(v) {
 }
 function flyBeginSelf() {
   const S = flySelfSpec(); if (!S || !player || player.inVehicle) return false;
-  FLY.on = true; FLY.self = true; FLY.v = null; FLY.S = Object.assign({ vtol: 1, turn: 6, hp: 1, parts: [] }, S); FLY.alt = 0.6; FLY.vz = S.climb * 0.6; FLY.air = true; FLY.brake = 0; FLY.landing = false;
-  FLY.vxm = (player.vx || 0) / 32; FLY.vym = (player.vy || 0) / 32; FLY.hdg = player.moveDir || 0;
-  player.flyingBy = S.n; player.flySaved = !!player.flying; player.flying = true;
+  let startAlt = 0.6;
+  if (player.roof) {
+    startAlt = Math.max(0.6, flyGroundAt(player.x, player.y) + 0.6);
+    if (typeof accLeaveRoof === "function") accLeaveRoof();
+  }
+  FLY.on = true; FLY.self = true; FLY.v = null; FLY.S = Object.assign({ vtol: 1, turn: 6, hp: 1, parts: [] }, S); FLY.alt = startAlt; FLY.vz = S.climb * 0.6; FLY.air = true; FLY.brake = 0; FLY.landing = false;
+  FLY.vxm = (player.vx || 0) / 32; FLY.vym = (player.vy || 0) / 32;
+  FLY.hdg = typeof player.facingAng === "number" ? player.facingAng : (player.moveDir || 0);
+  player.facingAng = FLY.hdg; player.moveDir = FLY.hdg; player.walkBlend = 0;
+  player.flyingBy = S.n; player.flySaved = !!player.flying; player.flying = true; player.flyAlt = startAlt;
   flyUiShow(true);
   if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 30, "⬆ " + S.n, "#80deea", 1.6);
   if (typeof sfx === "function") sfx(160, 520, 0.4, "sawtooth", 0.1);
@@ -132,7 +139,7 @@ function flyEnd(why) {
   if (!FLY.on) return;
   if (FLY.self && player) { player.flying = !!player.flySaved; player.flyingBy = null; }
   if (FLY.v) { FLY.v.flyAir = false; FLY.v.flyAlt = 0; }
-  FLY.on = false; FLY.self = false; FLY.v = null; FLY.air = false; FLY.alt = 0; FLY.lod = false; FLY.groundSeparated = false; FLY.cockpit = FLY.cockpit && false;
+  FLY.on = false; FLY.self = false; FLY.v = null; FLY.air = false; FLY.alt = 0; FLY.vz = 0; FLY.vxm = 0; FLY.vym = 0; FLY.landing = false; FLY.lod = false; FLY.groundSeparated = false; FLY.cockpit = false;
   if (player) player.flyAlt = 0;
   if (typeof VEH !== "undefined") VEH.noCam = false;
   flyUiShow(false);
@@ -150,14 +157,13 @@ function flyInput() {
   return { mx, my, mag, up, brake };
 }
 function flyGroundAt(lx, ly) {   // what's under you: a rooftop (its height), a tree, open ground
-  const f = cityFlagsAt(lx, ly);
-  if (!(f & (F_MOVE | F_IN))) return 0;
   const b = typeof cityBldT === "function" ? cityBldT(cityTX(lx), cityTY(ly)) : null;
-  if (b) {
+  if (b && !b.canopy) {
     if (b.rm && b.rm.h) return Math.max(3, Math.min(320, b.rm.h));   // real buildings know their height
     const tall = b.cls === 4 ? 2.2 : b.cls === 3 ? 1.3 : 1;
     return ({ apartment: 14, civic: 12, warehouse: 9, church: 14, cinema: 10, motel: 6, shed: 3, barn: 8, house: 7, farmhouse: 7, cabin: 5 }[b.type] || 8) * tall;
   }
+  const f = cityFlagsAt(lx, ly);
   return f & F_MOVE ? 3 : 0;
 }
 function flyPartsMul() {
@@ -235,9 +241,21 @@ function flyStep(dt) {
   }
   if (ghHere > 0.5 && FLY.alt <= ghHere) {   // on a rooftop: you can perch there, not get out (bail out works)
     const vs = -FLY.vz;
-    if (vs > (S.vtol ? 15 : 11)) { flyCrash("💥 CRASHED ONTO A ROOF"); return; }
-    if (vs > 7) flyDamage(40 + vs * 10, "under", "landing");
-    FLY.alt = ghHere; FLY.vz = Math.max(0, FLY.vz);
+    if (FLY.self) {
+      const roofBld = typeof accRoofTile === "function" ? accRoofTile(player.x, player.y) : null;
+      if (FLY.landing || I.up < 0) {
+        if (vs > 14) { player.hp -= player.maxHp * 0.15; if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 20, "OOF — HARD LANDING", "#ffab40", 1.2); }
+        flyEnd("landed");
+        if (roofBld && typeof accSetRoof === "function") accSetRoof(roofBld);
+        else if (typeof cityFindWalkable === "function") { const q = cityFindWalkable(player.x, player.y, 120, true); player.x = q[0]; player.y = q[1]; }
+        return;
+      }
+      FLY.alt = ghHere; FLY.vz = Math.max(0, FLY.vz);
+    } else {
+      if (vs > (S.vtol ? 15 : 11)) { flyCrash("💥 CRASHED ONTO A ROOF"); return; }
+      if (vs > 7) flyDamage(40 + vs * 10, "under", "landing");
+      FLY.alt = ghHere; FLY.vz = Math.max(0, FLY.vz);
+    }
   }
   // touching down
   if (FLY.alt <= 0) {
@@ -257,7 +275,9 @@ function flyStep(dt) {
   }
   // move
   if (FLY.self) {
-    player.x += FLY.vxm * 32 * dt; player.y += FLY.vym * 32 * dt; player.vx = FLY.vxm * 32; player.vy = FLY.vym * 32; player.moveDir = FLY.hdg;
+    player.x += FLY.vxm * 32 * dt; player.y += FLY.vym * 32 * dt; player.vx = FLY.vxm * 32; player.vy = FLY.vym * 32;
+    player.moveDir = FLY.hdg; player.facingAng = FLY.hdg;
+    player.walkBlend = Math.max(0, (player.walkBlend || 0) - dt * 10);
   } else { v.vx = FLY.vxm * 32; v.vy = FLY.vym * 32; v.flyAlt = FLY.alt; v.awake = true; v.sleep = 0; }
   player.flyAlt = FLY.alt;
   const separated = flyGroundSeparated();
@@ -304,16 +324,33 @@ function flyCrash(msg) {
 }
 function flyChute(alt) {
   // jet-class heroes just fly; everyone else gets a parachute
-  if (flySelfSpec()) { flyBeginSelf(); FLY.alt = alt; FLY.vz = -2; return; }
-  FLY.chute = { alt, t: 0 };
-  player.flyAlt = alt; player.flying = true;
+  if (flySelfSpec()) { flyBeginSelf(); FLY.alt = alt; FLY.vz = -2; player.flyAlt = alt; return; }
+  FLY.chute = { alt, t: 0, hadFlying: !!player.flying };
+  player.flyAlt = alt; player.flying = true; player.walkBlend = 0;
   if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 30, "🪂 PARACHUTE", "#ffd166", 2);
 }
 function flyChuteStep(dt) {
   const C = FLY.chute; if (!C || !player) return;
   C.t += dt; C.alt -= dt * (C.alt > 60 ? 9 : 5);
+  const I = flyInput();
+  if (I.mag > 0.12) {
+    const k = flyK(), spd = 5.5 * k * 32, len = Math.max(1e-3, Math.hypot(I.mx, I.my));
+    player.vx = I.mx / len * spd * I.mag; player.vy = I.my / len * spd * I.mag;
+    player.x += player.vx * dt; player.y += player.vy * dt;
+    player.facingAng = Math.atan2(I.my, I.mx); player.moveDir = player.facingAng;
+  } else { player.vx = 0; player.vy = 0; }
+  player.walkBlend = Math.max(0, (player.walkBlend || 0) - dt * 10);
   player.flyAlt = Math.max(0, C.alt);
-  if (C.alt <= 0) { FLY.chute = null; player.flyAlt = 0; player.flying = false; if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 24, "LANDED", "#69f0ae", 1.2); }
+  if (C.alt <= 0) {
+    const hadFly = !!C.hadFlying;
+    FLY.chute = null; player.flyAlt = 0; player.flying = hadFly;
+    const roofBld = typeof accRoofTile === "function" ? accRoofTile(player.x, player.y) : null;
+    if (roofBld && typeof accSetRoof === "function") accSetRoof(roofBld);
+    else if (typeof cityCircleBlocked === "function" && cityCircleBlocked(player.x, player.y, 7, false) && typeof cityFindWalkable === "function") {
+      const q = cityFindWalkable(player.x, player.y, 160, true); player.x = q[0]; player.y = q[1];
+    }
+    if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 24, "LANDED", "#69f0ae", 1.2);
+  }
 }
 
 /* --- parked ships, airports & airfields: everything that flies can be taken ------------------------- */
@@ -412,15 +449,29 @@ function flyDrawOwn(g, kind, t, v) {
 function flyDrawCraft(g, v, t, scale) {
   const S = flySpec(v); if (!S) return false;
   g.save(); g.translate(v.x, v.y); g.rotate(v.ang); if (scale) g.scale(scale, scale);
+  // Soft rear engine/repulsor wash drawn underneath/behind the tail so it never pastes a flat disc on top of the hull
+  if (v.flyAir) {
+    const tailX = -Math.max(v.L, v.D) * 0.50;
+    const grR = Math.max(12, Math.min(28, Math.min(v.L, v.D) * 0.34));
+    const gr = g.createRadialGradient(tailX, 0, 2, tailX, 0, grR);
+    gr.addColorStop(0, "rgba(180,235,255,0.68)");
+    gr.addColorStop(0.45, "rgba(90,190,255,0.30)");
+    gr.addColorStop(1, "rgba(90,190,255,0)");
+    g.save(); g.globalCompositeOperation = "lighter"; g.fillStyle = gr;
+    g.beginPath(); g.arc(tailX, 0, grR, 0, 7); g.fill(); g.restore();
+  }
   if (S.own) flyDrawOwn(g, S.own, t, v);
   else if (S.art && typeof RG_SHIP_ART !== "undefined" && RG_SHIP_ART[S.art]) {
     const H = typeof RG_HULL !== "undefined" ? RG_HULL[S.art] || [10, 6] : [10, 6];
     const sc = S.art === "freighter" ? H[0] * 32 / 520 : S.art === "skyhopper" ? H[0] * 32 / 200 : 1;
     g.scale(sc, sc);
     try { RG_SHIP_ART[S.art](g, v.pv | 0); } catch (e) { g.fillStyle = "#8a9096"; g.fillRect(-60, -30, 120, 60); }
-  } else return g.restore(), false;
-  // engines glowing when it flies
-  if (v.flyAir) { g.globalCompositeOperation = "lighter"; g.fillStyle = "rgba(120,200,255,0.35)"; g.beginPath(); g.arc(-Math.max(v.L, v.D) * 0.42 / (scale || 1), 0, 22, 0, 7); g.fill(); g.globalCompositeOperation = "source-over"; }
+  } else if (typeof vehSprite === "function") {
+    // Flying cars (Spinner, Flying Anglia, Hovercar): render their live rigid-body sprite cleanly at airborne scale
+    const spr = vehSprite(v);
+    if (!spr) { g.restore(); return false; }
+    g.save(); g.rotate(Math.PI / 2); g.drawImage(spr, -spr.width / 2, -spr.height / 2); g.restore();
+  } else { g.restore(); return false; }
   g.restore();
   return true;
 }
@@ -560,7 +611,7 @@ function flyUiShow(on) {
   let el = document.getElementById("flyUi");
   if (!el && on) {
     el = document.createElement("div"); el.id = "flyUi";
-    el.style.cssText = "position:fixed;right:10px;top:38%;z-index:9000;display:flex;flex-direction:column;gap:6px;touch-action:none;user-select:none";
+    el.style.cssText = "position:fixed;right:10px;top:38%;z-index:58;display:flex;flex-direction:column;gap:6px;touch-action:none;user-select:none";
     // Keep the flight strip inside short landscape touch viewports. The
     // action/exit button occupies a separate lane, so do not move it or
     // transform the flight toggle while a player is holding it.
@@ -580,7 +631,7 @@ function flyUiShow(on) {
     el.querySelector("#flySafe").onclick = () => flySafetyToggle();
     el.querySelector("#flyCam").onclick = () => { FLY.cockpit = !FLY.cockpit; };
   }
-  if (el) { el.style.display = on ? "flex" : "none"; const s = el.querySelector("#flySafe"); if (s) { s.textContent = FLY.safe ? "🛡" : "⚠"; s.style.background = FLY.safe ? "" : "#7f1010"; } }
+  if (el) { el.style.display = (on && !(typeof runPaused !== "undefined" && runPaused)) ? "flex" : "none"; const s = el.querySelector("#flySafe"); if (s) { s.textContent = FLY.safe ? "🛡" : "⚠"; s.style.background = FLY.safe ? "" : "#7f1010"; } }
 }
 function flySafetyToggle() {
   if (!FLY.on) return;
@@ -593,7 +644,9 @@ function flySafetyToggle() {
   if (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches)
     for (const b of el.querySelectorAll("button")) { b.style.minWidth = "48px"; b.style.minHeight = "48px"; }
   document.body.appendChild(el);
-  const close = (yes) => { el.remove(); FLY.confirm = null; runPaused = wasP; if (yes) { FLY.safe = false; flyTip("⚠ ASSISTS OFF — red light, hands steady"); if (typeof sfx === "function") sfx(700, 350, 0.3, "square", 0.12); } flyUiShow(true); };
+  const onEsc = (e) => { if (e.code === "Escape") { e.preventDefault(); close(false); } };
+  window.addEventListener("keydown", onEsc, true);
+  const close = (yes) => { window.removeEventListener("keydown", onEsc, true); el.remove(); FLY.confirm = null; runPaused = wasP; if (yes) { FLY.safe = false; flyTip("⚠ ASSISTS OFF — red light, hands steady"); if (typeof sfx === "function") sfx(700, 350, 0.3, "square", 0.12); } flyUiShow(FLY.on); };
   el.querySelector("#flyYes").onclick = () => close(true); el.querySelector("#flyNo").onclick = () => close(false);
 }
 function flyRenderScreen(g) {
@@ -693,10 +746,13 @@ function flyDrawCockpit(g, W0, H0, d, alt, sp, vs, head) {
     return o.apply(this, arguments);
   });
   wrap("vehDraw", o => function (g, v, t) {
-    if (flySpec(v) && (flySpec(v).own || flySpec(v).art)) {
-      if (v.flyAir) return;   // drawn by flight (above the rooftops)
-      g.save(); g.globalAlpha = 0.25; g.fillStyle = "#000"; g.beginPath(); g.ellipse(v.x + 8, v.y + 10, v.L * 0.5, v.D * 0.42, v.ang, 0, 7); g.fill(); g.restore();
-      if (flyDrawCraft(g, v, t, 1)) return;
+    const S = flySpec(v);
+    if (S) {
+      if (v.flyAir) return;   // ALL airborne craft (including spinner/anglia/hover) are drawn by flight above rooftops
+      if (S.own || S.art) {
+        g.save(); g.globalAlpha = 0.25; g.fillStyle = "#000"; g.beginPath(); g.ellipse(v.x + 8, v.y + 10, v.L * 0.5, v.D * 0.42, v.ang, 0, 7); g.fill(); g.restore();
+        if (flyDrawCraft(g, v, t, 1)) return;
+      }
     }
     return o.apply(this, arguments);
   });
@@ -766,6 +822,7 @@ function flyDrawCockpit(g, W0, H0, d, alt, sp, vs, head) {
     return _twi();
   };
   window.addEventListener("keydown", e => {
+    if (typeof uiTypingInField === "function" && uiTypingInField(e)) return;
     if (!runActive || runPaused || !CITY.on || e.repeat) return;
     if (e.code === "KeyK" && FLY.on) flySafetyToggle();
     else if (e.code === "KeyC" && FLY.on && !FLY.self) FLY.cockpit = !FLY.cockpit;
@@ -773,7 +830,9 @@ function flyDrawCockpit(g, W0, H0, d, alt, sp, vs, head) {
     else if (e.code === "KeyG" && !player.inVehicle) flyToggleSelf();
   });
   if (typeof V10 !== "undefined") {
-    V10.onRunStart.push(() => { flyEnd("start"); FLY.chute = null; FLY.safe = true; FLY.cockpit = false; FLY.fields = new Set(); FLY.tiles.clear(); flyUiShow(false); if (typeof VEH !== "undefined") VEH.camZoom = 1; });
+    V10.onFrame.push(() => { const el = document.getElementById("flyUi"); if (el && FLY.on) el.style.display = (runActive && !runPaused) ? "flex" : "none"; });
+    V10.onRunReset.push(() => { if (FLY.confirm) { FLY.confirm.remove(); FLY.confirm = null; } flyUiShow(false); });
+    V10.onRunStart.push(() => { if (FLY.confirm) { FLY.confirm.remove(); FLY.confirm = null; } flyEnd("start"); FLY.chute = null; FLY.safe = true; FLY.cockpit = false; FLY.fields = new Set(); FLY.tiles.clear(); flyUiShow(false); if (typeof VEH !== "undefined") VEH.camZoom = 1; });
     V10.onStep.push((dt) => {
       if (!CITY.on) return;
       flyStep(dt); flyChuteStep(dt);
@@ -793,7 +852,7 @@ function flyDrawCockpit(g, W0, H0, d, alt, sp, vs, head) {
       }
       if (FLY.on && FLY.self && FLY.alt < 300 && player) {   // a hero in the air: shadow + trail
         const a = FLY.alt; g.save(); g.globalAlpha = Math.max(0.05, 0.3 - a / 600); g.fillStyle = "#000"; g.beginPath(); g.ellipse(player.x + a * 9, player.y + a * 12, 10, 6, 0, 0, 7); g.fill(); g.restore();
-        const tr = FLY.S.trail, c = tr === "ki" ? "#fff59d" : tr === "smoke" ? "rgba(20,20,20,0.6)" : tr === "hex" ? "#ff1744" : tr === "broom" ? "#c8a165" : "#ffab40";
+        const tr = (FLY.S && FLY.S.trail) || "ki", c = tr === "ki" ? "#fff59d" : tr === "smoke" ? "rgba(20,20,20,0.6)" : tr === "hex" ? "#ff1744" : tr === "broom" ? "#c8a165" : "#ffab40";
         g.save(); g.globalCompositeOperation = tr === "smoke" ? "source-over" : "lighter"; g.fillStyle = c;
         for (let k = 0; k < 5; k++) { const d = (k + 1) * 7; g.globalAlpha = 0.35 - k * 0.06; g.beginPath(); g.arc(player.x - Math.cos(FLY.hdg) * d, player.y - Math.sin(FLY.hdg) * d + 6, 5 - k * 0.6, 0, 7); g.fill(); }
         g.restore();

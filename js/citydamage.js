@@ -45,11 +45,14 @@ function cityDamageKeyParts(key) { return [key % 131072, Math.floor(key / 131072
 function cityDamageUID(tx, ty) { const b = cityBldT(tx, ty); return b && b.uid || ""; }
 function cityDamageValidTile(tx, ty) { return tx >= 0 && ty >= 0 && tx < CITY.WORLD_T && ty < CITY.WORLD_T; }
 
+function cityDamageWorldKey() {
+  return typeof regionWorldKey === "function" ? regionWorldKey() : String(CITY.seed >>> 0);
+}
 function cityDamageSave() {
   if (typeof meta === "undefined" || !meta || typeof saveMeta !== "function") return false;
   let root = meta.cityDamageV1;
   if (!root || root.v !== 1 || !root.worlds || typeof root.worlds !== "object" || Array.isArray(root.worlds)) root = meta.cityDamageV1 = { v:1, worlds:{} };
-  const seed = String(CITY.seed >>> 0), damage = [];
+  const seed = cityDamageWorldKey(), damage = [];
   for (const [key, r] of cityRT.damage) {
     if (!r || !Number.isFinite(r.hp) || !r.mat) continue;
     damage.push([key, r.mat, Math.max(0, Math.min(CITY_MATERIALS[r.mat]?.maxHp || 0, r.hp)), r.uid || ""]);
@@ -72,7 +75,8 @@ function cityDamageSave() {
 function cityDamageLoad() {
   cityRT.damage.clear(); cityRT.fires.clear();
   if (typeof meta === "undefined" || !meta || !meta.cityDamageV1 || meta.cityDamageV1.v !== 1) return;
-  const world = meta.cityDamageV1.worlds && meta.cityDamageV1.worlds[String(CITY.seed >>> 0)];
+  const wk = cityDamageWorldKey();
+  const world = meta.cityDamageV1.worlds && (meta.cityDamageV1.worlds[wk] || (typeof RG !== "undefined" && RG.key === "nexus" ? meta.cityDamageV1.worlds[String(CITY.seed >>> 0)] : null));
   if (!world || typeof world !== "object") return;
   if (Array.isArray(world.d)) for (const row of world.d.slice(0, CITY_DAMAGE_LIMIT)) {
     if (!Array.isArray(row) || row.length < 4) continue;

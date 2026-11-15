@@ -95,7 +95,19 @@ const FORCE_VACUUM_HEROES = [0, 3, 7, 10, 12, 14, 18, 20, 27, 39, 45, 49, 56, 57
 function hasInnateVacuum(cid) { return FORCE_VACUUM_HEROES.includes(cid); }
 
 const SWORD_HEROES = [0, 3, 14, 18, 19, 24, 32, 33, 37, 48, 50, 55, 67, 71, 76, 77, 78, 79];
+const NON_BLADE_ORBIT_IDS = [12, 16, 29, 35, 44, 73];
+const HYBRID_GUN_BLADE_IDS = [32, 33]; // #32 Master Chief (MA5B + Energy Sword), #33 Doom Slayer (Super Shotgun + Crucible)
 function isSwordWeapon(wpnId) { return SWORD_HEROES.includes(wpnId); }
+function isHybridGunBlade(wpnId) { return HYBRID_GUN_BLADE_IDS.includes(wpnId); }
+function isMeleeBladeWeapon(w) {
+  if (w === null || w === undefined) return false;
+  const id = typeof w === "number" ? w : w.id;
+  const st = typeof w === "object" ? w.style : (typeof CHAR_RAW !== "undefined" && CHAR_RAW[id] ? CHAR_RAW[id][6] : "");
+  return isSwordWeapon(id) || (st === "orbit" && !NON_BLADE_ORBIT_IDS.includes(id));
+}
+function isHybridGunMode(w) {
+  return !!w && isHybridGunBlade(w.id) && !(w.sf && w.sf.lit > 0.08);
+}
 
 function getHeroArmCap(cid) {
   if (cid === 55) return 4;

@@ -98,15 +98,22 @@ const CR_ROAD = {
   modern: ["asphalt", "walk", "paint"], neon: ["wet", "panel", "neon"], galactic: ["packed", "sandstone", "none"], coruscant: ["plate", "polished", "light"],
   starship: ["plate", "polished", "light"], colony: ["hazplate", "grate", "hazard"], frontier: ["dirt", "planks", "none"], western: ["dirt", "boardwalk", "none"],
   desert: ["packed", "stone", "none"], pharaoh: ["flag", "stone", "gold"], gothic: ["flag", "flag", "none"], wasteland: ["cracked", "walk", "faded"],
-  medieval: ["cobble", "flag", "none"], wizard: ["cobble", "flag", "none"]
+  medieval: ["cobble", "flag", "none"], wizard: ["cobble", "flag", "none"],
+  capsule: ["asphalt", "walk", "paint"], mesa: ["cracked", "walk", "paint"]
 };
 const CR_FAM = { modern: "earth", ruined: "earth", neon: "scifi", sleek: "scifi", clean: "scifi", industrial: "scifi", used: "scifi", rustic: "rustic", western: "rustic", medieval: "rustic", wizard: "rustic", spartan: "rustic", egyptian: "rustic", gothic: "rustic" };
 function crFam() { return CR_FAM[CITY.theme.fu.style] || "earth"; }
 
+// v16.0-s06-7: render tile cache key includes region profile AND Real Map place/scale
+function crCacheKey() {
+  const rk = typeof RG !== "undefined" ? (RG.real && typeof rmPlaceKey === "function" ? "real:" + rmPlaceKey() : RG.key) : "nexus";
+  return CITY.themeKey + "|" + CITY.seed + "|" + rk;
+}
+
 /* --- tile cache --------------------------------------------------------------- */
 function cityRenderReset() {
   CR.tiles.clear(); CR.roofs.clear(); CR.roofA.clear(); CR.decals.length = 0; CR.fogGen = -1; CR.pats.clear();
-  CR.key = CITY.themeKey + "|" + CITY.seed;
+  CR.key = crCacheKey();
 }
 // v14.1: mark tiles stale but keep drawing them until the re-bake lands (no flat-colour flashes when a car wakes up)
 function cityRenderRefresh(lx, ly, w, h) {
@@ -1237,7 +1244,7 @@ function cityRenderPrewarm(lx, ly, rad) {
 /* --- per-frame ground ------------------------------------------------------------ */
 function cityRenderGround(left, top, vw, vh) {
   CR.frame++;
-  if (CR.key !== CITY.themeKey + "|" + CITY.seed) cityRenderReset();
+  if (CR.key !== crCacheKey()) cityRenderReset();
   const S = CR.TS, ox = CITY.orx, oy = CITY.ory;
   const rx0 = Math.max(0, Math.floor((left + ox) / S)), rx1 = Math.floor((left + vw + ox) / S), ry0 = Math.max(0, Math.floor((top + oy) / S)), ry1 = Math.floor((top + vh + oy) / S);
   const pcx = (player.x + ox) / S - 0.5, pcy = (player.y + oy) / S - 0.5;

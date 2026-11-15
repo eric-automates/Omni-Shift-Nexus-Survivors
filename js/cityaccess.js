@@ -30,6 +30,7 @@ const ACC_MOB = {
   65: ["tele", "APPARATE"], 66: ["tele", "APPARATE"], 67: ["tele", "APPARATE"], 68: ["tele", "APPARATE"], 69: ["tele", "APPARATE"],
   70: ["jet", "DARK FLIGHT"], 71: ["tele", "ISTARI STRIDE"], 72: ["tele", "ISTARI STRIDE"], 73: ["tele", "SLING-RING PORTAL"], 74: ["jet", "HEX FLIGHT"],
   75: ["tele", "SHADOW STEP"], 76: ["smash", "FORCE CRUSH"], 77: ["leap", "FORCE FLIP"], 78: ["leap", "FORCE LEAP"], 79: ["leap", "ATARU FLIP"],
+  81: ["leap", "FORCE LEAP"], 82: ["leap", "FORCE LEAP"], 83: ["leap", "FORCE LEAP"],
   84: ["jet", "KI FLIGHT"], 85: ["jet", "KI FLIGHT"], 86: ["jet", "KI FLIGHT"], 87: ["jet", "KI FLIGHT"], 88: ["jet", "KI FLIGHT"]
 };
 const ACC_MOB_DESC = {
@@ -46,7 +47,7 @@ function accMob(cid) {
   if (typeof CUSTOM_CID !== "undefined" && cid === CUSTOM_CID) {
     if (player && player.flying) return ["jet", "JETPACK"];
     const sp = typeof getHeroDashSpec === "function" ? getHeroDashSpec(cid) : null, st = sp && sp.style;
-    if (st === "blink") return ["tele", "BLINK"]; if (st === "jetpack" || st === "jetpackSlam") return ["jet", "JETPACK"];
+    if (st === "blink" || st === "apparitionBlink") return ["tele", "APPARATE"]; if (st === "jetpack" || st === "jetpackSlam") return ["jet", "JETPACK"];
     if (st === "yodaFlip" || st === "saberRush" || st === "maulSpin" || st === "vaderLunge" || st === "vaapad") return ["leap", "FORCE LEAP"];
     return ["climb", "SCRAMBLE"];
   }
