@@ -70,7 +70,7 @@ function scnRenderSection() {
   window.locRender = function () { const r = _lr.apply(this, arguments); try { scnRenderSection(); } catch (e) { if (window.trackProgress) window.trackProgress("scenario section: " + e.message, true); } return r; };
   if (typeof locLabel === "function") {
     const _ll = locLabel;
-    window.locLabel = function () { const s = _ll.apply(this, arguments), Q = typeof meta !== "undefined" && meta.region && meta.region.scen; return Q && Q.mode && Q.mode !== "survivors" ? s + " · " + SCN_MODES[Q.mode].icon : s; };
+    window.locLabel = function () { const s = _ll.apply(this, arguments), Q = typeof meta !== "undefined" && meta.region && meta.region.scen, M = Q && Q.mode && Q.mode !== "survivors" ? SCN_MODES[Q.mode] : null; return M ? s + " · " + M.icon : s; };
   }
 })();
 
@@ -142,9 +142,11 @@ function scnLights(push) {   // push(worldX, worldY, radiusPx, strength, kind)
       }
     }
   }
-  // headlights of anything with a driver
+  // headlights of anything with a driver (including the player's driven vehicle VEH.me)
   if (typeof VEH !== "undefined") for (const v of VEH.list) {
-    if (!v.drv && !(player.inVehicle === 3 && VEH.ride === v) || v.dead) continue;
+    const isPlayerVeh = !!(player && player.inVehicle === 3 && VEH.me === v);
+    if ((!v.drv && !isPlayerVeh) || v.dead || v.wreck) continue;
+    if (v.flyAir && (v.flyAlt || 0) > 20) continue;
     if (Math.abs(v.x - player.x) > 1600 || Math.abs(v.y - player.y) > 1200) continue;
     const fx = Math.cos(v.ang), fy = Math.sin(v.ang);
     const hk = Math.max(0.5, v.k || 1);   // v14.3: a 1:3 car throws a shorter beam

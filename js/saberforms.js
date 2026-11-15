@@ -156,6 +156,7 @@ for (let i = 0; i < 48; i++) sfGlobal.near.push({ j: -1, d: 0, a: 0, r: 11 });
 
 function saberEngineOwns(w) {
   if (sfGlobal.disabled || !w) return false;
+  if (typeof isMeleeBladeWeapon === "function") return isMeleeBladeWeapon(w);
   return (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44, 73].includes(w.id));
 }
 function saberEngineActive() { return !sfGlobal.disabled; }
@@ -189,10 +190,11 @@ function saberFormLabel(info) {
 }
 
 function sfNewState(w) {
+  const isHybrid = !!(w && typeof isHybridGunBlade === "function" && isHybridGunBlade(w.id));
   return {
     ph: SF_PH_GUARD, t: 0, dur: 0, mv: null, q: [], ci: 0, side: 1, tgt: -1, tUid: 0, ta: 0, jit: 0,
     arm: 0, blade: 0, reach: 8, len: 0, a0: { arm: 0, blade: 0, reach: 8, len: 1 }, a1: { arm: 0, blade: 0, reach: 8, len: 1 },
-    dArm: 0, dBlade: 0, lunge: 0, lungeTgt: 0, lungeAng: 0, lit: 0, idle: 0, introDone: false,
+    dArm: 0, dBlade: 0, lunge: 0, lungeTgt: 0, lungeAng: 0, lit: 0, idle: isHybrid ? 99 : 0, introDone: false,
     cdSweep: 0, cdLeap: 0, cdPull: 0, nMoves: 0, struck: false, stage: -1, key: "", init: false,
     tr: new Float32Array(SF_TR_N * 6), trHead: 0, trN: 0, pv: false, pHX: 0, pHY: 0, pAng: 0, pLen: 0,
     angSpd: 0, side0: 4.5, dbl: false, pull: null, parryAng: 0, riposte: false, grip: 2, off: "",
@@ -321,14 +323,24 @@ function saberEngineStep(w, slot, nSlots, simDt, col) {
   let nearest = 1e9, tgtNear = -1;
   for (let k = 0; k < sfGlobal.nearN; k++) { const o = sfGlobal.near[k]; if (o.d < nearest) { nearest = o.d; tgtNear = k; } }
   const stow = (player.saberStowT || 0) > 0;                     // v13: Yoda puts his blade away for the Will of the Force
+  const hybridBlade = typeof isHybridGunBlade === "function" && isHybridGunBlade(w.id);
+  const hybridMeleeR = 78 * (player.area || 1);
   // v14.2: steel is never "switched off" — IN HAND (default) keeps it drawn; SHEATHE mode scabbards it (js/sheathe.js)
   const steelHand = SF_STEEL_IDS.includes(w.id) && (typeof sheatheBladeMode !== "function" || sheatheBladeMode() === "hand");
-  const wantLit = steelHand || (!stow && (nearest < 260 || sfGlobal.boltNear || player.whirlwindTimer > 0 || sfGlobal.fanT > 0 || (player.invulnT > 0 && nearest < 400)));
+  const wantLit = hybridBlade
+    ? (!stow && (nearest < hybridMeleeR || player.whirlwindTimer > 0 || (typeof gloryState !== "undefined" && !!gloryState.exec)))
+    : (steelHand || (!stow && (nearest < 260 || sfGlobal.boltNear || player.whirlwindTimer > 0 || sfGlobal.fanT > 0 || (player.invulnT > 0 && nearest < 400))));
   if (wantLit) st.idle = 0; else st.idle += simDt;
   if (stow) st.idle = Math.max(st.idle, 3.5);
   const prevLit = st.lit;
   // v14.2: js/saga.js draws the hilt from the belt and ignites it in each character's own film style
-  if (typeof sagaLitStep === "function" && sagaLitStep(w, st, wantLit, stow, simDt, slot)) { /* driven by the choreography */ }
+  if (hybridBlade) {
+    // Hybrid gun+blade heroes (#32 Master Chief MA5B/Energy Sword, #33 Doom Slayer Super Shotgun/Crucible)
+    // hold their firearm at medium/long range and snap out their energy blade at close quarters.
+    if (wantLit || st.idle < 0.45) st.lit = Math.min(1, st.lit + simDt / 0.10);
+    else st.lit = Math.max(0, st.lit - simDt / 0.14);
+    st.hand = st.lit;
+  } else if (typeof sagaLitStep === "function" && sagaLitStep(w, st, wantLit, stow, simDt, slot)) { /* driven by the choreography */ }
   else if (wantLit || st.idle < 3.0) st.lit = Math.min(1, st.lit + simDt / 0.16);
   else st.lit = Math.max(0, st.lit - simDt / (stow ? 0.1 : 0.26));
   if (prevLit < 0.05 && st.lit >= 0.05 && slot === 0) {

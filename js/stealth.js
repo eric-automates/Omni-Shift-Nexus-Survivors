@@ -20,7 +20,7 @@
 const ST_WPN = {};
 (function () {
   const set = (ids, L0, cls, sup) => ids.forEach(i => { ST_WPN[i] = [L0, cls, sup]; });
-  set([0, 3, 14, 18, 24, 29, 30, 37, 42, 48, 50, 55, 71, 76, 77, 78, 79], 72, "x", 0);   // sabers, blades, claws (and Trunks's sword)
+  set([0, 3, 14, 18, 24, 29, 30, 37, 42, 48, 50, 55, 71, 76, 77, 78, 79, 81, 82, 83], 72, "x", 0);   // sabers, blades, claws (and Trunks's sword)
   set([17], 96, "x", 0);                                     // Reaver reactor buzzsaws
   set([1, 5, 6, 54], 140, "b", 0); set([2], 145, "b", 0);    // blasters & bowcaster
   set([7, 9], 136, "e", 0);                                  // Goa'uld staff weapons
@@ -206,7 +206,9 @@ function stLook(j, el) {
     if (alert) { ST.lost[j] = 0; ST.tx[j] = player.x; ST.ty[j] = player.y; ST.lkx = player.x; ST.lky = player.y; ST.lkT = runTime; return true; }
     const k = 1 - d / range, rate = 0.3 + 2.6 * k * k + (d < 90 ? 3 : 0);
     ST.sus[j] += rate * el;
-    ST.face[j] = Math.atan2(dy, dx) * 0.25 + ST.face[j] * 0.75;
+    const targetFace = Math.atan2(dy, dx);
+    const fDiff = Math.atan2(Math.sin(targetFace - ST.face[j]), Math.cos(targetFace - ST.face[j]));
+    ST.face[j] += fDiff * 0.25;
     if (ST.sus[j] >= 1) stAlert(j, player.x, player.y, true);
     else if (ST.sus[j] > 0.38 && ST.state[j] !== ST_INVEST) { ST.state[j] = ST_INVEST; ST.t[j] = 0; ST.tx[j] = player.x; ST.ty[j] = player.y; ST.urg[j] = 0; ST.path[j] = null; ST.icon[j] = 1.4; ST.iconK[j] = 1; }
     return true;
@@ -627,6 +629,7 @@ function stealthToggleSuppressor() {
   if (typeof sfx === "function") sfx(ST.suppressed ? 900 : 600, ST.suppressed ? 1300 : 400, 0.06, "square", 0.06);
 }
 window.addEventListener("keydown", e => {
+  if (typeof uiTypingInField === "function" && uiTypingInField(e)) return;
   if (e.repeat || !runActive || runPaused) return;
   if (e.code === "KeyV") stealthToggleSuppressor();
 });

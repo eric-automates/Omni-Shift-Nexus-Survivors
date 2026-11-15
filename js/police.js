@@ -255,7 +255,7 @@ function pdLeftStop() {
 // Use the existing bounded city pathfinder when a wall blocks the direct route.
 function pdWalkOfficer(O, tx, ty, dt, speed, arrive) {
   const distance = Math.hypot(tx - O.x, ty - O.y);
-  if (distance <= arrive + .05) { O.walk = 0; return true; }
+  if (distance <= arrive + .05) { O.walk = 0; O.walkBlend = 0; return true; }
   let gx = tx, gy = ty;
   O.routeT = Math.max(0, (O.routeT || 0) - dt);
   if (typeof stClearLine === "function" && typeof stFindPath === "function" && !stClearLine(O.x, O.y, tx, ty, 5)) {
@@ -269,13 +269,19 @@ function pdWalkOfficer(O, tx, ty, dt, speed, arrive) {
     }
   } else O.path = null;
   const dx = gx - O.x, dy = gy - O.y, d = Math.hypot(dx, dy);
-  if (d < .01) { O.walk = 0; return false; }
+  if (d < .01) { O.walk = 0; O.walkBlend = 0; return false; }
   const step = Math.min(speed * dt, d, distance - arrive), ox = O.x, oy = O.y;
   const q = cityResolve(ox + dx / d * step, oy + dy / d * step, 7, false);
   O.x = q[0]; O.y = q[1]; O.face = Math.atan2(dy, dx);
   const moved = Math.hypot(O.x - ox, O.y - oy);
   O.stuck = step > .5 && moved < step * .3 ? (O.stuck || 0) + dt : Math.max(0, (O.stuck || 0) - dt);
-  O.walk = moved > .1 ? O.walk + dt * 9 : 0;
+  if (moved > .1) {
+    const oSpd = moved / Math.max(1e-4, dt);
+    O.walk = ((O.walk || 0) + dt * Math.min(11, Math.max(2.8, oSpd * 0.11))) % (Math.PI * 200);
+    O.walkBlend = Math.min(1, (O.walkBlend || 0) + dt * 9);
+  } else {
+    O.walkBlend = Math.max(0, (O.walkBlend || 0) - dt * 11);
+  }
   return false;
 }
 function pdOfficerDoor(u) {
@@ -288,12 +294,12 @@ function pdStep(dt) {
   if (PD.st === "jail") return;
   pdWatch(dt);
   pdUnitStep(dt);
-  const me = VEH.me, u = PD.unit, k = pdK(), VPXK = 32 * k;
+  const me = VEH.me, u = PD.unit, k = pdK(), VPXK = 32 * k, airAlt = player ? (player.flyAlt || 0) : 0;
   if (PD.st === "chase" || PD.st === "flee") {
     PD.chaseT += dt;
     const mph = me ? pdMph(me) : 0, target = me || player;
     const pursuer = PD.off || u;
-    const near = pursuer && Math.hypot(pursuer.x - target.x, pursuer.y - target.y) < 22 * VPXK + (me ? me.D : 0);
+    const near = airAlt < 4 && pursuer && Math.hypot(pursuer.x - target.x, pursuer.y - target.y) < 22 * VPXK + (me ? me.D : 0);
     // A fleeing suspect does not become a fresh speeding ticket just by stopping.
     if (PD.st === "chase" && near && mph < 3 && me) { PD.stopT += dt; if (PD.stopT > 0.9) pdPullOver(); } else PD.stopT = Math.max(0, PD.stopT - dt);
     if (PD.st === "flee") {
@@ -303,19 +309,19 @@ function pdStep(dt) {
         // A car fleeing at speed: return to the parked cruiser first; do not teleport aboard.
         if (u && me && mph > 9) O.returning = true;
         // If the suspect gets out close by, an officer can pursue on foot instead.
-        if (!me && Math.hypot(O.x - player.x, O.y - player.y) < 10 * VPXK) O.returning = false;
+        if (!me && airAlt < 4 && Math.hypot(O.x - player.x, O.y - player.y) < 10 * VPXK) O.returning = false;
         if (O.returning && u) {
           const door = pdOfficerDoor(u);
           if (pdWalkOfficer(O, door[0], door[1], dt, 70, 3)) {
             PD.off = null; u.parked = false; u.mode = "join"; u.ti = 0;
           }
-        } else if (!me) pdWalkOfficer(O, player.x, player.y, dt, 70, 45);
+        } else if (!me && airAlt < 4) pdWalkOfficer(O, player.x, player.y, dt, 70, 45);
       }
     }
-    if (PD.st === "chase" && PD.chaseT > 16 && mph > 15) pdFlee();
+    if (PD.st === "chase" && ((PD.chaseT > 16 && mph > 15) || airAlt > 6)) pdFlee();
     // Losing sight is timed against the actual pursuer, not an empty parked car.
     if (pursuer) {
-      const far = Math.hypot(pursuer.x - target.x, pursuer.y - target.y) > 110 * VPXK;
+      const far = airAlt > 60 || Math.hypot(pursuer.x - target.x, pursuer.y - target.y) > 110 * VPXK;
       const seen = !far && pdSight(pursuer.x, pursuer.y, target.x, target.y);
       if (!seen) PD.lostT += dt; else PD.lostT = Math.max(0, PD.lostT - dt * 2);
       if (PD.lostT > (PD.st === "flee" ? 10 : 7)) {
@@ -326,7 +332,7 @@ function pdStep(dt) {
       }
     }
   } else if (PD.st === "stop") {
-    if ((me && pdMph(me) > 9) || pdLeftStop()) return pdFlee();
+    if (airAlt > 3 || (me && pdMph(me) > 9) || pdLeftStop()) return pdFlee();
     // a cruiser that can't line up neatly (a tight spot, a curve) just stops where it is after a few seconds
     PD.parkT = (PD.parkT || 0) + dt;
     if (u && !u.parked && PD.parkT > 4 && Math.hypot(u.x - (me || player).x, u.y - (me || player).y) < 14 * VPXK + (me ? me.D : 0)) { u.parked = true; u.v = 0; }
@@ -340,7 +346,7 @@ function pdStep(dt) {
       pdExitOfficer(); PD.st = "walk";
     }
   } else if (PD.st === "walk" || PD.st === "cover") {
-    if ((me && pdMph(me) > 9) || pdLeftStop()) return pdFlee();
+    if (airAlt > 3 || (me && pdMph(me) > 9) || pdLeftStop()) return pdFlee();
     if (pdActiveFight()) {
       if (PD.st !== "cover") { PD.st = "cover"; pdBanner("🚔 OFFICER TAKING COVER", "Active fight — the traffic stop can wait"); }
       PD.quietT = 0;
@@ -358,7 +364,7 @@ function pdStep(dt) {
     // and return-to-car; a routine stop must not walk through a building.
     if (!O) { pdEnd(true); return; }
     const ox = O.x, oy = O.y;
-    if (pdWalkOfficer(O, tx, ty, dt, 62, 3)) { O.face = Math.atan2(tgt.y - O.y, tgt.x - O.x); O.walk = 0; pdTalk(); }
+    if (pdWalkOfficer(O, tx, ty, dt, 62, 3)) { O.face = Math.atan2(tgt.y - O.y, tgt.x - O.x); O.walk = 0; O.walkBlend = 0; pdTalk(); }
     else {
       O.approachStill = Math.hypot(O.x - ox, O.y - oy) < .05 ? (O.approachStill || 0) + dt : Math.max(0, (O.approachStill || 0) - dt * 2);
       if (O.approachStill > 12) {
@@ -731,7 +737,8 @@ function pdDraw(g, l, t, vw, vh) {
   const O = PD.off;
   if (O && typeof erBodyHuman === "function") {
     g.save(); g.translate(O.x, O.y); g.scale(PD_SPEC.s, PD_SPEC.s);
-    try { erBodyHuman(g, PD_SPEC, 424242, O.face, O.walk, 0, false, false); } catch (e) { g.fillStyle = "#1a237e"; g.beginPath(); g.arc(0, 0, 6, 0, 7); g.fill(); }
+    const oWb = O.walkBlend != null ? O.walkBlend : (O.walk > 0 ? 1 : 0);
+    try { erBodyHuman(g, PD_SPEC, 424242, O.face, O.walk || 0, 0, false, false, oWb); } catch (e) { g.fillStyle = "#1a237e"; g.beginPath(); g.arc(0, 0, 6, 0, 7); g.fill(); }
     g.restore();
   }
 }

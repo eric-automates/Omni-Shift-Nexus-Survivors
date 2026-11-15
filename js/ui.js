@@ -14,12 +14,20 @@ const UI_VISOR_DEFS = [
   { id: 4, short: "PRESCIENCE", name: "Force / Ki / Matrix Prescience", desc: "Prophetic Force, ki & construct target lock with vector prediction (+10% Crit)." }
 ];
 
+function uiTypingInField(e) {
+  const t = e && e.target;
+  if (!t) return false;
+  const tag = t.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!t.isContentEditable;
+}
+window.uiTypingInField = uiTypingInField;
+
 function ensurePlayerVisors() {
   if (typeof player === "undefined" || !player) return;
   if (!Array.isArray(player.unlockedVisors)) {
     const startVisor = (typeof player.activeVisor === "number" && player.activeVisor > 0)
       ? player.activeVisor
-      : ([1, 54].includes(player.cid) ? 1 : ([40, 65, 76].includes(player.cid) ? 2 : ([29, 59, 77].includes(player.cid) ? 3 : ([39, 56, 69, 71, 73, 74, 78, 79].includes(player.cid) ? 4 : 0))));
+      : ([1, 54].includes(player.cid) ? 1 : ([40, 65, 76, 82].includes(player.cid) ? 2 : ([29, 59, 77].includes(player.cid) ? 3 : ([39, 56, 69, 71, 73, 74, 78, 79, 81, 83].includes(player.cid) ? 4 : 0))));
     player.unlockedVisors = startVisor > 0 ? [startVisor] : [];
     if (typeof player.activeVisor !== "number") player.activeVisor = startVisor;
   }
@@ -60,7 +68,7 @@ async function runDynamicEOFScan() {
   }
 }
 
-function checkLoadedScripts() {
+function getScriptLoadDiagnostics() {
   const checks = [
     ["chaos.js", typeof ChaosMath !== "undefined"], ["data-factions.js", typeof FACTIONS !== "undefined"],
     ["data-heroes.js", typeof CHAR_RAW !== "undefined"], ["data-relics.js", typeof RELICS_DB !== "undefined"],
@@ -75,22 +83,40 @@ function checkLoadedScripts() {
     ["citygen.js", typeof cityGenInit === "function"], ["cityworld.js", typeof cityCircleBlocked === "function"],
     ["citythemes.js", typeof cityApplyTheme === "function"], ["cityrender.js", typeof cityRenderGround === "function"],
     ["stealth.js", typeof stealthEnemyStep === "function"], ["enemylook.js", typeof drawEnemyDetailed === "function"],
-    ["cityplay.js", typeof cityRunStart === "function"], ["vision.js", typeof visionRenderWorld === "function"],
+    ["cityplay.js", typeof cityRunStart === "function"], ["citydamage.js", typeof cityDamageMaterial === "function"], ["vision.js", typeof visionRenderWorld === "function"],
     ["minimap.js", typeof mapOpen === "function"],
     ["sense.js", typeof senseRenderScreen === "function"], ["force.js", typeof forceReset === "function"],
     ["vehicles.js", typeof vehStepAll === "function"], ["convoy.js", typeof convoyReset === "function"],
     ["releaseprofile.js", typeof v15FeatureEnabled === "function"], ["jobcareer.js", typeof jcOffer === "function"], ["jobvehicle.js", typeof jcLoanRequest === "function"], ["jobpatrol.js", typeof pdpStep === "function"],
+    ["jobdetective.js", typeof jdRememberWitness === "function"], ["jobfire.js", typeof j04CareerRank === "function"], ["jobtactical.js", typeof j03CareerRank === "function"],
     ["cityaccess.js", typeof accReset === "function"], ["hudlayout.js", typeof hudPreview === "function"],
     ["sheathe.js", typeof sheatheDraw === "function"], ["heroreg.js", typeof heroRegister === "function"], ["saga.js", typeof sagaLitStep === "function"], ["weaponart.js", typeof waWand === "function"],
     ["regiongen.js", typeof regionGenerate === "function"], ["regionsites.js", typeof rgTownBays === "function"], ["regionart.js", typeof rgBake === "function"], ["regionworlds.js", typeof rgWater === "function"], ["location.js", typeof locOpen === "function"], ["locals.js", typeof enemySpecJ === "function"],
     ["realdata.js", typeof rmMvt === "function"], ["realgen.js", typeof rmGenBlock === "function"], ["realart.js", typeof rmBake === "function"], ["realui.js", typeof rmPreload === "function"],
-    ["agefilter.js", typeof ageInfoHTML === "function"], ["items.js", typeof itSearch === "function"], ["scenario.js", typeof scnRunStart === "function"], ["traffic.js", typeof trfStep === "function"], ["police.js", typeof pdStep === "function"], ["gunart.js", typeof gaDraw === "function"], ["gunaudio.js", typeof gauShot === "function"], ["dualaim.js", typeof dualAimTarget === "function"], ["actionui.js", typeof actFire === "function"], ["jobcore.js", typeof jobOffer === "function"], ["jobroute.js", typeof jobFindSite === "function"], ["jobdispatch.js", typeof jdOpen === "function"], ["jobemt.js", typeof j05CareerRank === "function"], ["townsfolk.js", typeof tfStep === "function"], ["economy.js", typeof ecoHourTick === "function"], ["apoc.js", typeof apocTag === "function"], ["flight.js", typeof flyStep === "function"], ["kisurge.js", typeof kiITOpen === "function"], ["rivalchase.js", typeof rvcStep === "function"]
+    ["agefilter.js", typeof ageInfoHTML === "function"], ["items.js", typeof itSearch === "function"], ["scenario.js", typeof scnRunStart === "function"], ["traffic.js", typeof trfStep === "function"], ["police.js", typeof pdStep === "function"], ["gunart.js", typeof gaDraw === "function"], ["gunaudio.js", typeof gauShot === "function"], ["dualaim.js", typeof dualAimTarget === "function"], ["actionui.js", typeof actFire === "function"], ["jobcore.js", typeof jobOffer === "function"], ["jobroute.js", typeof jobFindSite === "function"], ["jobdispatch.js", typeof jdOpen === "function"], ["jobemt.js", typeof j05CareerRank === "function"], ["townsfolk.js", typeof tfStep === "function"], ["economy.js", typeof ecoHourTick === "function"], ["apoc.js", typeof apocTag === "function"], ["flight.js", typeof flyStep === "function"], ["kisurge.js", typeof kiITOpen === "function"], ["rivalchase.js", typeof rvcStep === "function"], ["ui.js", typeof renderHealth === "function"]
   ];
   const failed = checks.filter(c => !c[1]).map(c => c[0]);
-  if (failed.length > 0) {
+  const domScripts = (typeof document !== "undefined")
+    ? [...document.querySelectorAll("script[src]")].map(sc => sc.getAttribute("src").split("?")[0]).filter(f => /^js\/[\w.-]+\.js$/.test(f)).map(f => f.slice(3))
+    : [];
+  const checkedSet = new Set(checks.map(c => c[0]));
+  const unchecked = domScripts.filter(f => !checkedSet.has(f));
+  return {
+    totalChecked: checks.length,
+    passedCount: checks.length - failed.length,
+    domCount: domScripts.length,
+    failed,
+    unchecked,
+    ok: failed.length === 0 && unchecked.length === 0
+  };
+}
+
+function checkLoadedScripts() {
+  const diag = getScriptLoadDiagnostics();
+  if (diag.failed.length > 0) {
     const box = document.getElementById("bootDiag");
-    if (box) { box.style.color = "#ff5252"; box.textContent = "FAILED TO PARSE: " + failed.join(", "); }
-    if (window.trackProgress) window.trackProgress("Failed to parse: " + failed.join(", "), true);
+    if (box) { box.style.color = "#ff5252"; box.textContent = "FAILED TO PARSE: " + diag.failed.join(", "); }
+    if (window.trackProgress) window.trackProgress("Failed to parse: " + diag.failed.join(", "), true);
     return false;
   }
   return true;
@@ -844,6 +870,8 @@ function updateHUD() {
 function showScreen(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   if (id) document.getElementById(id).classList.add("active");
+  const ui = document.getElementById("ui");
+  if (ui) ui.classList.toggle("modal-active", !!id);
 }
 document.querySelectorAll("[data-back]").forEach(b => { b.onclick = () => showScreen(b.getAttribute("data-back")); });
 
@@ -857,7 +885,12 @@ function updateMenuUI() {
   document.getElementById("menuSelStage").textContent = campNode ? `🗺️ ${campaignNodeLabel(campNode)}` : `Stage ${stg.id}: ${f.worlds[stg.tier]} ${stg.suffix}`;
   document.getElementById("menuDiff").textContent = `Difficulty: ${df.name}`;
   const ma = document.getElementById("menuAge"); if (ma && typeof AGE !== "undefined") { ma.textContent = `🛡️ Content: ${AGE_NAMES[AGE.level]}${AGE.pin ? " 🔒" : ""}`; ma.style.borderColor = AGE.level ? "#00e676" : ""; }
-  const gc = document.getElementById("goChars"); if (gc) gc.textContent = `CHARACTER ROSTER (80 + YOUR HERO)`;
+  if (typeof heroRosterLabels === "function") {
+    heroRosterLabels();
+  } else {
+    const n = typeof heroRosterCount === "function" ? heroRosterCount() : (Array.isArray(CHAR_RAW) ? CHAR_RAW.filter((r, i) => r && i !== 80).length : 0);
+    const gc = document.getElementById("goChars"); if (gc) gc.textContent = `CHARACTER ROSTER (${n} + YOUR HERO)`;
+  }
   const gcr = document.getElementById("goCreate");
   if (gcr) gcr.textContent = (typeof customHeroCreated === "function" && customHeroCreated()) ? `✨ EDIT YOUR HERO: ${CHAR_RAW[80][3].toUpperCase()}` : "✨ CREATE YOUR OWN HERO";
 }
@@ -986,7 +1019,7 @@ function renderOpts() {
     ["Floating Damage / Speech", opts.dmgNums ? "ON" : "OFF", () => { opts.dmgNums = !opts.dmgNums; }],
     ["Screen Flash Effects", opts.flash ? "ON" : "OFF", () => { opts.flash = !opts.flash; }],
     ["Master Synth Volume", Math.round(opts.vol * 100) + "%", () => { opts.vol = opts.vol >= 0.8 ? 0 : +(opts.vol + 0.2).toFixed(2); }],
-    ["HUD Handedness Layout", opts.hudFlip ? "LEFT-HANDED" : "STANDARD", () => { opts.hudFlip = !opts.hudFlip; if (typeof HUDL !== "undefined") HUDL.dirty = true; }],
+    ["HUD Handedness Layout", opts.hudFlip ? "LEFT-HANDED" : "STANDARD", () => { opts.hudFlip = !opts.hudFlip; const h = document.getElementById("hud"); if (h) h.classList.toggle("flip", !!opts.hudFlip); if (typeof HUDL !== "undefined") HUDL.dirty = true; }],
     ["🧩 HUD Layout, Priority & Sizes", (opts.hud && opts.hud.auto === false ? "AUTO-FIT OFF" : "AUTO-FIT ON") + " · " + Math.round(((opts.hud && opts.hud.scale) || 1) * 100) + "%", () => { if (typeof hudOptsOpen === "function") setTimeout(hudOptsOpen, 0); }],
     ["Vehicle Steering", opts.vehSteer === "classic" ? "CLASSIC (W/S THROTTLE · A/D STEER)" : "POINT-TO-STEER (PUSH WHERE YOU WANT TO GO)", () => { opts.vehSteer = opts.vehSteer === "classic" ? "point" : "classic"; }],
     ["Vehicle Speed Units", opts.vehUnits === "kmh" ? "KM/H" : "MPH", () => { opts.vehUnits = opts.vehUnits === "kmh" ? "mph" : "kmh"; }],
@@ -1006,9 +1039,49 @@ function renderOpts() {
 async function renderHealth() {
   await runDynamicEOFScan();
   const auditHTML = eofAuditResults.map(r => `<div style="color:${r.ok ? "#00e676" : "#ff5252"}">• ${r.file}: ${r.status}</div>`).join("");
+  const eofOk = eofAuditResults.filter(r => r.ok).length;
+  const eofTotal = eofAuditResults.length;
+  const scriptDiag = typeof getScriptLoadDiagnostics === "function" ? getScriptLoadDiagnostics() : null;
+  const heroDiag = typeof heroRegistryDiagnostics === "function" ? heroRegistryDiagnostics() : null;
+
+  let heroRowHTML = "";
+  if (heroDiag) {
+    const pct = heroDiag.canonicalCount > 0 ? Math.round((heroDiag.verifiedCanonical / heroDiag.canonicalCount) * 100) : 0;
+    const statusCol = heroDiag.ok ? "#00e676" : "#ff5252";
+    const statusWord = heroDiag.ok ? "VERIFIED" : "DEFECT DETECTED";
+    const customState = heroDiag.customRegistered
+      ? (heroDiag.customCreated ? "Registered · Custom Hero Saved" : "Registered · Default Creator Slot")
+      : "MISSING";
+    const issues = [];
+    if (heroDiag.holes.length > 0) issues.push(`Sparse holes: #${heroDiag.holes.join(", #")}`);
+    if (heroDiag.idMismatches.length > 0) issues.push(`ID mismatches: ${heroDiag.idMismatches.map(m => `slot ${m.slot}!=#${m.rowId}`).join(", ")}`);
+    if (heroDiag.missingByHero.length > 0) {
+      issues.push(`Incomplete hero data: ${heroDiag.missingByHero.slice(0, 6).map(h => `#${h.cid} ${h.name} (${h.missing.join("/")})`).join("; ")}${heroDiag.missingByHero.length > 6 ? "…" : ""}`);
+    }
+    const issueLine = issues.length > 0 ? `<div style="color:#ff8a80;margin-top:3px">${issues.join(" • ")}</div>` : "";
+    heroRowHTML = `<div class="health-row" id="healthHeroRow"><b style="color:${statusCol}">Canonical Hero Registry: ${heroDiag.verifiedCanonical}/${heroDiag.canonicalCount} Loaded (${pct}% ${statusWord})</b><br>` +
+      `Canonical IDs: ${heroDiag.rangesLabel} (${heroDiag.baseCount} base + ${heroDiag.extendedCount} registered) • Creator Slot #${heroDiag.customCid}: ${customState} • Total Slots: ${heroDiag.loadedTotalSlots}/${heroDiag.expectedTotalSlots} • ${heroDiag.biomesCount} Biomes` +
+      `${issueLine}<div class="meter"><div class="meter-fill" style="width:${pct}%;background:${statusCol}"></div></div></div>`;
+  } else {
+    heroRowHTML = `<div class="health-row" id="healthHeroRow"><b style="color:#ff5252">Canonical Hero Registry: Diagnostics helper unavailable (js/heroreg.js)</b><div class="meter"><div class="meter-fill" style="width:0%;background:#ff5252"></div></div></div>`;
+  }
+
+  let loaderRowHTML = "";
+  if (scriptDiag) {
+    const sPct = scriptDiag.totalChecked > 0 ? Math.round((scriptDiag.passedCount / scriptDiag.totalChecked) * 100) : 0;
+    const sCol = (scriptDiag.ok && eofOk === eofTotal) ? "#00e676" : "#ff5252";
+    const extraWarn = [];
+    if (scriptDiag.failed.length > 0) extraWarn.push(`Failed: ${scriptDiag.failed.join(", ")}`);
+    if (scriptDiag.unchecked.length > 0) extraWarn.push(`Unchecked: ${scriptDiag.unchecked.join(", ")}`);
+    loaderRowHTML = `<div class="health-row" id="healthLoaderRow"><b style="color:${sCol}">Module Loader & EOF Integrity: ${scriptDiag.passedCount}/${scriptDiag.totalChecked} Runtime Checks • ${eofOk}/${eofTotal} EOF Clean</b>` +
+      (extraWarn.length > 0 ? `<br><span style="color:#ff8a80">${extraWarn.join(" • ")}</span>` : `<br>DOM Script Tags Matched: ${scriptDiag.domCount}/${scriptDiag.totalChecked}`) +
+      `<div class="meter"><div class="meter-fill" style="width:${sPct}%;background:${sCol}"></div></div></div>`;
+  }
+
   document.getElementById("healthBox").innerHTML = `
+    ${heroRowHTML}
+    ${loaderRowHTML}
     <div class="health-row"><b>Dynamic EOF & Trailing-Line Paste Audit:</b><br>${auditHTML}</div>
-    <div class="health-row"><b>80-Hero Stature Voxel, 11 Biomes, Biographical Stances & Dash Engine: 100% VERIFIED</b><br>Zero Shared Placeholders Across All 80 Heroes (#00-#79)<div class="meter"><div class="meter-fill"></div></div></div>
     <div class="health-row"><b>Live Render Load & Gore Telemetry:</b><br>${fpsCount} FPS • ${frameMs}ms/frame • Corpses: ${activeCorpseCount}/${opts.persistCount}<div class="meter"><div class="meter-fill"></div></div></div>`;
 }
 
@@ -1095,10 +1168,13 @@ document.getElementById("btnZoomOut").onclick = () => { opts.zoom = Math.max(0.5
 document.getElementById("btnPause").onclick = (e) => {
   e.stopPropagation();
   if (!runActive) return;
+  const scrLvl = document.getElementById("scrLevel"), pBar = document.getElementById("pauseBar");
+  // Never wipe an active mandatory Level-Up card pick if Pause is clicked while picking upgrades.
+  if (scrLvl && scrLvl.classList.contains("active") && pBar && pBar.style.display === "none") return;
   runPaused = true;
   document.getElementById("lvlTitle").textContent = "RUN PAUSED";
   document.getElementById("lvlGrid").innerHTML = "";
-  document.getElementById("pauseBar").style.display = "flex";
+  pBar.style.display = "flex";
   renderWeaponToggler(); drawRangeTarget(selRangeTab); showScreen("scrLevel");
 };
 // A browser can lose pointer-up/keyup when a call, app switch, file picker or
@@ -1157,7 +1233,10 @@ function showRunSummary(sm) {
   lastRunSummary = sm;
   const scr = document.getElementById("scrSummary");
   if (!scr) { showScreen("scrMain"); updateMenuUI(); return; }
-  const titles = { death: "☠ KIA — RUN OVER", quit: "⏏ RUN ENDED — EXTRACTED" };
+  const strongAge = typeof AGE !== "undefined" && AGE.level === 2;
+  const titles = strongAge
+    ? { death: "★ RUN COMPLETE — RECOVERING", quit: "⏏ RUN ENDED — EXTRACTED" }
+    : { death: "☠ KIA — RUN OVER", quit: "⏏ RUN ENDED — EXTRACTED" };
   document.getElementById("sumTitle").textContent = (sm.cleared ? "★ SECTOR CLEARED • " : "") + (titles[sm.reason] || "RUN OVER");
   let subTxt;
   if (sm.cleared && sm.campaignLabel) subTxt = "District secured: new routes are charted on the Galactic Expedition Map.";
@@ -1166,14 +1245,19 @@ function showRunSummary(sm) {
   document.getElementById("sumSub").textContent = subTxt;
   const row = (label, val, col = "#e0f2f1") => `<div style="display:flex;justify-content:space-between;gap:8px"><span style="color:#90a4ae">${label}</span><b style="color:${col}">${val}</b></div>`;
   const mulTxt = sm.mul > 1.0001 ? ` × ${sm.mul.toFixed(2)} greed` : "";
+  const killLbl = strongAge ? "Defeated" : "Kills";
+  const gloryLbl = strongAge ? "Finishers · best streak" : "Glory kills · best streak";
+  const gloryIco = strongAge ? "★" : "☠";
+  const killDmLbl = strongAge ? "Defeated ÷ 18" : "Kills ÷ 18";
+  const bossDropTxt = sm.stageDM ? "+" + sm.stageDM + " DM (banked on clear)" : "—";
   document.getElementById("sumBox").innerHTML = `
     <div class="health-row">${row("Hero", sm.hero)}${row("Sector", sm.campaignLabel ? "🗺️ " + sm.campaignLabel : `Stage ${sm.stageId}: ${sm.stageName}`)}${row("Difficulty", sm.diffName)}</div>
-    <div class="health-row">${row("Time survived", fmtRunClock(sm.time))}${row("Nexus level", sm.lvl)}${row("Kills", sm.kills)}${row("Glory kills · best streak", `${sm.glories || 0} ☠ · x${sm.bestStreak || 0}`, "#ff9100")}${row("Arsenal", `${sm.weapons} weapon(s) • ${sm.relics} relic(s)`)}</div>
+    <div class="health-row">${row("Time survived", fmtRunClock(sm.time))}${row("Nexus level", sm.lvl)}${row(killLbl, sm.kills)}${row(gloryLbl, `${sm.glories || 0} ${gloryIco} · x${sm.bestStreak || 0}`, "#ff9100")}${row("Arsenal", `${sm.weapons} weapon(s) • ${sm.relics} relic(s)`)}</div>
     <div class="health-row">
-      ${row("Kills ÷ 18", "+" + sm.killDM + " DM")}
+      ${row(killDmLbl, "+" + sm.killDM + " DM")}
       ${row("Run bonuses", "+" + sm.bonusDM + " DM")}
       ${row("Run payout" + mulTxt, "+" + sm.runDM + " DM")}
-      ${row("Sector Titan drop", sm.stageDM ? "+" + sm.stageDM + " DM (banked at kill)" : "—", sm.stageDM ? "#00e676" : "#90a4ae")}
+      ${row("Sector Titan drop", strongAge ? bossDropTxt : (sm.stageDM ? "+" + sm.stageDM + " DM (banked at kill)" : "—"), sm.stageDM ? "#00e676" : "#90a4ae")}
       <div style="border-top:1px solid #263850;margin:5px 0 3px"></div>
       ${row("TOTAL EARNED", "+" + sm.totalDM + " DM", "#ffd166")}
       ${row("Dark Matter available", availDM() + " DM", "#ffd166")}
@@ -1200,6 +1284,48 @@ if (document.getElementById("btnSumAgain")) {
   };
   document.getElementById("btnSumMenu").onclick = () => { updateMenuUI(); showScreen("scrMain"); };
 }
+
+window.addEventListener("keydown", e => {
+  if (e.repeat || e.defaultPrevented) return;
+  if (e.code === "Escape") {
+    const hudOptsEl = document.getElementById("hudOpts");
+    if (hudOptsEl && hudOptsEl.style.display === "flex" && typeof hudOptsClose === "function") { e.preventDefault(); hudOptsClose(); return; }
+    const ttEl = document.getElementById("tooltip");
+    if (ttEl && ttEl.style.display === "flex") { e.preventDefault(); document.getElementById("ttClose").click(); return; }
+    const mpEl = document.getElementById("nexus-music-panel");
+    if (mpEl && mpEl.style.display === "flex") { e.preventDefault(); mpEl.style.display = "none"; return; }
+    const dbgEl = document.getElementById("live-debug-box");
+    if (dbgEl && dbgEl.style.display === "flex") { e.preventDefault(); dbgEl.style.display = "none"; return; }
+    if (typeof squadState !== "undefined" && squadState.wheelOpen && typeof squadWheelClose === "function") { e.preventDefault(); squadWheelClose(); return; }
+    if (uiTypingInField(e)) return;
+    if (runActive) {
+      const scrLvl = document.getElementById("scrLevel"), pBar = document.getElementById("pauseBar");
+      if (scrLvl && scrLvl.classList.contains("active")) {
+        if (pBar && pBar.style.display !== "none") { e.preventDefault(); document.getElementById("btnResume").click(); }
+        return;
+      }
+      const anyModal = (typeof MAPV !== "undefined" && MAPV.open) || (typeof IT !== "undefined" && IT.panel) ||
+        (typeof ECO !== "undefined" && ECO.panel) || (typeof TF !== "undefined" && TF.panel) ||
+        (typeof KI !== "undefined" && KI.it) || (typeof ACT !== "undefined" && ACT.choice) ||
+        (typeof FLY !== "undefined" && FLY.confirm) || (typeof JOB_DISPATCH !== "undefined" && JOB_DISPATCH.panel) ||
+        (typeof PD_RADAR !== "undefined" && PD_RADAR.panel);
+      if (!runPaused && !anyModal) { e.preventDefault(); document.getElementById("btnPause").click(); }
+      return;
+    }
+    const active = document.querySelector(".screen.active");
+    if (active && active.id !== "scrMain" && active.id !== "scrSummary") {
+      const backBtn = active.querySelector("[data-back]");
+      if (backBtn) { e.preventDefault(); backBtn.click(); }
+    }
+  } else if (e.code === "KeyP" && !uiTypingInField(e) && runActive) {
+    const scrLvl = document.getElementById("scrLevel"), pBar = document.getElementById("pauseBar");
+    if (scrLvl && scrLvl.classList.contains("active")) {
+      if (pBar && pBar.style.display !== "none") { e.preventDefault(); document.getElementById("btnResume").click(); }
+    } else if (!runPaused) {
+      e.preventDefault(); document.getElementById("btnPause").click();
+    }
+  }
+});
 
 let lastTS = performance.now();
 function loop(ts) {

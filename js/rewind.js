@@ -95,6 +95,7 @@ function rewindRestore(slot) {
   for (let t = 0; t < RW_STR.length; t++) { const st = RW_STR[t], a = st.store[slot]; if (a) for (let i = 0; i < st.n; i++) st.arr[i] = a[i]; }
   const PF = REWIND_PLAYER_FIELDS, base = slot * RW_PSTRIDE;
   for (let f = 0; f < PF.length; f++) { const v = rwPlayer[base + f]; if (v === v) player[PF[f]] = v; }   // skip NaN
+  if (player.inVehicle === 3 && (typeof VEH === "undefined" || !VEH.me)) player.inVehicle = 0;
   if (player.limbs) for (let l = 0; l < 6; l++) player.limbs[l] = rwPlayer[base + PF.length + l];
   for (let u = 0; u < 4; u++) { const v = rwUtil[slot * 4 + u]; if (v === v && player.utils[u]) player.utils[u].cd = v; }
   for (let w = 0; w < 8; w++) { const v = rwWpn[slot * 8 + w]; if (v === v && player.weapons[w]) player.weapons[w].cd = v; }

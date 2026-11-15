@@ -44,8 +44,8 @@ function rvcStep(dt) {
     }
     for (const t of gone) rvcEvaded(t);
   }
-  // returns that are due (never in the middle of a duel)
-  if (RVC.back.length && !(typeof showdownBusy === "function" && showdownBusy())) {
+  // returns that are due (never in the middle of a duel or while flying high above ground combat)
+  if (RVC.back.length && !(typeof showdownBusy === "function" && showdownBusy()) && !(typeof flyGroundSeparated === "function" && flyGroundSeparated())) {
     const i = RVC.back.findIndex(b => runTime >= b.t);
     if (i >= 0) { const b = RVC.back.splice(i, 1)[0]; rvcReturn(b.cid, b.n); }
   }

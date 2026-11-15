@@ -1207,6 +1207,15 @@ function rmPickDrop(xm, ym) {
       }
     }
   }
+  // v16.0-s06-7: fallback scan around (xm, ym) so we don't drop onto a monument, building or water tile
+  const tx0 = Math.floor(xm * 2), ty0 = Math.floor(ym * 2);
+  for (let rad = 0; rad <= 40; rad += 2) {
+    for (let dy = -rad; dy <= rad; dy += 2) for (let dx = -rad; dx <= rad; dx += 2) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== rad) continue;
+      const f = cityFlagsT(tx0 + dx, ty0 + dy);
+      if (!(f & (F_MOVE | F_IN | F_WATER))) return [(tx0 + dx) * 16 + 8, (ty0 + dy) * 16 + 8];
+    }
+  }
   return [xm * 32, ym * 32];
 }
 function rmNearestNamed(xm, ym, maxD) {
@@ -1254,8 +1263,17 @@ function rmEsc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<
 // streaming + the warning before the border
 function rmStep(dt) {
   const [xm, ym] = cityWorldM(player.x, player.y);
-  const v = player.inVehicle && typeof VEH !== "undefined" && VEH.ride ? VEH.ride : null;
-  rmStream(xm, ym, v ? v.vx / 32 : (player.vx || 0) / 32, v ? v.vy / 32 : (player.vy || 0) / 32);
+  // v16.0-s06-7: read actual travel velocity from FLY (airborne), VEH.me (driving — VEH.ride never existed), or player on foot
+  let vx = (player.vx || 0) / 32, vy = (player.vy || 0) / 32;
+  if (typeof FLY !== "undefined" && FLY.on && FLY.air) {
+    const sp = (FLY.sp || 0) / 32, ang = FLY.self ? (FLY.hdg || 0) : (FLY.v ? FLY.v.ang : (player.facingAng || 0));
+    vx = Math.cos(ang) * sp; vy = Math.sin(ang) * sp;
+  } else if (player.inVehicle === 3 && typeof VEH !== "undefined" && VEH.me) {
+    const v = VEH.me;
+    vx = typeof v.vx === "number" ? v.vx / 32 : Math.cos(v.ang || 0) * ((v.sp || 0) / 32);
+    vy = typeof v.vy === "number" ? v.vy / 32 : Math.sin(v.ang || 0) * ((v.sp || 0) / 32);
+  }
+  rmStream(xm, ym, vx, vy);
   rmLawfulHunters(dt);
   const off = rmHwyOff(xm, ym);
   RMG.warnT = (RMG.warnT || 0) - dt;
@@ -1273,7 +1291,14 @@ function rmLawfulHunters(dt) {
     if (!safe) continue;
     eFireCD[j] = Math.max(eFireCD[j], 0.8);
     const dx = eX[j] - player.x, dy = eY[j] - player.y, d = Math.hypot(dx, dy) || 1;
-    if (d < 420) { eX[j] += dx / d * 140 * dt; eY[j] += dy / d * 140 * dt; }
+    if (d < 420) {
+      // v16.0-s06-7: wall-checked retreat so lawful hunters never get shoved into adjacent buildings or water
+      const stepX = dx / d * 140 * dt, stepY = dy / d * 140 * dt, rad = (typeof eR !== "undefined" && eR[j]) ? eR[j] : 12;
+      const nx = eX[j] + stepX, ny = eY[j] + stepY;
+      if (typeof cityCircleBlocked !== "function" || !cityCircleBlocked(nx, ny, rad, false)) { eX[j] = nx; eY[j] = ny; }
+      else if (!cityCircleBlocked(nx, eY[j], rad, false)) { eX[j] = nx; }
+      else if (!cityCircleBlocked(eX[j], ny, rad, false)) { eY[j] = ny; }
+    }
     if (RMG.lawT <= 0 && typeof spawnSpeech === "function") { RMG.lawT = 9; spawnSpeech(eX[j], eY[j] - 24, (CHAR_RAW[eRivalCid[j]] ? CHAR_RAW[eRivalCid[j]][3] : "HUNTER").toUpperCase() + ": \"Not in there. I'll wait outside.\"", "#ffd166", 2.6); }
   }
 }

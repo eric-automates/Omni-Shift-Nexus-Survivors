@@ -5,7 +5,7 @@
 "use strict";
 
 const keys = {};
-window.addEventListener("keydown", e => { keys[e.code] = true; });
+window.addEventListener("keydown", e => { if (typeof uiTypingInField === "function" && uiTypingInField(e)) return; keys[e.code] = true; });
 window.addEventListener("keyup", e => { keys[e.code] = false; });
 
 const MAX_BLAST = 32;
@@ -774,7 +774,10 @@ function stepSimulation(rawDt) {
             evolvedLv5: false,
             bladeCol: wCol
           });
-          if (rc[6] === "orbit" || (typeof isSwordWeapon === "function" && isSwordWeapon(drop.wpnId))) {
+          const dropIsBlade = typeof isMeleeBladeWeapon === "function"
+            ? isMeleeBladeWeapon({ id: drop.wpnId, style: rc[6] })
+            : (rc[6] === "orbit" || (typeof isSwordWeapon === "function" && isSwordWeapon(drop.wpnId)));
+          if (dropIsBlade) {
             player.hasSaber = true;
             player.saberMastery = Math.max(20, player.saberMastery || 0);
           }
@@ -836,20 +839,41 @@ function stepSimulation(rawDt) {
   const rushSpdMul = (player.overclockTimer > 0 ? 2.0 : 1.0) * (player.sandTimer > 0 ? 1.8 : 1.0);
   const hazSlow = (player.hazSlowT > 0 && typeof biomeActive === "function") ? (1 - (biomeActive().hazard.slow || 0)) : 1.0;   // v10 biome hazards
   const sneakMul = (typeof CITY !== "undefined" && CITY.on && typeof ST !== "undefined" && ST.sneak) ? 0.55 : 1.0;   // v14: Shift = sneak
-  const effSpd = (player.spd || 110) * legFactor * vehMul * rushSpdMul * (player.guardZone >= 0 ? 0.82 : 1.0) * hazSlow * sneakMul;
+  const ecoWeakMul = player.ecoWeak ? 0.85 : 1.0;
+  const effSpd = (player.spd || 110) * legFactor * vehMul * rushSpdMul * (player.guardZone >= 0 ? 0.82 : 1.0) * hazSlow * sneakMul * ecoWeakMul;
 
   // v14.1: in a Nexus City vehicle the stick drives a real rigid body (js/vehicles.js) instead of walking
   const vehDrive = player.inVehicle === 3 && typeof vehDriveInput === "function" && vehDriveInput(simDt, mx, my, mag);
-  if (vehDrive) {
-    player.walk += 0;
+  // v16.0-s06-6: self-flight and parachute descent are exclusively steered by js/flight.js (no double-stepping or midair walking)
+  const selfFlyActive = typeof FLY !== "undefined" && ((FLY.on && FLY.self && FLY.air) || !!FLY.chute);
+  if (typeof player.facingAng !== "number") player.facingAng = Math.PI / 2;
+  if (typeof player.walkBlend !== "number") player.walkBlend = 0;
+  const blendFacing = (targetAng, rate) => {
+    let diff = targetAng - player.facingAng;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    player.facingAng += diff * Math.min(1, simDt * rate);
+  };
+  if (vehDrive || selfFlyActive) {
+    player.walkBlend = Math.max(0, player.walkBlend - simDt * 12);
+    player.bankTilt = (player.bankTilt || 0) * 0.82;
   } else if (mag > 0.04) {
     const moveAng = Math.atan2(my, mx) + legImbalance * 0.28;
-    const vx = Math.cos(moveAng) * effSpd * Math.min(1, mag);
-    const vy = Math.sin(moveAng) * effSpd * Math.min(1, mag);
+    const stepFrac = Math.min(1, mag);
+    const vx = Math.cos(moveAng) * effSpd * stepFrac;
+    const vy = Math.sin(moveAng) * effSpd * stepFrac;
+    const moveSpd = Math.hypot(vx, vy);
     player.vx = vx; player.vy = vy; player.moveDir = moveAng;
-    player.walk += simDt * (6.5 + effSpd * 0.025);
-    const targetBank = Math.max(-0.32, Math.min(0.32, (vx / Math.max(1, effSpd)) * 0.26));
-    player.bankTilt = (player.bankTilt || 0) * 0.82 + targetBank * 0.18;
+    if (player.inVehicle > 0) {
+      // Seated in speeder/walker: keep legs settled instead of walking inside the vehicle.
+      player.walkBlend = Math.max(0, player.walkBlend - simDt * 12);
+    } else {
+      // Stride cadence tracks real world travel speed so feet match ground movement (no ice-skating).
+      player.walk += simDt * Math.max(2.6, moveSpd * 0.056);
+      player.walkBlend = player.walkBlend + (stepFrac - player.walkBlend) * Math.min(1, simDt * 14);
+    }
+    blendFacing(moveAng, 18);
+    player.bankTilt = (player.bankTilt || 0) * 0.82;
 
     const nx = player.x + vx * simDt, ny = player.y + vy * simDt;
     const ignoreLow = player.hover || (player.acrobatZ > 4) || player.inVehicle > 0 || [1, 16, 21, 25, 47, 54, 70, 73, 74, 79].includes(player.cid);
@@ -860,12 +884,16 @@ function stepSimulation(rawDt) {
       if (typeof isPointBlockedByObstacle !== "function" || !isPointBlockedByObstacle(player.x, ny, ignoreLow)) player.y = ny;
     }
 
-    if ([1, 16, 25, 47, 54].includes(player.cid) && Math.random() < 0.45) {
+    if ((player.flying || player.hover || [16, 21].includes(player.cid)) && Math.random() < 0.45) {
       spawnParticles(player.x - Math.cos(moveAng) * 10, player.y + 8, 1);
     }
   } else {
     player.vx = 0; player.vy = 0;
+    player.walkBlend = Math.max(0, player.walkBlend - simDt * 11);
     player.bankTilt = (player.bankTilt || 0) * 0.82;
+    if (typeof touchFireHasAimPoint === "function" && touchFireHasAimPoint()) {
+      blendFacing(Math.atan2(touchFire.point.y - player.y, touchFire.point.x - player.x), 14);
+    }
   }
 
   let aimTarget = -1, bestAimDist = 380;
@@ -980,7 +1008,9 @@ function stepSimulation(rawDt) {
     // Do not spend ammunition/cooldowns or strike the ground plane during high flight.
     if (typeof flyGroundSeparated === "function" && flyGroundSeparated()) continue;
     const w = enabledWpns[(player.handSlotOffset + s) % enabledWpns.length];
-    const isMeleeBlade = (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 44, 73].includes(w.id));
+    const isMeleeBlade = typeof isMeleeBladeWeapon === "function"
+      ? isMeleeBladeWeapon(w)
+      : ((typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44, 73].includes(w.id)));
 
     if (s === 0 && thrownBlade.active && isMeleeBlade) continue;
 
@@ -1064,9 +1094,16 @@ function stepSimulation(rawDt) {
       w.wristSpin = pat === 11 ? Math.cos(ph) * wStance.wristAmp : 0;
     }
 
+    const hybridGunActive = typeof isHybridGunMode === "function" && isHybridGunMode(w);
+    if (hybridGunActive) {
+      w.ang = player.aim + (s * 0.2);
+      w.armAng = w.ang;
+      w.wristSpin = 0;
+    }
+
     if (player.swapPause > 0.05) continue;
     // v14 Nexus City: guns only fire when a hostile is actually in sight (Shift = sneak & hold fire until spotted)
-    if (!isMeleeBlade && typeof CITY !== "undefined" && CITY.on && typeof cityHoldFire === "function" && cityHoldFire()) continue;
+    if ((!isMeleeBlade || hybridGunActive) && typeof CITY !== "undefined" && CITY.on && typeof cityHoldFire === "function" && cityHoldFire()) continue;
     if (typeof touchFireCanShoot === "function" && !touchFireCanShoot(w, simDt)) continue;
 
     if (w.id === 52) {
@@ -1092,7 +1129,7 @@ function stepSimulation(rawDt) {
         const baseCD = w.style === "orbit" ? 0.36 : (w.style === "beam" ? 0.48 : (w.style === "cone" ? 0.62 : 0.52));
         w.cd = Math.max(0.06, baseCD * (player.cdr || 1) * hasteCdr * (w.lvl >= 10 ? 0.78 : 1.0));
         const fired = fireWeapon(w);
-        if (!isMeleeBlade && fired !== false) { player.recoilKick = 1.0; if (typeof touchFireConsume === "function") touchFireConsume(w); }
+        if ((!isMeleeBlade || fired === "ranged") && fired !== false) { player.recoilKick = 1.0; if (typeof touchFireConsume === "function") touchFireConsume(w); }
       }
     }
   }

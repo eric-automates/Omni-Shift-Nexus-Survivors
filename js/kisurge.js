@@ -236,16 +236,16 @@ function kiLeaveForm() {
   if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 30, "…back to base", "#b0bec5", 1.4);
 }
 function kiDeathBallReady() {
-  return !!(player && player.cid === 84 && KI.form && runTime < KI.formT && !KI.deathBall && !KI.planetDecay);
+  return !!(player && player.cid === 84 && KI.form && runTime < KI.formT && !KI.deathBall);
 }
 function kiCastDeathBall() {
   if (!kiDeathBallReady()) {
-    if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 28, "MAX KI + FULL POWER REQUIRED", "#e1bee7", 1.5);
+    if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 28, KI.deathBall ? "DEATH BALL IN FLIGHT" : "MAX KI + FULL POWER REQUIRED", "#e1bee7", 1.5);
     return false;
   }
-  const a = Number.isFinite(player.aim) ? player.aim : 0, speed = 720;
-  KI.deathBall = { x: player.x + Math.cos(a) * 26, y: player.y + Math.sin(a) * 26, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, hit: false, postHit: 0, age: 0 };
-  if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 32, "DEATH BALL — PLANET BREAKER!", "#ce93d8", 2.1);
+  const a = Number.isFinite(player.aim) ? player.aim : 0, speed = 720, planetBreaker = !KI.planetDecay;
+  KI.deathBall = { x: player.x + Math.cos(a) * 26, y: player.y + Math.sin(a) * 26, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, hit: false, postHit: 0, age: 0, planetBreaker };
+  if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 32, planetBreaker ? "DEATH BALL — PLANET BREAKER!" : "DEATH BALL!", "#ce93d8", 2.1);
   if (typeof fxShake === "function") fxShake(8, 0.35);
   if (typeof sfx === "function") sfx(95, 42, 0.42, "sawtooth", 0.28);
   return true;
@@ -253,16 +253,31 @@ function kiCastDeathBall() {
 function kiPlanetDecayStart() {
   if (KI.planetDecay) return false;
   KI.planetDecay = 1;
-  // On the generated city world, redress the same streamed map as a wasteland.
-  // The next cityRunStart applies the selected universe theme again, so this is run-local.
+  // On the generated city world, redress the same streamed map as a wasteland
+  // and clear minimap/full-map tile caches so navigation matches the decayed ground.
   if (typeof CITY !== "undefined" && CITY && CITY.on && typeof cityApplyTheme === "function") {
     cityApplyTheme("wasteland");
     if (typeof cityRenderReset === "function") cityRenderReset();
+    if (typeof MAPV !== "undefined" && MAPV) { if (MAPV.tiles && typeof MAPV.tiles.clear === "function") MAPV.tiles.clear(); MAPV.lastSig = ""; }
   }
   if (typeof spawnSpeech === "function") spawnSpeech(player.x, player.y - 42, "PLANET CORE DESTABILIZED — WORLD DECAYING", "#ff7043", 3.0);
   if (typeof fxShake === "function") fxShake(18, 1.1);
   if (typeof sfx === "function") sfx(72, 28, 0.9, "sawtooth", 0.4);
   return true;
+}
+function kiDeathBallDetonate(x, y, rad, dmg) {
+  if (typeof spawnBlastWave === "function") spawnBlastWave(x, y, rad, "#ce93d8");
+  if (typeof spawnParticles === "function") spawnParticles(x, y, 16);
+  if (typeof fxShake === "function") fxShake(9, 0.35);
+  if (typeof sfx === "function") sfx(135, 42, 0.32, "sawtooth", 0.28);
+  for (let i = 0; i < MAX_E; i++) {
+    if (!eAct[i] || allyIs(i) || (typeof sdIgnore === "function" && sdIgnore(i))) continue;
+    const dx = eX[i] - x, dy = eY[i] - y;
+    if (dx * dx + dy * dy > rad * rad) continue;
+    eHP[i] -= dmg; eStun[i] = Math.max(eStun[i], 1.1);
+    if (typeof spawnDmg === "function") spawnDmg(eX[i], eY[i], dmg, true);
+    if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, false, null, "#ce93d8", "player", player);
+  }
 }
 function kiDeathBallStep(dt) {
   const b = KI.deathBall;
@@ -277,18 +292,15 @@ function kiDeathBallStep(dt) {
   b.age += dt;
   const ox = b.x, oy = b.y;
   b.x += b.vx * dt; b.y += b.vy * dt;
+  const dmg = Math.max(360, 620 * (player.might || 1));
   if (!b.hit) {
     for (let i = 0; i < MAX_E; i++) {
       if (!eAct[i] || allyIs(i) || (typeof sdIgnore === "function" && sdIgnore(i))) continue;
       const dx = eX[i] - b.x, dy = eY[i] - b.y;
       if (dx * dx + dy * dy > 34 * 34) continue;
       b.hit = true; b.postHit = 0;
-      const dmg = Math.max(360, 620 * player.might);
-      eHP[i] -= dmg; eStun[i] = Math.max(eStun[i], 1.1);
-      if (typeof spawnDmg === "function") spawnDmg(eX[i], eY[i], dmg, true);
-      if (eHP[i] <= 0 && typeof killEnemy === "function") killEnemy(i, false, null, "#ce93d8", "player", player);
-      if (typeof spawnParticles === "function") spawnParticles(eX[i], eY[i], 14);
-      if (typeof sfx === "function") sfx(210, 90, 0.18, "triangle", 0.2);
+      kiDeathBallDetonate(eX[i], eY[i], 96, dmg);
+      if (!b.planetBreaker) { KI.deathBall = null; return; }
       break;
     }
   } else {
@@ -301,7 +313,11 @@ function kiDeathBallStep(dt) {
       if (typeof fxShake === "function") fxShake(11, 0.65);
     }
   }
-  if (b && b.age > 3.2) KI.deathBall = null;
+  if (KI.deathBall && b.age > 3.2) {
+    const bx = b.x, by = b.y;
+    KI.deathBall = null;
+    kiDeathBallDetonate(bx, by, 110, dmg * 0.85);
+  }
 }
 
 function kiStep(dt) {
@@ -335,16 +351,19 @@ function kiAuraStrength() { return KI.form ? 1 : KI.charging ? Math.max(0.15, KI
 function kiAuraBack(g, x, y) {
   const strength = kiAuraStrength(); if (strength <= 0) return;
   const t = runTime, col = kiAuraCol(player.cid), h = 30 + 18 * strength, w = 13 + 7 * strength;
+  const bSpec = typeof getHeroBodySpec === "function" ? getHeroBodySpec(player.cid) : { yOff: 0 };
+  const airOff = (bSpec.yOff || 0) - (player.acrobatZ || 0);
+  const ay = y + airOff;
   g.save(); g.globalCompositeOperation = "lighter";
-  const base = g.createRadialGradient(x, y + 4, 2, x, y - 4, h * 0.9);
+  const base = g.createRadialGradient(x, ay + 4, 2, x, ay - 4, h * 0.9);
   base.addColorStop(0, "rgba(" + col + "," + (0.30 * strength) + ")"); base.addColorStop(0.6, "rgba(" + col + "," + (0.12 * strength) + ")"); base.addColorStop(1, "rgba(" + col + ",0)");
-  g.fillStyle = base; g.beginPath(); g.moveTo(x - w, y + 13); g.quadraticCurveTo(x - w * 1.25, y - h * 0.45, x, y - h); g.quadraticCurveTo(x + w * 1.25, y - h * 0.45, x + w, y + 13); g.closePath(); g.fill();
-  for (let k = 0; k < 5; k++) {   // flame tongues licking upwards
-    const s = (k - 2) / 2, ph = t * (11 + k) + k * 1.7, top = y - h * (0.72 + 0.22 * Math.sin(ph)) , bx = x + s * w * 0.9;
+  g.fillStyle = base; g.beginPath(); g.moveTo(x - w, ay + 13); g.quadraticCurveTo(x - w * 1.25, ay - h * 0.45, x, ay - h); g.quadraticCurveTo(x + w * 1.25, ay - h * 0.45, x + w, ay + 13); g.closePath(); g.fill();
+  for (let k = 0; k < 5; k++) {   // flame tongues licking upwards around live body height
+    const s = (k - 2) / 2, ph = t * (11 + k) + k * 1.7, top = ay - h * (0.72 + 0.22 * Math.sin(ph)), bx = x + s * w * 0.9;
     g.fillStyle = "rgba(" + col + "," + (0.16 * strength) + ")";
-    g.beginPath(); g.moveTo(bx - 3.5, y + 10); g.quadraticCurveTo(bx - 4 + Math.sin(ph) * 3, (y + top) / 2, bx + s * 4 + Math.sin(ph * 1.3) * 2.5, top); g.quadraticCurveTo(bx + 4 + Math.sin(ph) * 2, (y + top) / 2, bx + 3.5, y + 10); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(bx - 3.5, ay + 10); g.quadraticCurveTo(bx - 4 + Math.sin(ph) * 3, (ay + top) / 2, bx + s * 4 + Math.sin(ph * 1.3) * 2.5, top); g.quadraticCurveTo(bx + 4 + Math.sin(ph) * 2, (ay + top) / 2, bx + 3.5, ay + 10); g.closePath(); g.fill();
   }
-  g.fillStyle = "rgba(" + col + "," + (0.18 * strength) + ")"; g.beginPath(); g.ellipse(x, y + 13, w * 1.15, 4.2, 0, 0, 7); g.fill();   // glow on the ground
+  g.fillStyle = "rgba(" + col + "," + (0.18 * strength) + ")"; g.beginPath(); g.ellipse(x, y + 13, w * 1.15, 4.2, 0, 0, 7); g.fill();   // glow stays anchored on the ground
   g.restore();
 }
 function kiRender(g) {
@@ -398,21 +417,22 @@ function kiRender(g) {
 function kiHud() {
   let el = document.getElementById("hudKi");
   if (!el) { const dm = document.getElementById("hudDM"); if (!dm) return; el = document.createElement("div"); el.className = "stat-pill"; el.id = "hudKi"; el.title = "Ki — hold R (or 🔥) to power up"; dm.insertAdjacentElement("beforebegin", el); }
-  if (!kiIs()) { el.style.display = "none"; return; }
+  if (!kiIs()) { el.style.display = "none"; const b0 = document.getElementById("kiBtns"); if (b0) b0.style.display = "none"; return; }
   el.style.display = "";
   const c = player.cid;
   el.textContent = KI.form ? "⚡ " + kiFormName(c) + " " + Math.max(0, Math.ceil(KI.formT - runTime)) + "s" : runTime < KI.cdT ? "🔥 recovering " + Math.ceil(KI.cdT - runTime) + "s" : KI_ANDROID.has(c) ? "♾ OVERDRIVE READY (R)" : "🔥 KI " + Math.round(KI.ki) + "% (hold R)";
   el.style.color = KI.form ? "#ffd54f" : "";
   let b = document.getElementById("kiBtns");
   if (!b) {
-    b = document.createElement("div"); b.id = "kiBtns"; b.style.cssText = "position:fixed;left:10px;top:42%;z-index:9000;display:flex;flex-direction:column;gap:6px;touch-action:none;user-select:none";
+    b = document.createElement("div"); b.id = "kiBtns"; b.style.cssText = "position:fixed;left:10px;top:42%;z-index:58;display:flex;flex-direction:column;gap:6px;touch-action:none;user-select:none";
     b.innerHTML = '<button class="btn" id="kiPow" title="Power up (hold R)" style="min-width:54px;padding:8px 6px;font-size:16px">🔥</button><button class="btn" id="kiITb" title="Instant Transmission (T)" style="min-width:54px;padding:8px 6px;font-size:13px">IT</button><button class="btn" id="kiFly" title="Fly (G)" style="min-width:54px;padding:8px 6px;font-size:16px">🕊</button>';
     document.body.appendChild(b);
     const p = b.querySelector("#kiPow"); p.onpointerdown = (e) => { e.preventDefault(); KI.touch = 1; }; p.onpointerup = p.onpointerleave = p.onpointercancel = () => { KI.touch = 0; };
     b.querySelector("#kiITb").onclick = () => kiITOpen();
     b.querySelector("#kiFly").onclick = () => { if (typeof flyToggleSelf === "function") flyToggleSelf(); };
   }
-  b.style.display = runActive && typeof CITY !== "undefined" && CITY.on ? "flex" : "none";
+  const sdBusy = typeof showdownBusy === "function" && showdownBusy();
+  b.style.display = runActive && !runPaused && !sdBusy && typeof CITY !== "undefined" && CITY.on ? "flex" : "none";
   b.querySelector("#kiITb").style.display = kiCanIT() ? "" : "none";
 }
 
@@ -537,15 +557,32 @@ function kiYodaSpeak(s) {
   return out.charAt(0).toUpperCase() + out.slice(1) + (end.indexOf("!") >= 0 ? "!" : end.indexOf("?") >= 0 ? "?" : ".");
 }
 
-// Frieza's and Cell's tails swing behind them (sprite space, drawn before the body)
-function kiTail(g, x, y, cid, walk, aim) {
-  const dir = Math.cos(aim || 0) >= 0 ? 1 : -1, sw = Math.sin((walk || 0) * 2.6 + (typeof runTime !== "undefined" ? runTime : 0) * 2) * 2.5;
-  const tip = [x - dir * 15, y - 3 + sw];
+// Frieza's and Cell's tails follow facingAngle across all 8 directions (behind body on S/E/W, over rear hip on N/NE/NW).
+function kiTail(g, x, y, cid, walk, facingAng, walkBlend) {
+  const ang = Number.isFinite(facingAng) ? facingAng : Math.PI / 2;
+  const fx = Math.cos(ang), fy = Math.sin(ang);
+  const backView = fy < -0.35;
+  const bSpec = typeof getHeroBodySpec === "function" ? getHeroBodySpec(cid) : { sx: 1, sy: 1, yOff: 0 };
+  const moveK = walkBlend !== null && walkBlend !== undefined ? Math.max(0, Math.min(1, walkBlend)) : (Math.abs(walk || 0) > 0.001 ? 1 : 0);
+  const swayAmp = 1.4 + moveK * 2.2;
+  const sw = Math.sin((walk || 0) * 2.6 + (typeof runTime !== "undefined" ? runTime : 0) * 2.1) * swayAmp;
+  // Trail direction opposes horizontal travel (-fx); in pure N/S, sweep gracefully to the right (-1 -> +1).
+  const trailX = Math.abs(fx) > 0.2 ? -fx : (backView ? 0.65 : -0.75);
+  const baseX = x + trailX * 2.6 * bSpec.sx;
+  const baseY = y + (bSpec.yOff || 0) + (backView ? 4.4 : 4.8) * bSpec.sy;
+  const ctrlX = x + trailX * 14.5 * bSpec.sx + (backView ? sw * 0.6 : 0);
+  const ctrlY = baseY + (backView ? 6.2 : 5.4) + sw * 0.55;
+  const tipX = x + trailX * (backView ? 12.0 : 14.8) * bSpec.sx + (backView ? sw * 0.9 : 0);
+  const tipY = baseY + (backView ? -1.5 : -6.2) + sw;
   g.save(); g.lineCap = "round";
-  g.strokeStyle = "rgba(0,0,0,0.35)"; g.lineWidth = 3.6; g.beginPath(); g.moveTo(x - dir * 2.5, y + 5); g.quadraticCurveTo(x - dir * 15, y + 11 + sw, tip[0], tip[1]); g.stroke();
-  g.strokeStyle = cid === 84 ? "#f5f5f5" : "#43a047"; g.lineWidth = 2.4; g.beginPath(); g.moveTo(x - dir * 2.5, y + 5); g.quadraticCurveTo(x - dir * 15, y + 11 + sw, tip[0], tip[1]); g.stroke();
-  if (cid === 85) { g.fillStyle = "#1b5e20"; g.beginPath(); g.moveTo(tip[0] - 1.6, tip[1] + 1); g.lineTo(tip[0] - dir * 1.5, tip[1] - 4.2); g.lineTo(tip[0] + 1.6, tip[1] + 1); g.fill(); }
-  else { g.fillStyle = "#ce93d8"; g.beginPath(); g.arc(tip[0], tip[1], 1.3, 0, 7); g.fill(); }
+  g.strokeStyle = "rgba(0,0,0,0.35)"; g.lineWidth = 3.5; g.beginPath(); g.moveTo(baseX, baseY); g.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY); g.stroke();
+  g.strokeStyle = cid === 84 ? "#f5f5f5" : "#43a047"; g.lineWidth = 2.3; g.beginPath(); g.moveTo(baseX, baseY); g.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY); g.stroke();
+  if (cid === 85) {
+    const dir = trailX >= 0 ? -1 : 1;
+    g.fillStyle = "#1b5e20"; g.beginPath(); g.moveTo(tipX - 1.6, tipY + 1); g.lineTo(tipX - dir * 1.5, tipY - 4.2); g.lineTo(tipX + 1.6, tipY + 1); g.fill();
+  } else {
+    g.fillStyle = "#ce93d8"; g.beginPath(); g.arc(tipX, tipY, 1.35, 0, 7); g.fill();
+  }
   g.restore();
 }
 /* --- bare-handed fighters: a ki glow in the palm instead of a gun (Trunks's sword is drawn as steel by the engine) -- */
@@ -570,9 +607,14 @@ const KI_PALM = { 34: "#4fc3f7", 35: "#ffd54f", 36: "#ffd54f", 38: "#4fc3f7", 84
   if (typeof drawHeroSprite === "function") {
     const o = drawHeroSprite;
     window.drawHeroSprite = drawHeroSprite = function (x, y, fac, cid, walk, aim, inVeh, g) {
+      const fAng = (arguments.length >= 11 && typeof arguments[10] === "number") ? arguments[10] : Math.PI / 2;
+      const wBlend = arguments.length >= 12 ? arguments[11] : null;
+      const backTail = Math.sin(fAng) < -0.35;
       if (g && player && cid === player.cid && kiIs() && (KI.form || KI.charging) && Math.abs(x - player.x) < 8 && Math.abs(y - player.y) < 8) { try { kiAuraBack(g, x, y); } catch (e) { /* art */ } }
-      if (g && (cid === 84 || cid === 85)) { try { kiTail(g, x, y, cid, walk, aim); } catch (e) { /* art */ } }
-      return o.apply(this, arguments);
+      if (g && !backTail && (cid === 84 || cid === 85)) { try { kiTail(g, x, y, cid, walk, fAng, wBlend); } catch (e) { /* art */ } }
+      const res = o.apply(this, arguments);
+      if (g && backTail && (cid === 84 || cid === 85)) { try { kiTail(g, x, y, cid, walk, fAng, wBlend); } catch (e) { /* art */ } }
+      return res;
     };
   }
 })();
@@ -597,7 +639,8 @@ const KI_PALM = { 34: "#4fc3f7", 35: "#ffd54f", 36: "#ffd54f", 38: "#4fc3f7", 84
     window.triggerUtility = triggerUtility = function (uIdx) {
       const u = player && player.utils && player.utils[uIdx];
       if (u && player && player.cid === 84 && u.name === "Death Ball") {
-        if (u.cd > 0 || !kiDeathBallReady()) { if (!kiDeathBallReady()) kiCastDeathBall(); return; }
+        if (u.cd > 0) return;
+        if (!kiDeathBallReady()) { kiCastDeathBall(); return; }
         if (kiCastDeathBall()) u.cd = u.cdMax * (player.utilCdrMul || 1);
         if (typeof updateHUD === "function") updateHUD();
         return;
@@ -624,12 +667,13 @@ const KI_PALM = { 34: "#4fc3f7", 35: "#ffd54f", 36: "#ffd54f", 38: "#4fc3f7", 84
   }
   // Yoda's speech for Cell, once absorbed: his own lines only (not a rival's "NAME: …" callout, not ALL-CAPS combat calls)
   if (typeof spawnSpeech === "function") { const o = spawnSpeech; window.spawnSpeech = spawnSpeech = function (x, y, text) { if (player && player.cid === 85 && KI.absorbed.some(a => a.k === "levitate" && a.v) && typeof text === "string" && Math.abs(x - player.x) < 4 && /^[A-Z]/.test(text) && /[a-z]/.test(text) && !/^[A-Z][A-Z0-9 '.\-]+:/.test(text) && text.split(" ").length >= 3) arguments[2] = kiYodaSpeak(text); return o.apply(this, arguments); }; }
-  window.addEventListener("keydown", e => { if (e.code === "KeyT" && !e.repeat && runActive && !runPaused && kiCanIT()) kiITOpen(); else if (e.code === "Escape" && KI.it) kiITClose(); });
+  window.addEventListener("keydown", e => { if (e.code === "Escape" && KI.it) { e.preventDefault(); kiITClose(); return; } if (typeof uiTypingInField === "function" && uiTypingInField(e)) return; if (e.code === "KeyT" && !e.repeat && runActive && !runPaused && kiCanIT()) kiITOpen(); });
   if (typeof V10 !== "undefined") {
-    V10.onRunStart.push(() => { KI.ki = 0; KI.form = 0; KI.buff = null; KI.cdT = 0; KI.itCd = 0; KI.itPose = null; KI.absorbed = []; KI.deathBall = null; KI.coreImpact = null; KI.planetDecay = 0; kiITClose(); kiHud(); });
+    V10.onFrame.push(() => { const b = document.getElementById("kiBtns"); if (b && (!runActive || runPaused || !kiIs())) b.style.display = "none"; });
+    V10.onRunStart.push(() => { KI.ki = 0; KI.form = 0; KI.formT = 0; KI.buff = null; KI.cdT = 0; KI.itCd = 0; KI.itPose = null; KI.absorbed = []; KI.deathBall = null; KI.coreImpact = null; KI.planetDecay = 0; KI.charging = false; KI.touch = 0; KI.burstT = 0; kiITClose(); kiHud(); });
     V10.onStep.push(kiStep);
     V10.onRenderWorld.push(kiRender);
-    V10.onRunReset.push(() => { kiITClose(); const b = document.getElementById("kiBtns"); if (b) b.style.display = "none"; const h = document.getElementById("hudKi"); if (h) h.style.display = "none"; });
+    V10.onRunReset.push(() => { KI.ki = 0; KI.form = 0; KI.formT = 0; KI.buff = null; KI.deathBall = null; KI.coreImpact = null; KI.planetDecay = 0; KI.charging = false; KI.touch = 0; KI.burstT = 0; KI.itPose = null; kiITClose(); const b = document.getElementById("kiBtns"); if (b) b.style.display = "none"; const h = document.getElementById("hudKi"); if (h) h.style.display = "none"; });
   }
 })();
 

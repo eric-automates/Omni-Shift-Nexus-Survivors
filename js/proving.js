@@ -55,7 +55,10 @@ const PROVING_TESTS = [
     setup(D) {
       pgClearArena();
       const prim = player.weapons[0];
-      D.tempBlade = !(player.hasSaber && prim && (prim.style === "orbit" || (typeof isSwordWeapon === "function" && isSwordWeapon(prim.id))));
+      const primIsBlade = prim && (typeof isMeleeBladeWeapon === "function"
+        ? isMeleeBladeWeapon(prim)
+        : (prim.style === "orbit" || (typeof isSwordWeapon === "function" && isSwordWeapon(prim.id))));
+      D.tempBlade = !(player.hasSaber && primIsBlade);
       D.oldSaber = player.hasSaber;
       if (D.tempBlade) {
         player.weapons.unshift({ id: 0, name: "Proving Saber", superName: "", style: "orbit", lvl: 3, cd: 0, ang: 0, angVel: 0, enabled: true, evolvedLv5: false, bladeCol: "#00e5ff" });
@@ -74,9 +77,28 @@ const PROVING_TESTS = [
     cleanup(D) { if (D.tempBlade) { player.weapons.shift(); player.hasSaber = D.oldSaber; } pgClearArena(); } },
 
   { name: "Skills", desc: "Both utility skills fire and start their cooldowns",
-    setup(D) { pgDummy(player.x + 120, player.y - 30); player.utils.forEach(u => { u.cd = 0; }); triggerUtility(0); triggerUtility(1); },
-    tick(D) { return D.t > 0.3 ? (player.utils[0].cd > 0 && player.utils[1].cd > 0 ? true : "a skill did not trigger") : null; },
-    cleanup() { pgClearArena(); } },
+    setup(D) {
+      pgDummy(player.x + 120, player.y - 30);
+      player.utils.forEach(u => { u.cd = 0; });
+      D.prevForm = typeof KI !== "undefined" ? KI.form : 0;
+      D.prevFormT = typeof KI !== "undefined" ? KI.formT : 0;
+      // Frieza's Death Ball (#84, wrapped on slot 0) requires Golden form (form >= 4); grant it briefly so the skill test fires cleanly.
+      if (typeof KI !== "undefined" && (player.cid === 84 || player.utils.some(u => u && u.type === "deathBall")) && KI.form < 4) {
+        KI.form = 4; KI.formT = runTime + 15;
+      }
+      triggerUtility(0);
+      D.u0ok = !!(player.utils[0] && player.utils[0].cd > 0);
+      triggerUtility(1);
+      D.u1ok = !!(player.utils[1] && player.utils[1].cd > 0);
+    },
+    tick(D) { return D.t > 0.3 ? ((D.u0ok && D.u1ok) ? true : "a skill did not trigger") : null; },
+    cleanup(D) {
+      if (typeof KI !== "undefined") {
+        KI.form = D.prevForm || 0; KI.formT = D.prevFormT || 0;
+        KI.deathBall = null; KI.coreImpact = null;
+      }
+      pgClearArena();
+    } },
 
   { name: "Dash", desc: "Hero dash relocates the hero",
     setup(D) { player.dashCD = 0; D.x0 = player.x; D.y0 = player.y; D.ok = executeHeroDash(player.x + 160, player.y + 20); },

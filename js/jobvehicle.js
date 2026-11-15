@@ -6,7 +6,7 @@
 const JC_LOAN={incident:null,world:null,key:null};
 // No improvised military aircraft, tanks or unverified animal teams as courier
 // vehicles. Unsupported settings retain the normal on-foot/other-car option.
-const JC_LOAN_KINDS={modern:"pickup",neon:"spinner",galactic:"speeder",coruscant:"hover",starship:"hover",frontier:"mule",wasteland:"rusted",wizard:"anglia"};
+const JC_LOAN_KINDS={modern:"pickup",neon:"spinner",galactic:"speeder",coruscant:"hover",starship:"hover",frontier:"mule",wasteland:"rusted",wizard:"anglia",capsule:"hover",mesa:"pickup"};
 function jcLoanLive(a) {
   if(!a || a.contract!==JOB_COURIER_SHIFT || !a.data?.loan || JC_LOAN.incident!==a.id || JC_LOAN.world!==a.world || JC_LOAN.key!==a.data.loan.key)return null;
   return VEH.byKey.get(JC_LOAN.key)||null;
@@ -57,7 +57,8 @@ function jcRidePerson() { const p = JD_SUPPORT.actor; return p && p.alive && p.w
 function jcRideBoard() {
   const a = jdActive();
   if (!a || a.contract !== JOB_COURIER_SHIFT || a.world !== jobWorldKey() || a.phase !== "delivery" || a.data?.support?.status !== "active") return { ok: false, why: "An active assistant on a delivery leg is required." };
-  const v = player.inVehicle && player.veh && !player.veh.dead && !player.veh.wreck ? player.veh : null;
+  const me = typeof VEH !== "undefined" ? VEH.me : null;
+  const v = player && player.inVehicle === 3 && me && !me.dead && !me.wreck && !me.burnt ? me : null;
   if (!v) return { ok: false, why: "Get in a working vehicle first." };
   const p = jcRidePerson(), w = p?.w;
   if (!w || w.flee > 0 || w.stun > 0 || w.inside) return { ok: false, why: "Your assistant is not in a state to board." };

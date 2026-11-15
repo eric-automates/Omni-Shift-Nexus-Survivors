@@ -155,9 +155,16 @@ function locnRender(g) {
   for (const J of LOCN.list) {
     if (Math.abs(J.x - player.x) > 1500 || Math.abs(J.y - player.y) > 1100) continue;
     if (typeof cityVisibleAt === "function" && !cityVisibleAt(J.x, J.y)) continue;
-    const moving = Math.hypot(J.vx, J.vy) > 6, walk = moving ? runTime * 11 + (J.seed % 7) : 0;
+    const spd = Math.hypot(J.vx, J.vy), moving = spd > 5;
+    const dtAnim = J._animT > 0 && runTime >= J._animT ? Math.min(0.08, runTime - J._animT) : 0;
+    J._animT = runTime;
+    const tgtB = moving ? Math.min(1, Math.max(0.22, spd / 42)) : 0;
+    J.walkBlend = J.walkBlend == null ? tgtB : J.walkBlend + (tgtB - J.walkBlend) * Math.min(1, dtAnim * (tgtB > J.walkBlend ? 10 : 12));
+    if (!moving && J.walkBlend < 0.015) J.walkBlend = 0;
+    if (J.walkPhase == null) J.walkPhase = (J.seed % 7);
+    if (moving && dtAnim > 0) J.walkPhase = (J.walkPhase + dtAnim * Math.min(12.5, Math.max(3.2, spd * 0.14))) % (Math.PI * 200);
     g.save(); g.translate(J.x, J.y); g.scale(JAWA_SPEC.s, JAWA_SPEC.s);
-    try { erBodyHuman(g, JAWA_SPEC, 200000 + (J.seed % 50000), J.face, walk, 0, false, false); } catch (e) { g.fillStyle = "#6d4c41"; g.beginPath(); g.arc(0, 0, 6, 0, 7); g.fill(); }
+    try { erBodyHuman(g, JAWA_SPEC, 200000 + (J.seed % 50000), J.face, J.walkPhase, 0, false, false, J.walkBlend); } catch (e) { g.fillStyle = "#6d4c41"; g.beginPath(); g.arc(0, 0, 6, 0, 7); g.fill(); }
     g.restore();
     if (J.sayT > runTime && J.say) { g.save(); g.font = "bold 9px sans-serif"; g.textAlign = "center"; const tw = g.measureText(J.say).width + 8; g.fillStyle = "rgba(0,0,0,0.55)"; g.fillRect(J.x - tw / 2, J.y - 30, tw, 12); g.fillStyle = "#ffe0b2"; g.fillText(J.say, J.x, J.y - 21); g.restore(); }
   }

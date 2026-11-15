@@ -1115,6 +1115,7 @@ function vehStepAll(dt) {
   if (VEH.me) {
     const v = VEH.me;
     player.x = v.x; player.y = v.y; player.vx = v.vx; player.vy = v.vy;
+    player.facingAng = v.ang; player.moveDir = v.ang; player.walkBlend = 0;
     player.vehicleHp = Math.max(1, v.hp);
     vehRefuelStep(v, dt);
     if (v.fire > 0 && runTime - (v.fireSeen || 0) > 1.4) { v.fireSeen = runTime; if (runTime - (v.fireStart || (v.fireStart = runTime)) > 1.2) vehExit(true); }
@@ -1339,7 +1340,8 @@ function vehEnter(q) {
   ds.occ = { t: "P" };
   v.drv = "P"; v.awake = true; v.sleep = 0; v.cruise = 0; VEH.me = v; VEH.lastMine = v; v.convoy = null; v.ai = null;
   player.inVehicle = 3; player.vehicleHp = v.hp; player.cityCar = { kind: v.kind, v: v.pv, ang: v.ang, L: v.L, D: v.D };
-  player.x = v.x; player.y = v.y;
+  player.x = v.x; player.y = v.y; player.facingAng = v.ang; player.moveDir = v.ang; player.walkBlend = 0;
+  if (player.roof && typeof accLeaveRoof === "function") accLeaveRoof();
   const b = typeof cityBuildingAt === "function" ? cityBuildingAt(v.x, v.y) : null;
   if (b && typeof cityAccessGarageOpen === "function") cityAccessGarageOpen(b, v);
   const fuel = v.S.horse ? Math.round(v.stamina * 100) + "% STAMINA" : Math.round(v.fuel * 100) + "% " + vehFuelName(v);
@@ -1366,6 +1368,7 @@ function vehExit(forced) {
   for (const st of v.seats) if (st.occ && st.occ.t === "P") st.occ = null;
   v.drv = null; v.cruise = 0; v.ctl.thr = 0; v.ctl.st = 0; v.ctl.hb = 1; VEH.me = null; v.revMode = false;
   player.inVehicle = 0; player.cityCar = null; player.x = out[0]; player.y = out[1]; player.vx = 0; player.vy = 0;
+  player.facingAng = v.ang; player.moveDir = v.ang; player.walkBlend = 0;
   if (typeof convoyOnExit === "function") convoyOnExit(v, forced);
   if (forced) { player.invulnT = Math.max(player.invulnT || 0, 0.6); spawnSpeech(player.x, player.y - 24, "BAILED OUT!", "#ff8a65", 1.2); }
   if (typeof updateHUD === "function") updateHUD();
@@ -1389,6 +1392,28 @@ function vehTipOnce(k) {
 }
 
 /* === 14. RENDER ======================================================================================================= */
+const VEH_OPEN_COCKPIT = new Set(["speeder", "tractor", "forklift", "cart", "wagon", "mule", "broom"]);
+function vehDrawDriver(g, v) {
+  if (v.drv !== "P" || !player || !v.seats || v.dead) return;
+  const ds = v.seats.find(s => s.type === "d") || v.seats[0];
+  if (!ds) return;
+  const open = VEH_OPEN_COCKPIT.has(v.kind) || (ds.side && vehDoorOpen(v, ds.side, ds.w));
+  if (!open) return;
+  const sx = ds.u * v.L, sy = -ds.w * v.D, gk = Math.max(0.45, v.k || 1);
+  const out = typeof getOutfit === "function" ? getOutfit(player.cid) : null;
+  const pal = typeof getHeroOutfits === "function" ? getHeroOutfits(player.cid) : null;
+  const cHead = (pal && pal.head && pal.head[(out && out.head) || 0]) ? pal.head[(out && out.head) || 0][1] : ((player.fac && player.fac.c1) || "#cfd8dc");
+  const cTorso = (pal && pal.torso && pal.torso[(out && out.torso) || 0]) ? pal.torso[(out && out.torso) || 0][1] : ((player.fac && player.fac.c2) || "#37474f");
+  g.save(); g.translate(sx, sy); g.scale(gk, gk);
+  // Seated shoulders, arms on controls, & head/helm facing vehicle forward (-Y in vehicle-local frame)
+  g.fillStyle = "rgba(0,0,0,0.32)"; g.beginPath(); g.ellipse(0, 1.8, 5.6, 4.4, 0, 0, Math.PI * 2); g.fill();
+  g.fillStyle = cTorso; crRR(g, -5.0, -2.0, 10.0, 5.8, 2.4); g.fill();
+  g.fillStyle = "rgba(0,0,0,0.22)"; g.fillRect(-4.2, -0.5, 8.4, 1.6);
+  g.fillStyle = cHead; g.beginPath(); g.arc(0, -2.6, 3.6, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = "rgba(0,0,0,0.35)"; g.lineWidth = 0.8; g.stroke();
+  g.fillStyle = "rgba(255,255,255,0.28)"; g.beginPath(); g.arc(0, -4.2, 1.9, Math.PI, 0); g.fill();
+  g.restore();
+}
 function vehDraw(g, v, t) {
   const spr = vehSprite(v), sag = vehWheelsLost(v) ? 0.6 : 0;
   // hover vehicles float: a soft shadow further down + repulsor glow (wheeled ones carry the baked prop shadow)
@@ -1408,6 +1433,7 @@ function vehDraw(g, v, t) {
     g.restore();
   }
   if (v.refuel) { g.strokeStyle = "rgba(105,240,174," + (0.5 + 0.4 * Math.sin(t * 8)).toFixed(2) + ")"; g.lineWidth = 2; crRR(g, x0 - 4, y0 - 4, v.L + 8, v.D + 8, 10); g.stroke(); }
+  vehDrawDriver(g, v);
   if (typeof convoyDrawOccupants === "function") convoyDrawOccupants(g, v, t);
   g.restore();
 }
@@ -1680,12 +1706,20 @@ function cityExitCar() { vehExit(false); }
 function cityCarStep(dt) { vehStepAll(dt); }
 function cityRenderCar(g) { vehRenderMine(g); }
 window.addEventListener("keydown", e => {
+  if (typeof uiTypingInField === "function" && uiTypingInField(e)) return;
   if (!runActive || runPaused || !CITY.on || e.repeat) return;
   if (e.code === "KeyH" && VEH.me) vehHorn();
   if (e.code === "Space" && VEH.me) e.preventDefault();
 });
 /* === 18. FEEL: engine sound you can hear, engine noise the enemies can hear, blades that cut metal ================== */
-const VEH_SABER = new Set([0, 3, 32, 33, 55, 76, 77, 78, 79]);   // lightsabers + energy swords cut through panels
+const VEH_SABER = new Set([0, 3, 32, 33, 55, 76, 77, 78, 79, 81, 82, 83]);   // lightsabers + energy swords cut through panels
+function vehIsSaberHero(cid) {
+  if (VEH_SABER.has(cid)) return true;
+  if (typeof CUSTOM_CID !== "undefined" && cid === CUSTOM_CID && typeof customHeroDesign === "function" && typeof crHasCat === "function") {
+    return !!crHasCat(customHeroDesign(), "saber");
+  }
+  return false;
+}
 function vehEngineAudio(dt) {
   const v = VEH.me, on = !!(v && !v.dead && runActive && !runPaused && CITY.on && !v.S.horse && (v.fuel > 0));
   const A = VEH.audio;
@@ -1734,7 +1768,7 @@ function vehBladeStep() {
   }
   if (!q) return;
   const v = vehMakeLive(q, "blade"); if (!v) return;
-  const ax = Math.cos(aim), ay = Math.sin(aim), saber = VEH_SABER.has(player.cid), [lx, ly] = vehToLocal(v, hx, hy);
+  const ax = Math.cos(aim), ay = Math.sin(aim), saber = vehIsSaberHero(player.cid), [lx, ly] = vehToLocal(v, hx, hy);
   vehDamage(v, Math.max(-v.L / 2, Math.min(v.L / 2, lx)), Math.max(-v.D / 2, Math.min(v.D / 2, ly)), saber ? 150 : 50, "melee", ax, ay, "player");
   if (saber) { for (let k = 0; k < 6; k++) spawnPt(hx, hy, (Math.random() - 0.5) * 140, (Math.random() - 0.5) * 140, 0.35, 1.8, 3, 4); if (v.holes.length < 28) { v.holes.push([lx, ly]); v.sprDirty = true; } }
   else spawnPt(hx, hy, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, 0.2, 1.4, 1, 4);

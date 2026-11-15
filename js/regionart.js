@@ -97,8 +97,15 @@ function rgDuneShade(xm, ym, light) {
   if (light) return f < 0.8 ? v * 0.24 * Math.pow(f / 0.8, 1.6) : 0;          // windward slope brightens up to the crest
   return f >= 0.8 ? v * 0.4 * (f < 0.84 ? (f - 0.8) / 0.04 : 1 - (f - 0.84) / 0.16) : 0;   // slip face: dark right behind it
 }
+function rgWastelandDecayOn() {
+  return typeof CITY !== "undefined" && CITY.themeKey === "wasteland" && typeof KI !== "undefined" && !!KI.planetDecay;
+}
 function rgGround(g, wx0, wy0) {
-  const P = RG.P, G = P.ground || { base: ["sand", "#c8a870"], layers: [] }, S = CR.TS;
+  const P = RG.P, decay = rgWastelandDecayOn(), T = CITY.theme;
+  const G = decay
+    ? { base: ["dirt", T.g.dirt], layers: [{ f: "rock", pat: "ash", col: "#4a3f32", a: 0.72 }, { f: "hill", pat: "rock", col: "#5d503d", a: 0.55 }], town: ["gravel", T.g.gravel] }
+    : (P.ground || { base: ["sand", "#c8a870"], layers: [] });
+  const S = CR.TS;
   g.fillStyle = crPat(G.base[0], G.base[1]); g.fillRect(wx0, wy0, S, S);
   for (const L of G.layers) rgMaskFill(g, wx0, wy0, crPat(L.pat, L.col), (x, y) => { const v = rgF(L.f, x, y); return (L.lo !== undefined ? rgSm(L.lo, L.hi, v) : v) * (L.a === undefined ? 1 : L.a); });
   // broad tonal variation + dune crests in ONE soft-light pass of a grey 1 m map (grey 50 % = unchanged)
@@ -123,9 +130,11 @@ function rgGround(g, wx0, wy0) {
 }
 /* --- 5. tracks ---------------------------------------------------------------------------- */
 function rgRoadCols() {
-  const T = CITY.theme, k = CITY.themeKey, paved = k === "starship" || k === "capsule" || k === "colony" || k === "mesa" || k === "neon" || k === "modern" || k === "coruscant";
-  const P = RG.P || {}, base = (P.ground && P.ground.base && P.ground.base[1]) || T.g.road;
-  const road = P.road || (paved ? T.g.road : crSh(base, -0.16)), road2 = P.road2 || (paved ? T.g.road2 : crSh(base, -0.1));
+  const T = CITY.theme, k = CITY.themeKey, decay = rgWastelandDecayOn();
+  const paved = k === "starship" || k === "capsule" || k === "colony" || k === "mesa" || k === "neon" || k === "modern" || k === "coruscant" || k === "wasteland";
+  const P = RG.P || {}, base = decay ? T.g.dirt : ((P.ground && P.ground.base && P.ground.base[1]) || T.g.road);
+  const road = (decay || k === "wasteland") ? T.g.road : (P.road || (paved ? T.g.road : crSh(base, -0.16)));
+  const road2 = (decay || k === "wasteland") ? T.g.road2 : (P.road2 || (paved ? T.g.road2 : crSh(base, -0.1)));
   return { paved, road, road2, edge: paved ? crSh(road, -0.25) : crSh(base, -0.05), line: T.g.line, rut: crSh(road, -0.2) };
 }
 function rgRoadsIn(m0x, m0y, m1x, m1y) {
@@ -600,7 +609,7 @@ function rgBake(rx, ry) {
   // the render cache key must include the world, not just the theme + seed
   if (typeof cityRenderReset === "function") {
     const _rr = cityRenderReset;
-    window.cityRenderReset = cityRenderReset = function () { _rr(); CR.key = CITY.themeKey + "|" + CITY.seed; CR.rgKey = RG.key; };
+    window.cityRenderReset = cityRenderReset = function () { _rr(); CR.key = typeof crCacheKey === "function" ? crCacheKey() : (CITY.themeKey + "|" + CITY.seed + "|" + RG.key); CR.rgKey = RG.key; };
   }
 })();
 // EOF part 4 (regionart.js continues)
@@ -608,7 +617,8 @@ function rgBake(rx, ry) {
 /* --- 10. organic map tiles ------------------------------------------------------------------ */
 function rgMix(a, b, t) { const A = crRGB(a), Bc = crRGB(b); return [A[0] + (Bc[0] - A[0]) * t, A[1] + (Bc[1] - A[1]) * t, A[2] + (Bc[2] - A[2]) * t]; }
 function rgMapColor(xm, ym, St) {
-  const P = RG.P, G = P.ground;
+  const P = RG.P, decay = rgWastelandDecayOn();
+  const G = decay ? { base: ["dirt", CITY.theme.g.dirt], layers: [{ f: "rock", col: "#4a3f32", a: 0.65 }, { f: "hill", col: "#6a5c45", a: 0.45 }] } : P.ground;
   let c = crRGB(G.base[1]);
   for (const L of G.layers) { let v = rgF(L.f, xm, ym); if (L.lo !== undefined) v = rgSm(L.lo, L.hi, v); v *= (L.a === undefined ? 1 : L.a); if (v > 0.02) { const d = crRGB(L.col); c = [c[0] + (d[0] - c[0]) * v, c[1] + (d[1] - c[1]) * v, c[2] + (d[2] - c[2]) * v]; } }
   if (St && St.bg === "#06121e") c = [c[0] * 0.25 + 4, c[1] * 0.3 + 14, c[2] * 0.38 + 26];   // sci-fi map style: tinted dark

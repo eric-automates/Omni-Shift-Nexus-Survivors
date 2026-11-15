@@ -60,8 +60,9 @@ function v15JobEnabled(a) {
 function v15AnyCareerAvailable() { return Object.keys(V15_CAREER_CONTRACTS).some(v15ContractEnabled); }
 function v15ContractOfferEnabled(id) {
   if (!v15ContractEnabled(id)) return false;
-  const customHero = (typeof player !== "undefined" && player && player.cid === 80) ||
-    (typeof meta !== "undefined" && meta && meta.selChar === 80);
+  const customHero = (typeof runActive !== "undefined" && runActive && typeof player !== "undefined" && player)
+    ? (player.cid === 80)
+    : (typeof meta !== "undefined" && meta && meta.selChar === 80);
   if (!customHero || typeof customCareerAllowsContract !== "function") return true;
   return customCareerAllowsContract(id, meta && meta.custom);
 }

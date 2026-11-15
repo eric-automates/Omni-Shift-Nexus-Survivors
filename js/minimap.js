@@ -29,7 +29,14 @@ function mapStyle() { return MAP_STYLE[typeof crFam === "function" && CITY.theme
 
 /* --- map tiles: 256 px each, metres-per-pixel levels -------------------------------- */
 const MAP_LEVELS = [0.5, 1, 2, 4, 8, 16, 32, 64, 128];
-function mapTileKey(mpp, tx, ty) { return mpp + "|" + tx + "|" + ty + "|" + CITY.themeKey + "|" + CITY.seed; }
+// v16.0-s06-7: include active region key so grid worlds (nexus vs midwest/nightcity/sfearth) never collide in tile cache
+function mapTileKey(mpp, tx, ty) { return mpp + "|" + tx + "|" + ty + "|" + CITY.themeKey + "|" + CITY.seed + "|" + (typeof RG !== "undefined" ? RG.key : "nexus"); }
+// v16.0-s06-7: player arrow heading tracks active flight/vehicle heading when airborne or driving
+function mapPlayerHeading() {
+  if (typeof FLY !== "undefined" && FLY.on && FLY.air) return FLY.self ? (FLY.hdg || 0) : (FLY.v ? FLY.v.ang : (player && typeof player.aim === "number" ? player.aim : 0));
+  if (typeof VEH !== "undefined" && VEH.me && player && player.inVehicle === 3) return VEH.me.ang || 0;
+  return player && typeof player.aim === "number" ? player.aim : 0;
+}
 function mapTile(mpp, tx, ty, allowBuild) {
   const k = mapTileKey(mpp, tx, ty);
   let t = MAPV.tiles.get(k);
@@ -181,8 +188,11 @@ function minimapRender(g) {
   }
   if (typeof miniEdge141 === "function") miniEdge141(g, toS, x0, y0, S);   // v14.1: nearest station when fuel is low
   // you
-  const a = typeof player.aim === "number" ? player.aim : 0, cx = x0 + S / 2, cy = y0 + S / 2;
-  if (player.roof) { g.save(); g.font = "900 8px 'Segoe UI', sans-serif"; g.textAlign = "center"; g.fillStyle = "#ffd166"; g.strokeStyle = "rgba(0,0,0,0.8)"; g.lineWidth = 3; g.strokeText("ROOF", cx, cy + 16); g.fillText("ROOF", cx, cy + 16); g.restore(); }
+  const a = mapPlayerHeading(), cx = x0 + S / 2, cy = y0 + S / 2;
+  const airBadge = (typeof FLY !== "undefined" && FLY.chute) ? "CHUTE"
+    : (typeof FLY !== "undefined" && FLY.on && FLY.air) ? ("AIR " + Math.max(1, Math.round(FLY.alt || 0)) + "m")
+    : (player.roof ? "ROOF" : "");
+  if (airBadge) { g.save(); g.font = "900 8px 'Segoe UI', sans-serif"; g.textAlign = "center"; g.fillStyle = player.roof ? "#ffd166" : "#80deea"; g.strokeStyle = "rgba(0,0,0,0.8)"; g.lineWidth = 3; g.strokeText(airBadge, cx, cy + 16); g.fillText(airBadge, cx, cy + 16); g.restore(); }
   g.translate(cx, cy); g.rotate(a); g.fillStyle = "#ffffff"; g.strokeStyle = "#0d47a1"; g.lineWidth = 1.5;
   g.beginPath(); g.moveTo(7, 0); g.lineTo(-5, -4.5); g.lineTo(-2.5, 0); g.lineTo(-5, 4.5); g.closePath(); g.fill(); g.stroke();
   g.restore();
@@ -339,7 +349,7 @@ function mapSideSync() {
   if (!s || !s.classList.contains("on")) return;
   const L = mapMarkers(), here = mapHomePoint();
   s.innerHTML = '<b>MARKERS & NOTES (' + L.length + ')</b>' + (L.length ? "" : '<p>Click anywhere on the map to drop a marker.</p>') +
-    L.map((m, i) => '<div class="map-li" data-i="' + i + '"><span style="color:' + MAP_COLS[m.c] + '">' + MAP_SYMS[m.s] + '</span> ' + (m.n ? m.n.replace(/[<>&]/g, "") : "<i>no note</i>") + '<em>' + (Math.hypot(m.x - here[0], m.y - here[1]) / 1000).toFixed(1) + ' km</em></div>').join("");
+    L.map((m, i) => '<div class="map-li" data-i="' + i + '"><span style="color:' + MAP_COLS[m.c] + '">' + MAP_SYMS[m.s] + '</span> ' + (m.n ? m.n.replace(/[<>&]/g, "") : "<i>no note</i>") + '<em>' + mapDistTxt(Math.hypot(m.x - here[0], m.y - here[1])) + '</em></div>').join("");
   s.querySelectorAll(".map-li").forEach(d => { d.onclick = () => { const m = L[+d.dataset.i]; MAPV.cx = m.x; MAPV.cy = m.y; MAPV.mpp = Math.min(MAPV.mpp, 2); }; });
 }
 function mapOpen(mode) {
@@ -423,7 +433,7 @@ function mapFrame() {
   }
   if (MAPV.mode === "run" && player && CITY.on) {
     const [pxm, pym] = mapPlayerM(), [sx, sy] = toS(pxm, pym);
-    g.save(); g.translate(sx, sy); g.rotate(player.aim || 0); g.fillStyle = "#fff"; g.strokeStyle = "#0d47a1"; g.lineWidth = 2; g.beginPath(); g.moveTo(11, 0); g.lineTo(-7, -7); g.lineTo(-3, 0); g.lineTo(-7, 7); g.closePath(); g.fill(); g.stroke(); g.restore();
+    g.save(); g.translate(sx, sy); g.rotate(mapPlayerHeading()); g.fillStyle = "#fff"; g.strokeStyle = "#0d47a1"; g.lineWidth = 2; g.beginPath(); g.moveTo(11, 0); g.lineTo(-7, -7); g.lineTo(-3, 0); g.lineTo(-7, 7); g.closePath(); g.fill(); g.stroke(); g.restore();
     g.font = "900 11px 'Segoe UI', sans-serif"; g.fillStyle = "#fff"; g.strokeStyle = "#0d47a1"; g.lineWidth = 3; g.strokeText("YOU", sx, sy - 16); g.fillText("YOU", sx, sy - 16);
   }
   // scale bar
@@ -487,13 +497,14 @@ function mapWorldLabel() { return "🌆 WORLD: " + (typeof meta !== "undefined" 
 })();
 window.addEventListener("keydown", e => {
   if (MAPV.open) {
-    if (e.target && e.target.tagName === "TEXTAREA") { if (e.code === "Escape") mapEdClose(); return; }
+    if (e.target && e.target.tagName === "TEXTAREA") { if (e.code === "Escape") { e.preventDefault(); mapEdClose(); } return; }
     if (e.code === "KeyM" || e.code === "Escape") { e.preventDefault(); if (MAPV.sel) mapEdClose(); else mapClose(); }
     else if (e.code === "Equal" || e.code === "NumpadAdd") mapZoom(0.7, MAPV.cv.width / 2, MAPV.cv.height / 2);
     else if (e.code === "Minus" || e.code === "NumpadSubtract") mapZoom(1.4, MAPV.cv.width / 2, MAPV.cv.height / 2);
     return;
   }
-  if (!runActive || !CITY.on || e.repeat) return;
+  if (typeof uiTypingInField === "function" && uiTypingInField(e)) return;
+  if (!runActive || runPaused || !CITY.on || e.repeat) return;
   if (e.code === "KeyM") { e.preventDefault(); mapOpen("run"); }
   else if (e.code === "BracketLeft") MAPV.mini = Math.min(MAPV.miniSizes.length - 1, MAPV.mini + 1);
   else if (e.code === "BracketRight") MAPV.mini = Math.max(0, MAPV.mini - 1);

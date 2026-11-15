@@ -302,9 +302,9 @@ function trfStep(dt) {
   }
   TRF.cars = keep;
   // the player's car hits a car → it becomes a real vehicle (and the police may have seen)
-  if (pm && !pm.dead) trfPlayerCarHits(pm);
-  // the player on foot can't walk through cars
-  if (!player.inVehicle) trfPushPlayer();
+  if (pm && !pm.dead && !pm.flyAir && (pm.flyAlt || 0) < 2) trfPlayerCarHits(pm);
+  // the player on foot can't walk through cars (rooftop & airborne heroes clear road traffic)
+  if (!player.inVehicle && !player.roof && (player.flyAlt || 0) < 2) trfPushPlayer();
 }
 function trfIdm(v, v0, gap, dv, a0, b0, s0, T) {
   const ss = s0 + Math.max(0, v * T + v * dv / (2 * Math.sqrt(a0 * b0)));
@@ -314,13 +314,13 @@ function trfIdm(v, v0, gap, dv, a0, b0, s0, T) {
 // people and live vehicles in front of a car: [x, y, radius, vx, vy] in metres
 function trfObstacles() {
   const out = [];
-  if (!player.inVehicle) { const [x, y] = trfM(player.x, player.y); out.push([x, y, 0.45, 0, 0, 1]); }
+  if (!player.inVehicle && !player.roof && (player.flyAlt || 0) < 2) { const [x, y] = trfM(player.x, player.y); out.push([x, y, 0.45, 0, 0, 1]); }
   // drivers brake for anyone in the road: townsfolk, and whoever's out there (a few dozen nearest)
   const [pxm, pym] = trfM(player.x, player.y);
   if (typeof TF !== "undefined" && TF.walk) { let n = 0; for (const p of TF.walk) { const W = p.w; if (!W || W.inside || !p.alive) continue; const [x, y] = trfM(W.x, W.y); if (Math.abs(x - pxm) > 70 || Math.abs(y - pym) > 70) continue; out.push([x, y, 0.4, 0, 0, 1]); if (++n > 40) break; } }
   if (typeof eAct !== "undefined") { let n = 0; for (let j = 0; j < MAX_E; j++) { if (!eAct[j]) continue; const [x, y] = trfM(eX[j], eY[j]); if (Math.abs(x - pxm) > 60 || Math.abs(y - pym) > 60) continue; out.push([x, y, 0.45, 0, 0, 3]); if (++n > 30) break; } }
   if (typeof VEH !== "undefined") for (const v of VEH.list) {
-    if (v.dead && !v.wreck) continue;
+    if ((v.dead && !v.wreck) || v.flyAir || (v.flyAlt || 0) >= 2) continue;
     const [x, y] = trfM(v.x, v.y); out.push([x, y, Math.max(v.L, v.D) / 64, (v.vx || 0) / 32, (v.vy || 0) / 32, v === VEH.me ? 2 : 0, v]);
   }
   return out;

@@ -9,7 +9,8 @@
 
 /* === 1. EXTRA MINION STATE (pool = js/state.js mX/mY/...) === */
 const mBurst = new Uint8Array(MAX_MINION), mAim = new Float32Array(MAX_MINION), mTeam = new Uint8Array(MAX_MINION),
-      mSlot = new Uint8Array(MAX_MINION), mTag = new Float32Array(MAX_MINION);
+      mSlot = new Uint8Array(MAX_MINION), mTag = new Float32Array(MAX_MINION),
+      mWalkBlend = new Float32Array(MAX_MINION), mFace = new Float32Array(MAX_MINION), mAnimT = new Float32Array(MAX_MINION);
 const mName = new Array(MAX_MINION).fill("");
 // Paths are disposable navigation hints, not save state.  A maximum of two
 // searches per simulation step keeps a large fireteam from stalling a phone.
@@ -247,7 +248,11 @@ function squadMove(m, dx, dy, simDt, mul) {
   const N = squadNav[m];
   N.stuck = planned > .5 && moved < planned * .25 ? N.stuck + simDt : Math.max(0, N.stuck - simDt);
   mVX[m] = (mX[m] - ox) / Math.max(.0001, simDt); mVY[m] = (mY[m] - oy) / Math.max(.0001, simDt);
-  if (moved > .1) mWalk[m] += simDt * (mKind[m] === 1 ? 11 : 7.5);
+  if (moved > .1) {
+    const spd = moved / Math.max(.0001, simDt);
+    const cad = Math.min(mKind[m] === 1 ? 13.5 : 10.5, Math.max(2.6, spd * (mKind[m] === 1 ? 0.115 : 0.095)));
+    mWalk[m] = (mWalk[m] + simDt * cad) % (Math.PI * 200);
+  }
 }
 function squadMoveTo(m, tx, ty, simDt, mul, stopR, nocurb) {
   let dx = tx - mX[m], dy = ty - mY[m], d = Math.hypot(dx, dy), N = squadNav[m];
@@ -706,56 +711,133 @@ function squadStep(simDt) {
 }
 
 /* === 6. RENDERING === */
-function squadRenderMinions() {
+function squadRenderMinions(tCtx) {
+  const g = tCtx || ctx;
   const th = FIRETEAM_THEMES[squadState.theme] || FIRETEAM_THEMES.marine;
+  const now = typeof runTime === "number" ? runTime : 0;
   for (let i = 0; i < MAX_MINION; i++) {
     if (!mAct[i]) continue;
     if (typeof mSeatOf === "function" && mSeatOf(i)) continue;   // v14.1: riders are drawn by their vehicle
     const kind = mKind[i], rad = mRad[i] || 10;
-    ctx.save();
-    ctx.translate(mX[i], mY[i]);
-    ctx.fillStyle = mCol[i] || "#b388ff";
+    const spd = Math.hypot(mVX[i], mVY[i]);
+    const rawFace = spd > 10 ? Math.atan2(mVY[i], mVX[i]) : (Number.isFinite(mAim[i]) ? mAim[i] : Math.PI * 0.5);
+    if (mAnimT[i] <= 0 || now < mAnimT[i] - 0.25) {
+      mFace[i] = rawFace;
+      mWalkBlend[i] = spd > 5 ? Math.min(1, spd / 55) : 0;
+      mAnimT[i] = now;
+    } else if (now > mAnimT[i]) {
+      const dt = Math.min(0.08, now - mAnimT[i]);
+      mAnimT[i] = now;
+      const tgtB = spd > 5 ? Math.min(1, Math.max(0.2, spd / 52)) : 0;
+      mWalkBlend[i] += (tgtB - mWalkBlend[i]) * Math.min(1, dt * (tgtB > mWalkBlend[i] ? 10 : 12));
+      if (spd <= 5 && mWalkBlend[i] < 0.015) mWalkBlend[i] = 0;
+      const fd = Math.atan2(Math.sin(rawFace - mFace[i]), Math.cos(rawFace - mFace[i]));
+      mFace[i] += fd * Math.min(1, dt * 12);
+    }
+    const face = mFace[i], wb = mWalkBlend[i], wPh = mWalk[i];
+    g.save();
+    g.translate(mX[i], mY[i]);
+    g.fillStyle = mCol[i] || "#b388ff";
     if (kind >= 5) {
-      const st = Math.sin(mWalk[i]) * 2;
-      ctx.fillStyle = "#263238"; ctx.fillRect(-3.5, 4 + st * 0.3, 2.6, 5); ctx.fillRect(0.9, 4 - st * 0.3, 2.6, 5);
-      ctx.fillStyle = mCol[i]; ctx.fillRect(-4.5, -4, 9, 9);
-      ctx.fillStyle = "rgba(0,0,0,0.28)"; ctx.fillRect(-4.5, -1, 9, 2.4);
-      ctx.save(); ctx.rotate(mAim[i]);
+      const pose = typeof computeNpcIsometricPose === "function"
+        ? computeNpcIsometricPose(face, wPh, wb, { tw: 4.8, limb: 2.5, bulky: kind === 6, seed: i })
+        : { dir: Math.cos(face) >= 0 ? 1 : -1, back: Math.sin(face) < -0.35, profile: Math.abs(Math.cos(face)), faceShift: Math.abs(Math.cos(face)), wb, twEff: 4.8, bob: Math.abs(Math.sin(wPh)) * 0.5 * wb, leanX: 0, legs: [] };
+      const dir = pose.dir, back = pose.back, tw = pose.twEff;
+      const aimA = Number.isFinite(mAim[i]) ? mAim[i] : face;
+      const la = dir > 0 ? aimA : Math.PI - aimA;
       const len = kind === 7 ? 15 : (kind === 6 ? 12 : (kind === 8 ? 9 : 11));
-      ctx.fillStyle = "#1c1c1c"; ctx.fillRect(2, kind === 6 ? -1.6 : -1.1, len, kind === 6 ? 3.2 : 2.2);
-      if (kind === 7) { ctx.fillStyle = "#37474f"; ctx.fillRect(6, -2.8, 4, 1.4); }
-      ctx.restore();
-      if (th.helm === th.uni && th.uni === "#eceff1") {          // full-face clone bucket
-        ctx.fillStyle = "#eceff1"; ctx.beginPath(); ctx.arc(0, -7, 3.8, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#111"; ctx.fillRect(-2.6, -7.8, 5.2, 1.3); ctx.fillStyle = th.accent; ctx.fillRect(-0.6, -10.4, 1.2, 2.6);
+      g.fillStyle = "rgba(0,0,0,0.28)"; g.beginPath(); g.ellipse(0, 9.6, tw + 2.2, 2.2, 0, 0, Math.PI * 2); g.fill();
+      g.save(); g.translate(0, -pose.bob); g.scale(dir, 1);
+      // Articulated 8-dir isometric legs
+      for (let li = 0; li < pose.legs.length; li++) {
+        const L = pose.legs[li];
+        g.strokeStyle = L.depth < 0 ? "#1c262b" : "#263238"; g.lineWidth = 2.4; g.lineCap = "round"; g.lineJoin = "round";
+        g.beginPath(); g.moveTo(L.hipX * 0.9, 3.2); g.lineTo(L.kneeX * 0.9, L.kneeY * 0.92); g.lineTo(L.footX * 0.9, L.footY * 0.92); g.stroke();
+        g.fillStyle = "#151a1d"; g.beginPath(); g.ellipse(L.footX * 0.9 + 0.4 * pose.profile, L.footY * 0.92 + 0.45, 1.5, 0.85, 0, 0, Math.PI * 2); g.fill();
+      }
+      const drawRifleAndArms = () => {
+        const px = tw * 0.25, py = -1.2;
+        g.save(); g.translate(px, py); g.rotate(la);
+        g.fillStyle = "#1c1c1c"; g.fillRect(1.5, kind === 6 ? -1.6 : -1.1, len, kind === 6 ? 3.2 : 2.2);
+        if (kind === 7) { g.fillStyle = "#37474f"; g.fillRect(6, -2.8, 4, 1.4); }
+        g.restore();
+        const cg = Math.cos(la), sg = Math.sin(la);
+        g.strokeStyle = mCol[i] || th.uni; g.lineWidth = 2.1; g.lineCap = "round";
+        g.beginPath(); g.moveTo(tw * 0.72, -3.4); g.lineTo(px + cg * 4.0, py + sg * 4.0); g.stroke();
+        g.beginPath(); g.moveTo(-tw * 0.72, -3.4); g.lineTo(px + cg * 7.2, py + sg * 7.2); g.stroke();
+      };
+      if (back) drawRifleAndArms();
+      // Torso + tactical vest / rear pack
+      g.fillStyle = mCol[i]; g.fillRect(-tw, -4.4, tw * 2, 8.6);
+      g.fillStyle = "rgba(0,0,0,0.28)"; g.fillRect(-tw, -1.2, tw * 2, 2.4);
+      if (back) {
+        g.fillStyle = "#263238"; g.fillRect(-tw + 1.1, -3.8, tw * 2 - 2.2, 5.4);
+        g.fillStyle = th.accent; g.fillRect(-1.4, -3.0, 2.8, 1.1);
       } else {
-        ctx.fillStyle = "#e0ac69"; ctx.beginPath(); ctx.arc(0, -7, 3.3, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = th.helm; ctx.beginPath(); ctx.arc(0, -7.6, 3.8, Math.PI, 0); ctx.fill(); ctx.fillRect(-3.8, -7.9, 7.6, 1.5);
+        g.fillStyle = th.accent; g.fillRect(-1 + pose.faceShift * 0.7, -2.8, 2, 2);
       }
-      ctx.fillStyle = th.accent; ctx.fillRect(-1, -2.6, 2, 2);
+      // Head / helmet with 8-dir back view & front visor shift
+      const fs = pose.faceShift;
+      if (th.helm === th.uni && th.uni === "#eceff1") {          // full-face clone bucket
+        g.fillStyle = "#eceff1"; g.beginPath(); g.arc(0, -7.2, 3.8, 0, Math.PI * 2); g.fill();
+        if (!back) { g.fillStyle = "#111"; g.fillRect(-2.6 + fs * 0.9, -8.0, 5.2, 1.3); g.fillRect(-0.5 + fs * 0.9, -7.4, 1.0, 2.4); }
+        g.fillStyle = th.accent; g.fillRect(-0.6 + fs * 0.3, -10.8, 1.2, 2.6);
+      } else {
+        g.fillStyle = back ? th.helm : "#e0ac69"; g.beginPath(); g.arc(0, -7.2, 3.3, 0, Math.PI * 2); g.fill();
+        g.fillStyle = th.helm; g.beginPath(); g.arc(0, -7.8, 3.8, Math.PI, 0); g.fill();
+        g.fillRect(-3.8 + (back ? 0 : fs * 0.5), -8.1, 7.6, 1.5);
+        if (!back) { g.fillStyle = "#15171b"; g.fillRect(-1.7 + fs * 0.9, -7.3, 1.0, 1.0); g.fillRect(0.8 + fs * 0.9, -7.3, 1.0, 1.0); }
+      }
+      if (!back) drawRifleAndArms();
+      g.restore();
       if (mTag[i] > 0 && mName[i]) {
-        ctx.globalAlpha = Math.min(1, mTag[i]); ctx.fillStyle = th.accent; ctx.font = "bold 6.5px monospace"; ctx.textAlign = "center";
-        ctx.fillText(mName[i] + " · " + SOLDIER_SPECS[kind].role, 0, -15); ctx.globalAlpha = 1;
+        g.globalAlpha = Math.min(1, mTag[i]); g.fillStyle = th.accent; g.font = "bold 6.5px monospace"; g.textAlign = "center";
+        g.fillText(mName[i] + " · " + SOLDIER_SPECS[kind].role, 0, -15); g.globalAlpha = 1;
       }
-    } else if (kind === 4) {
-      ctx.fillRect(-16, -14, 32, 26);
-      ctx.beginPath(); ctx.arc(0, -18, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#00ff88"; ctx.fillRect(-4, -6, 8, 4);
-    } else if (kind === 3) {
-      ctx.fillRect(-11, -10, 22, 20);
-      ctx.beginPath(); ctx.arc(0, -12, 6.5, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = "#ffd166"; ctx.lineWidth = 1.4; ctx.strokeRect(-11, -10, 22, 20);
+    } else if (kind === 4 || kind === 3 || kind === 0 || kind === 2) {
+      // Summoned humanoid/golem/knight minions with isometric stride + 8-dir facing
+      const sc = kind === 4 ? 1.55 : (kind === 3 ? 1.15 : 0.92);
+      const pose = typeof computeNpcIsometricPose === "function"
+        ? computeNpcIsometricPose(face, wPh, wb, { tw: 5.5, limb: 2.8, bulky: kind >= 3, seed: i })
+        : { dir: Math.cos(face) >= 0 ? 1 : -1, back: Math.sin(face) < -0.35, profile: Math.abs(Math.cos(face)), faceShift: Math.abs(Math.cos(face)), wb, twEff: 5.5, bob: Math.abs(Math.sin(wPh)) * 0.6 * wb, legs: [] };
+      g.fillStyle = "rgba(0,0,0,0.28)"; g.beginPath(); g.ellipse(0, 10 * sc, 7 * sc, 2.2 * sc, 0, 0, Math.PI * 2); g.fill();
+      g.save(); g.scale(pose.dir * sc, sc); g.translate(0, -pose.bob);
+      for (let li = 0; li < pose.legs.length; li++) {
+        const L = pose.legs[li];
+        g.strokeStyle = "#263238"; g.lineWidth = kind === 4 ? 3.4 : 2.3; g.lineCap = "round";
+        g.beginPath(); g.moveTo(L.hipX, 3.2); g.lineTo(L.kneeX, L.kneeY); g.lineTo(L.footX, L.footY); g.stroke();
+      }
+      if (pose.arms && pose.arms[0]) {
+        const A = pose.arms[0];
+        g.strokeStyle = "#546e7a"; g.lineWidth = kind === 4 ? 3.2 : 2.1; g.lineCap = "round";
+        g.beginPath(); g.moveTo(A.shX, A.shY); g.lineTo(A.elbowX, A.elbowY); g.lineTo(A.handX, A.handY); g.stroke();
+      }
+      g.fillStyle = mCol[i] || "#b388ff";
+      g.fillRect(-pose.twEff, -5.5, pose.twEff * 2, 9.5);
+      if (kind === 3) { g.strokeStyle = "#ffd166"; g.lineWidth = 1.2; g.strokeRect(-pose.twEff, -5.5, pose.twEff * 2, 9.5); }
+      if (kind === 4 && !pose.back) { g.fillStyle = "#00ff88"; g.fillRect(-2.5 + pose.faceShift, -2.5, 5, 2.4); }
+      g.fillStyle = mCol[i] || "#b388ff"; g.beginPath(); g.arc(0, -9, kind === 4 ? 4.8 : 4.2, 0, Math.PI * 2); g.fill();
+      if (!pose.back) { g.fillStyle = kind === 4 ? "#00ff88" : "#ffd166"; g.fillRect(-1.8 + pose.faceShift, -9.6, 1.2, 1.1); g.fillRect(0.8 + pose.faceShift, -9.6, 1.2, 1.1); }
+      if (pose.arms && pose.arms[1]) {
+        const A = pose.arms[1];
+        g.strokeStyle = mCol[i] || "#b388ff"; g.lineWidth = kind === 4 ? 3.2 : 2.1; g.lineCap = "round";
+        g.beginPath(); g.moveTo(A.shX, A.shY); g.lineTo(A.elbowX, A.elbowY); g.lineTo(A.handX, A.handY); g.stroke();
+      }
+      g.restore();
     } else if (kind === 1) {
-      ctx.beginPath(); ctx.ellipse(0, 0, rad + 4, rad, 0, 0, Math.PI * 2); ctx.fill();
-    } else {
-      ctx.fillRect(-5, -6, 10, 12);
-      ctx.beginPath(); ctx.arc(0, -9, 4.8, 0, Math.PI * 2); ctx.fill();
+      // Summoned beast / hound minion with quadruped 8-dir gallop
+      const beastSpec = { b: "b", hd: "dog", c: [mCol[i] || "#b388ff", "#37474f", "#ffd166"], s: Math.max(0.75, rad / 11), x: "" };
+      if (typeof erBodyBeast === "function") {
+        g.save(); g.scale(beastSpec.s, beastSpec.s); erBodyBeast(g, beastSpec, 400000 + i, face, wPh, wb); g.restore();
+      } else {
+        g.beginPath(); g.ellipse(0, 0, rad + 4, rad, 0, 0, Math.PI * 2); g.fill();
+      }
     }
     if (mHP[i] < mMax[i]) {
-      ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(-12, -18, 24, 2.5);
-      ctx.fillStyle = "#00ff88"; ctx.fillRect(-12, -18, 24 * Math.max(0, mHP[i] / mMax[i]), 2.5);
+      g.fillStyle = "rgba(0,0,0,0.6)"; g.fillRect(-12, -18, 24, 2.5);
+      g.fillStyle = "#00ff88"; g.fillRect(-12, -18, 24 * Math.max(0, mHP[i] / mMax[i]), 2.5);
     }
-    ctx.restore();
+    g.restore();
   }
 }
 
@@ -833,6 +915,7 @@ function squadEnsureUI() {
     }
   });
   window.addEventListener("keydown", e => {
+    if (typeof uiTypingInField === "function" && uiTypingInField(e)) return;
     if (!runActive || !player || runPaused) return;
     if (e.code === "KeyQ") { squadState.wheelOpen ? squadWheelClose() : (squadState.alive ? squadWheelOpen() : null); }
     const map = { Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 0 };

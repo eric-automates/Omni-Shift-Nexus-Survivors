@@ -326,6 +326,36 @@ function rmLoadIndex() {
     .then(j => { RM.index = j; RM.indexFail = null; return j; }).catch(e => { RM.indexP = null; RM.indexFail = { base, t: performance.now(), msg: (e && e.message) || "offline map index missing" }; throw e; });
   return RM.indexP;
 }
+// v16.0-s06-7: verify that not just index.json, but the actual overview binary pack file exists on this host
+function rmVerifyOfflinePacks() {
+  const base = rmOfflineBase();
+  if (RM.packsVerified && RM.packsVerified.base === base && performance.now() - RM.packsVerified.t < 20000) {
+    return RM.packsVerified.ok ? Promise.resolve(true) : Promise.reject(new Error(RM.packsVerified.msg || "offline packs missing"));
+  }
+  return rmLoadIndex().then(j => {
+    const ovwKey = (j && j.ovw) || "overview";
+    const meta = j && j.packs ? j.packs[ovwKey] : null;
+    if (!meta || !meta.f) throw new Error("offline pack manifest has no overview pack");
+    const url = base + meta.f;
+    return fetch(url, { method: "HEAD", cache: "no-cache" }).then(r => {
+      if (r.ok) return true;
+      if (r.status === 405 || r.status === 501) {
+        return fetch(url, { headers: { Range: "bytes=0-15" }, cache: "no-cache" }).then(r2 => {
+          if (!r2.ok && r2.status !== 206) throw new Error("pack " + ovwKey + " HTTP " + r2.status);
+          return true;
+        });
+      }
+      throw new Error("pack " + ovwKey + " HTTP " + r.status);
+    });
+  }).then(() => {
+    RM.packsVerified = { base, t: performance.now(), ok: true, msg: "" };
+    return true;
+  }).catch(e => {
+    const msg = (e && e.message) || "offline map packs missing";
+    RM.packsVerified = { base, t: performance.now(), ok: false, msg };
+    throw e;
+  });
+}
 // which pack holds a tile — index v2: every z10 tile in one small overview pack, the middle of each place in its own
 // core pack (index.tile), the other z14 tiles in ≈ 4 MB packs listed per z11 cell (index.cell); v1 (older builds):
 // one pack per z10 tile. null = outside the shipped area (an empty tile)
@@ -357,6 +387,13 @@ function rmLoadPack(pk) {
     }).catch(e => { P.st = 3; P.err = e.message; RM.err = e.message; return P; });
   return P.p;
 }
+// v16.0-s06-7: bounded-timeout fetch so blackholed / offline networks trigger clean fallback instead of hanging
+function rmFetchTimed(url, opts, ms) {
+  if (typeof AbortController === "undefined") return fetch(url, opts);
+  const ac = new AbortController();
+  const tid = setTimeout(() => { try { ac.abort(); } catch (e) { /* ignore */ } }, ms || 8000);
+  return fetch(url, Object.assign({}, opts || {}, { signal: ac.signal })).finally(() => clearTimeout(tid));
+}
 function rmTileTemplate() {
   const w = typeof window !== "undefined" && window.RM_TILES_TPL;   // QA / self-hosted tiles
   if (w) { RM.tpl = w; return Promise.resolve(w); }
@@ -367,7 +404,7 @@ function rmTileTemplate() {
   let stored = null;
   try { stored = JSON.parse(localStorage.getItem("omniRealTpl") || "null"); } catch (e) { stored = null; }
   if (stored && stored.t && Date.now() - stored.at < 3 * 864e5) { RM.tpl = stored.t; return Promise.resolve(RM.tpl); }
-  RM.tplP = fetch(RM_SRC.tilejson).then(r => r.json()).then(j => { RM.tpl = j.tiles[0]; try { localStorage.setItem("omniRealTpl", JSON.stringify({ t: RM.tpl, at: Date.now() })); } catch (e) { /* private mode */ } return RM.tpl; })
+  RM.tplP = rmFetchTimed(RM_SRC.tilejson, { mode: "cors" }, 5000).then(r => r.json()).then(j => { RM.tpl = j.tiles[0]; try { localStorage.setItem("omniRealTpl", JSON.stringify({ t: RM.tpl, at: Date.now() })); } catch (e) { /* private mode */ } return RM.tpl; })
     .catch(() => { RM.tpl = (stored && stored.t) || RM_SRC.tplFallback; return RM.tpl; }).finally(() => { RM.tplP = null; });
   return RM.tplP;
 }
@@ -376,7 +413,7 @@ async function rmFetchOnline(z, x, y) {
   const tpl = await rmTileTemplate(), url = tpl.replace("{z}", z).replace("{x}", x).replace("{y}", y);
   const c = await rmCacheOpen();
   if (c) { try { const hit = await c.match(url); if (hit) { RM.stats.cacheHits++; return new Uint8Array(await hit.arrayBuffer()); } } catch (e) { /* ignore */ } }
-  const r = await fetch(url, { mode: "cors" });
+  const r = await rmFetchTimed(url, { mode: "cors" }, 9000);
   if (r.status === 204 || r.status === 404) return new Uint8Array(0);
   if (!r.ok) throw new Error("tile HTTP " + r.status);
   const ab = await r.arrayBuffer();
@@ -446,7 +483,7 @@ function rmPump() {
       if (T.tries < 4 && (RM.mode === "online" || RM.viaOnline > 0)) { setTimeout(() => { if (gen === RM.gen && T.st === 1) { RM.q.push(T); rmPump(); } }, 700 * T.tries); return; }
       T.st = 3; T.f = rmExtract(z, x, y, {}); RM.stats.fail++; RM.err = e.message || String(e);
       rmTileReady(T);
-    }).finally(() => { RM.active--; rmPump(); });
+    }).finally(() => { if (gen === RM.gen) RM.active = Math.max(0, RM.active - 1); rmPump(); });
   }
 }
 function rmTileReady(T) {
@@ -458,7 +495,9 @@ function rmTileReady(T) {
 function rmResetData() {
   // settle every waiter of the old place first (their promises must not hang), then forget it all
   for (const T of RM.tiles.values()) if (T.st === 1) { T.st = 3; T.f = null; const cb = T.cbs; T.cbs = []; for (const f of cb) try { f(T); } catch (e) { /* ignore */ } }
-  RM.gen++; RM.tiles.clear(); RM.cells.clear(); RM.q.length = 0; RM.ovw = null; RM.ovwP = null; RM.err = ""; RM.viaOnline = 0; RM.offlineErr = "";
+  // v16.0-s06-7: evict failed pack entries so retries / base-URL switches don't stay poisoned, and reset RM.active so discarded fetches from the old generation can't starve the new load
+  for (const [pk, P] of RM.packs) if (P && P.st === 3) RM.packs.delete(pk);
+  RM.gen++; RM.active = 0; RM.tiles.clear(); RM.cells.clear(); RM.q.length = 0; RM.ovw = null; RM.ovwP = null; RM.err = ""; RM.viaOnline = 0; RM.offlineErr = "";
   RM.stats = { req: 0, ok: 0, fail: 0, bytes: 0, decodeMs: 0, cacheHits: 0 };
 }
 // unload far tiles (keep memory bounded): decoded features of tiles > 4.5 km from the player

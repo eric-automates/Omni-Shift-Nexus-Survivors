@@ -22,7 +22,9 @@ const SHEATHE = { blade: 1, gun: 1, low: 0, bladeT: 0, gunT: 0, near: 1e9, scanT
 const SH_BLADE_IDLE = 3.0, SH_GUN_IDLE = 4.0, SH_BLADE_R = 360, SH_GUN_R = 560;
 
 function sheatheIsBlade(w) {
-  return (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 44, 73].includes(w.id));
+  if (typeof isHybridGunMode === "function" && isHybridGunMode(w)) return false;
+  if (typeof isMeleeBladeWeapon === "function") return isMeleeBladeWeapon(w);
+  return (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || (w.style === "orbit" && ![12, 16, 29, 35, 44, 73].includes(w.id));
 }
 // keep everything out for a moment (dash, execute, explicit attack)
 function sheatheForceDraw(sec = 2.5) { SHEATHE.forceT = Math.max(SHEATHE.forceT, sec); }
@@ -81,12 +83,15 @@ function sheatheStowed(w, isBlade) {
   return isBlade ? SHEATHE.blade > 0.5 : (sheatheGunMode() === "holster" && SHEATHE.gun > 0.5);
 }
 // stowed weapon on the hero's body: blades in a scabbard on the back, guns on the hip / slung
-function sheatheDraw(tCtx, w, slotIdx, isBlade, col, handCol) {
+function sheatheDraw(tCtx, w, slotIdx, isBlade, col, handCol, pose = null, sleeveCol = "#37474f") {
   const side = slotIdx % 2 === 0 ? 1 : -1;
+  const tx = pose ? pose.torsoShiftX : 0;
+  const ty = pose ? pose.torsoBobY : 0;
+  const sx = pose ? pose.torsoScaleX : 1;
   tCtx.save();
   if (isBlade) {
     // hilt pokes up over the shoulder, the scabbard runs diagonally down across the back
-    tCtx.translate(5.5 * side, -10.5 + slotIdx * 1.2);
+    tCtx.translate(tx + 5.5 * sx * side, ty - 10.5 + slotIdx * 1.2);
     tCtx.rotate(side > 0 ? 2.2 : 0.94);
     tCtx.scale(0.82, 0.82);
     drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, col, 0, 0, 0, w.dbl ? true : null, w.hilt);
@@ -96,13 +101,20 @@ function sheatheDraw(tCtx, w, slotIdx, isBlade, col, handCol) {
     tCtx.fillStyle = "#d8c690"; tCtx.fillRect(4.1, -2.8, 2.4, 5.6); tCtx.fillRect(23.4, -1.9, 1.8, 3.8);
     tCtx.strokeStyle = "#3e2723"; tCtx.lineWidth = 1.1; tCtx.beginPath(); tCtx.moveTo(9, -2.4); tCtx.lineTo(4, -9); tCtx.stroke();   // strap
   } else {
-    tCtx.translate(6.2 * side, 4.2);
+    tCtx.translate(tx + 5.8 * sx * side, ty + 4.0);
     tCtx.rotate(side > 0 ? 1.45 : 1.7);
     tCtx.scale(0.68, 0.68);
     drawWeaponModel(tCtx, w.id, w.style, w.lvl >= 5, w.lvl >= 10, col, 0, 0, 0, w.dbl ? true : null, w.hilt);
   }
   tCtx.restore();
-  if (slotIdx === 0) { drawBallHand(tCtx, 1.5, 7.2, 2.4, handCol); drawBallHand(tCtx, 1.5, -7.2, 2.4, handCol); }
+  if (slotIdx === 0) {
+    if (pose && pose.arms && typeof drawHeroSwingingArm === "function") {
+      drawHeroSwingingArm(tCtx, pose.arms[1], sleeveCol, handCol, 2.5);
+    } else {
+      drawBallHand(tCtx, tx - 6.4 * sx, ty + 2.2, 2.3, handCol);
+      drawBallHand(tCtx, tx + 6.4 * sx, ty + 2.2, 2.3, handCol);
+    }
+  }
 }
 
 if (typeof V10 !== "undefined") {

@@ -613,11 +613,18 @@ function tfRender(g) {
     if (W.inside && (!here || here.uid !== W.inside)) continue;   // indoors: only seen from inside
     if (typeof cityVisibleAt === "function" && !cityVisibleAt(W.x, W.y)) continue;
     const S = TF_SPEC; S.c[0] = p.shirt; S.c[1] = p.pants; S.c[2] = p.bad ? "#c62828" : "#3a2a1a"; S.hd = p.head; S.s = p.age < 18 ? 0.8 : 0.95;
-    const moving = Math.hypot(W.vx, W.vy) > 6, walk = moving ? runTime * 9 + (p.seed % 7) : 0;
+    const spd = Math.hypot(W.vx, W.vy), moving = spd > 5;
+    const dtAnim = W._animT > 0 && runTime >= W._animT ? Math.min(0.08, runTime - W._animT) : 0;
+    W._animT = runTime;
+    const tgtB = moving ? Math.min(1, Math.max(0.2, spd / 54)) : 0;
+    W.walkBlend = W.walkBlend == null ? tgtB : W.walkBlend + (tgtB - W.walkBlend) * Math.min(1, dtAnim * (tgtB > W.walkBlend ? 9.5 : 11.5));
+    if (!moving && W.walkBlend < 0.015) W.walkBlend = 0;
+    if (W.walkPhase == null) W.walkPhase = (p.seed % 7);
+    if (moving && dtAnim > 0) W.walkPhase = (W.walkPhase + dtAnim * Math.min(11, Math.max(2.6, spd * 0.105))) % (Math.PI * 200);
     g.save(); g.translate(W.x, W.y);
     if (W.sleep) { g.rotate(Math.PI / 2); g.globalAlpha = 0.9; }
     g.scale(S.s, S.s);
-    try { erBodyHuman(g, S, 100000 + (p.seed % 50000), W.face, walk, 0, false, false); } catch (e) { g.fillStyle = p.shirt; g.beginPath(); g.arc(0, 0, 6, 0, 7); g.fill(); }
+    try { erBodyHuman(g, S, 100000 + (p.seed % 50000), W.face, W.walkPhase, 0, false, false, W.sleep ? 0 : W.walkBlend); } catch (e) { g.fillStyle = p.shirt; g.beginPath(); g.arc(0, 0, 6, 0, 7); g.fill(); }
     g.restore();
     // Only label the actual visible mission actor; do not reveal them through
     // city fog or create a marker for an absent/unspawned person.
@@ -676,7 +683,7 @@ function townsLights(push) {
       return r;
     };
   }
-  window.addEventListener("keydown", e => { if (e.code === "Escape" && TF.panel) tfTalkClose(); });
+  window.addEventListener("keydown", e => { if (e.code === "Escape" && TF.panel) { e.preventDefault(); tfTalkClose(); } });
   if (typeof V10 !== "undefined") {
     V10.onRunStart.push(() => {
       TF.on = typeof CITY !== "undefined" && CITY.on && (SCN.mode === "economy" || SCN.mode === "apoc");

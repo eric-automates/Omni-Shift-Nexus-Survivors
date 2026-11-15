@@ -235,7 +235,8 @@ if (typeof mapOpen === "function") {
   const _mo = mapOpen;
   window.mapOpen = mapOpen = function (mode) {
     const r = _mo.apply(this, arguments), nb = document.getElementById("mapNew");
-    if (nb) nb.style.display = RG.real ? "none" : "";
+    // v16.0-s06-7: only show NEW REGION in drop-zone picker mode (never during a live run) and never on Real Maps
+    if (nb) nb.style.display = (MAPV.mode === "drop" && !RG.real) ? "" : "none";
     const ov = document.getElementById("mapOv");
     if (ov) {
       let at = document.getElementById("mapAttr");
@@ -328,7 +329,10 @@ function rmRenderReal(body, S) {
   if (q && go) { const run = () => rmSearch(q.value); go.onclick = run; q.onkeydown = e => { if (e.key === "Enter") run(); }; }
   const dsc = body.querySelector("#rmDisc"); if (dsc) dsc.onclick = () => rmDisclaimer(true);
   const clr = body.querySelector("#rmClear"); if (clr) clr.onclick = async () => { try { if (typeof caches !== "undefined") await caches.delete(RM_SRC.cacheName); } catch (e) { /* none */ } clr.textContent = "cleared ✓"; };
-  if (R.mode === "offline" && RMUI.packsOk === null) rmLoadIndex().then(() => { RMUI.packsOk = true; if (locState().where === "real") locRender(); }).catch(() => { RMUI.packsOk = false; if (locState().where === "real") locRender(); });
+  if (R.mode === "offline" && RMUI.packsOk === null) {
+    const checkPacks = typeof rmVerifyOfflinePacks === "function" ? rmVerifyOfflinePacks : rmLoadIndex;
+    checkPacks().then(() => { RMUI.packsOk = true; if (locState().where === "real") locRender(); }).catch(() => { RMUI.packsOk = false; if (locState().where === "real") locRender(); });
+  }
   setTimeout(locPreview, 20);
 }
 // v14.3: a tap must start and end on the same item, move < 10 px, and not land within 350 ms of the list being redrawn

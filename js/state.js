@@ -342,7 +342,10 @@ function touchFireEnd(pointerId) {
 }
 function touchFireHasAimPoint() { return !!(touchFire.point && (touchFire.active || touchFire.pending > 0)); }
 function touchFireCanShoot(w, dt = 0) {
-  if (!player || !player.weapons || player.weapons[0] !== w || (typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || w.style === "orbit") return true;
+  const pureMelee = typeof isMeleeBladeWeapon === "function"
+    ? (isMeleeBladeWeapon(w) && !(typeof isHybridGunBlade === "function" && isHybridGunBlade(w.id)))
+    : ((typeof isSwordWeapon === "function" && isSwordWeapon(w.id)) || w.style === "orbit");
+  if (!player || !player.weapons || player.weapons[0] !== w || pureMelee) return true;
   const mode = touchFireMode();
   if (mode === "auto") return true; // preserve Survivor auto-fire when the touch trigger is idle
   if (touchFire.pending > 0) return true;
